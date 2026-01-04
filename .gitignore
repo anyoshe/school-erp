@@ -1,0 +1,23 @@
+node_modules
+# Keep environment variables out of version control
+.env
+
+/generated/prisma
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env.*
+
+# Django
+db.sqlite3
+staticfiles/
+media/
+
+# Node
+node_modules/
+.next/
+out/
+
+# OS
+.DS_Store
