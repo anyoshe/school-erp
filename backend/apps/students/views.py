@@ -85,10 +85,35 @@ class StudentGuardianViewSet(viewsets.ModelViewSet):  # <-- Use viewsets.ModelVi
 # MEDICAL RECORD VIEWSET
 # ----------------------------
 class MedicalRecordViewSet(ModelViewSet):
-    queryset = MedicalRecord.objects.select_related('student').all().order_by('-last_visit')
+    queryset = MedicalRecord.objects.select_related("student").prefetch_related("documents").all()
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["student"]
 
     def get_serializer_class(self):
-        if self.action in ['create', 'update', 'partial_update']:
+        if self.action in ["create", "update", "partial_update"]:
             return MedicalRecordCreateUpdateSerializer
         return MedicalRecordSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(recorded_by=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(reviewed_by=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        print("CREATE DATA:", request.data)
+        print("FILES:", request.FILES)
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        print("UPDATE DATA:", request.data)
+        print("FILES:", request.FILES)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        print("PATCH DATA:", request.data)
+        print("FILES:", request.FILES)
+        return super().partial_update(request, *args, **kwargs)
+        
+    

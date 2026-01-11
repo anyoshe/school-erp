@@ -34,6 +34,8 @@ class User(AbstractBaseUser, PermissionsMixin):
         STUDENT = "STUDENT"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    first_name = models.CharField(max_length=150, blank=True)
+    last_name = models.CharField(max_length=150, blank=True)
     email = models.EmailField(unique=True)
     role = models.CharField(max_length=20, choices=Role.choices)
     is_active = models.BooleanField(default=True)
@@ -82,3 +84,7 @@ class UserPermission(models.Model):
 
     class Meta:
         unique_together = ('user', 'permission')
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}".strip() or self.email

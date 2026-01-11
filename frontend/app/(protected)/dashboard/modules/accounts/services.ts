@@ -1,4 +1,4 @@
-import api from "@/app/utils/api";
+import api from "@/utils/api";
 import axios from "axios";
 // ----------------------------
 // Auth

@@ -1,8 +1,10 @@
 from rest_framework import serializers
 from django.db import IntegrityError
 from .models import Student, Guardian, StudentGuardian, MedicalRecord
-from apps.academics.serializers import ClassSerializer
+from apps.academics.serializers import GradeLevelSerializer
 from django.db.models import Q
+from .models import MedicalRecord
+from .models import MedicalRecord, MedicalDocument
 # ----------------------------
 # STUDENT SERIALIZERS
 # ----------------------------
@@ -13,7 +15,7 @@ class StudentSerializer(serializers.ModelSerializer):
     """
     # guardians = serializers.StringRelatedField(many=True, source='studentguardian_set', read_only=True)
     
-    current_class = ClassSerializer(read_only=True) 
+    current_class = GradeLevelSerializer(read_only=True) 
 
     class Meta:
         model = Student
@@ -251,30 +253,92 @@ class LinkExistingGuardianSerializer(serializers.ModelSerializer):
 # MEDICAL RECORD SERIALIZERS
 # ----------------------------
 
+class MedicalDocumentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MedicalDocument
+        fields = ["id", "file", "description", "uploaded_at"]
+
 class MedicalRecordSerializer(serializers.ModelSerializer):
-    student_name = serializers.CharField(source='student.__str__', read_only=True)
+    documents = MedicalDocumentSerializer(many=True, read_only=True)
+    review_date = serializers.DateField(read_only=True)  
+
+    # Explicitly serialize consent_by as UUID string only
+    consent_by = serializers.UUIDField(read_only=True, source="consent_by.id", allow_null=True)
+
+    # Optional: same for other user FKs
+    recorded_by = serializers.UUIDField(read_only=True, source="recorded_by.id", allow_null=True)
+    reviewed_by = serializers.UUIDField(read_only=True, source="reviewed_by.id", allow_null=True)
 
     class Meta:
         model = MedicalRecord
         fields = [
-            'id',
-            'student',
-            'student_name',
-            'allergies',
-            'conditions',
-            'immunization_notes',
-            'last_visit'
+            'id', 'student', 'blood_group', 'allergies', 'chronic_conditions',
+            'special_needs', 'medication', 'medication_instructions',
+            'emergency_notes', 'emergency_doctor', 'preferred_hospital',
+            'immunization_status', 'immunization_notes',
+            'consent_to_treat', 'medical_disclosure_allowed',
+            'consent_date', 'consent_by', 'recorded_by', 'reviewed_by',
+            'review_date', 'created_at', 'updated_at', 'documents'
         ]
-
 
 class MedicalRecordCreateUpdateSerializer(serializers.ModelSerializer):
+    documents = serializers.ListField(
+        child=serializers.FileField(),
+        write_only=True,
+        required=False
+    )
+
+    # Explicitly accept UUID string for consent_by
+    consent_by = serializers.UUIDField(allow_null=True, required=False)
+
     class Meta:
         model = MedicalRecord
         fields = [
-            'id',
-            'student',
-            'allergies',
-            'conditions',
-            'immunization_notes',
-            'last_visit'
+            'id', 'student', 'blood_group', 'allergies', 'chronic_conditions',
+            'special_needs', 'medication', 'medication_instructions',
+            'emergency_notes', 'emergency_doctor', 'preferred_hospital',
+            'immunization_status', 'immunization_notes',
+            'consent_to_treat', 'medical_disclosure_allowed',
+            'consent_date', 'consent_by', 'documents',
+            'recorded_by', 'reviewed_by', 'review_date'
         ]
+        extra_kwargs = {
+            "student": {"required": False},  # allow omission on update
+            "recorded_by": {"required": False},
+            "reviewed_by": {"required": False},
+        }
+
+    def create(self, validated_data):
+        documents = validated_data.pop('documents', [])
+        # consent_by comes as string ID → convert to Guardian object
+        consent_by_id = validated_data.pop('consent_by', None)
+        if consent_by_id:
+            try:
+                validated_data['consent_by'] = Guardian.objects.get(id=consent_by_id)
+            except Guardian.DoesNotExist:
+                raise serializers.ValidationError({"consent_by": "Invalid guardian ID"})
+
+        record = MedicalRecord.objects.create(**validated_data)
+
+        for file in documents:
+            MedicalDocument.objects.create(medical_record=record, file=file)
+
+        return record
+
+    def update(self, instance, validated_data):
+        documents = validated_data.pop('documents', [])
+        consent_by_id = validated_data.pop('consent_by', None)
+        if consent_by_id is not None:
+            try:
+                validated_data['consent_by'] = Guardian.objects.get(id=consent_by_id)
+            except Guardian.DoesNotExist:
+                raise serializers.ValidationError({"consent_by": "Invalid guardian ID"})
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        for file in documents:
+            MedicalDocument.objects.create(medical_record=instance, file=file)
+
+        return instance

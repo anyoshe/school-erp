@@ -1,7 +1,7 @@
+// app/layout.tsx
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Layout from "./(protected)/dashboard/components/layout/Layout"; // relative import
 import { Toaster } from "react-hot-toast";
 
 const geistSans = Geist({
@@ -19,12 +19,16 @@ export const metadata: Metadata = {
   description: "School ERP Dashboard",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-          {children}
-          <Toaster position="top-center" />
+        {children}
+        <Toaster position="top-center" />
       </body>
     </html>
   );

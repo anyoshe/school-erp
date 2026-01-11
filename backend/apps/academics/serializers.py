@@ -1,194 +1,99 @@
-# from rest_framework import serializers
-# from .models import Class, Subject, Exam, Result
-# from apps.students.models import Student
-# from apps.staff.models import Staff
-
-# # ----------------------------
-# # CLASS SERIALIZERS
-# # ----------------------------
-
-# class ClassSerializer(serializers.ModelSerializer):
-#     """
-#     READ-ONLY: Includes subjects list
-#     """
-#     subjects = serializers.StringRelatedField(many=True, read_only=True)
-
-#     class Meta:
-#         model = Class
-#         fields = ['id', 'name', 'level', 'subjects']
-
-
-# class ClassCreateUpdateSerializer(serializers.ModelSerializer):
-#     """
-#     CREATE / UPDATE: For admin or school staff
-#     """
-#     class Meta:
-#         model = Class
-#         fields = ['id', 'name', 'level']
-
-
-# # ----------------------------
-# # SUBJECT SERIALIZERS
-# # ----------------------------
-
-# class SubjectSerializer(serializers.ModelSerializer):
-#     """
-#     READ-ONLY: Includes teacher info
-#     """
-#     teacher_email = serializers.EmailField(source='teacher.user.email', read_only=True)
-
-#     class Meta:
-#         model = Subject
-#         fields = ['id', 'name', 'class_fk', 'teacher', 'teacher_email']
-
-
-# class SubjectCreateUpdateSerializer(serializers.ModelSerializer):
-#     """
-#     CREATE / UPDATE subject
-#     """
-#     class Meta:
-#         model = Subject
-#         fields = ['id', 'name', 'class_fk', 'teacher']
-
-
-# # ----------------------------
-# # EXAM SERIALIZERS
-# # ----------------------------
-
-# class ExamSerializer(serializers.ModelSerializer):
-#     """
-#     READ-ONLY: For listing exams
-#     """
-#     class Meta:
-#         model = Exam
-#         fields = ['id', 'name', 'term', 'session']
-
-
-# class ExamCreateUpdateSerializer(serializers.ModelSerializer):
-#     """
-#     CREATE / UPDATE exam
-#     """
-#     class Meta:
-#         model = Exam
-#         fields = ['id', 'name', 'term', 'session']
-
-
-# # ----------------------------
-# # RESULT SERIALIZERS
-# # ----------------------------
-
-# class ResultSerializer(serializers.ModelSerializer):
-#     """
-#     READ-ONLY: Includes student, subject, exam names
-#     """
-#     student_name = serializers.CharField(source='student.__str__', read_only=True)
-#     subject_name = serializers.CharField(source='subject.name', read_only=True)
-#     exam_name = serializers.CharField(source='exam.name', read_only=True)
-
-#     class Meta:
-#         model = Result
-#         fields = [
-#             'id',
-#             'student',
-#             'student_name',
-#             'subject',
-#             'subject_name',
-#             'exam',
-#             'exam_name',
-#             'score',
-#             'grade'
-#         ]
-
-
-# class ResultCreateUpdateSerializer(serializers.ModelSerializer):
-#     """
-#     CREATE / UPDATE results
-#     """
-#     class Meta:
-#         model = Result
-#         fields = ['id', 'student', 'subject', 'exam', 'score', 'grade']
-
-
+# apps/academics/serializers.py
 from rest_framework import serializers
-from .models import AcademicLevel, Class, Subject, Exam, Result
-from apps.students.models import Student
-from apps.staff.models import Staff
+from .models import Curriculum, GradeLevel, Department
+from apps.school.models import School  # if needed for nested school display
 
-# ----------------------------
-# Academic Level
-# ----------------------------
-class AcademicLevelSerializer(serializers.ModelSerializer):
+
+class SchoolMiniSerializer(serializers.ModelSerializer):
+    """Minimal school info for nested display"""
     class Meta:
-        model = AcademicLevel
-        fields = ['id', 'name', 'order']
+        model = School
+        fields = ['id', 'name', 'short_name']
 
-# ----------------------------
-# Class Serializers
-# ----------------------------
-class ClassSerializer(serializers.ModelSerializer):
-    level = AcademicLevelSerializer()  # nested
-    subjects = serializers.StringRelatedField(many=True, read_only=True)
+
+class CurriculumSerializer(serializers.ModelSerializer):
+    school = SchoolMiniSerializer(read_only=True)
 
     class Meta:
-        model = Class
-        fields = ['id', 'name', 'level', 'subjects', 'stream']
-
-class ClassCreateUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Class
-        fields = ['id', 'name', 'level', 'stream']
-
-# ----------------------------
-# Subject Serializers
-# ----------------------------
-class SubjectSerializer(serializers.ModelSerializer):
-    teacher_email = serializers.EmailField(source='teacher.user.email', read_only=True)
-
-    class Meta:
-        model = Subject
-        fields = ['id', 'name', 'class_fk', 'teacher', 'teacher_email']
-
-class SubjectCreateUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Subject
-        fields = ['id', 'name', 'class_fk', 'teacher']
-
-# ----------------------------
-# Exam Serializers
-# ----------------------------
-class ExamSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Exam
-        fields = ['id', 'name', 'term', 'session']
-
-class ExamCreateUpdateSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Exam
-        fields = ['id', 'name', 'term', 'session']
-
-# ----------------------------
-# Result Serializers
-# ----------------------------
-class ResultSerializer(serializers.ModelSerializer):
-    student_name = serializers.CharField(source='student.__str__', read_only=True)
-    subject_name = serializers.CharField(source='subject.name', read_only=True)
-    exam_name = serializers.CharField(source='exam.name', read_only=True)
-
-    class Meta:
-        model = Result
+        model = Curriculum
         fields = [
-            'id',
-            'student',
-            'student_name',
-            'subject',
-            'subject_name',
-            'exam',
-            'exam_name',
-            'score',
-            'grade'
+            'id', 'school', 'name', 'short_code', 'description',
+            'is_active', 'term_system', 'number_of_terms',
+            'grading_system', 'passing_mark'
+        ]
+        read_only_fields = ['school']  # set via view/context
+
+
+class CurriculumCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Curriculum
+        fields = [
+            'id', 'name', 'short_code', 'description',
+            'is_active', 'term_system', 'number_of_terms',
+            'grading_system', 'passing_mark', 'school'
         ]
 
-class ResultCreateUpdateSerializer(serializers.ModelSerializer):
+def validate_school(self, value):
+        request = self.context['request']
+        user = request.user
+        if not School.objects.filter(id=value, users=user).exists():
+            raise serializers.ValidationError(
+                "You do not have permission to create curriculum for this school."
+            )
+        return value
+
+class GradeLevelSerializer(serializers.ModelSerializer):
+    school = SchoolMiniSerializer(read_only=True)
+    curriculum = CurriculumSerializer(read_only=True)
+
     class Meta:
-        model = Result
-        fields = ['id', 'student', 'subject', 'exam', 'score', 'grade']
+        model = GradeLevel
+        fields = [
+            'id', 'school', 'curriculum', 'name', 'short_name',
+            'order', 'code'
+        ]
+        read_only_fields = ['school']
+
+class GradeLevelCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GradeLevel
+        fields = [
+            'id', 'curriculum', 'name', 'short_name',
+            'order', 'code', 'school'
+        ]
+
+def validate_school(self, value):
+        request = self.context['request']
+        user = request.user
+        if not School.objects.filter(id=value, users=user).exists():
+            raise serializers.ValidationError(
+                "You do not have permission to create grade level for this school."
+            )
+        return value
+class DepartmentSerializer(serializers.ModelSerializer):
+    school = SchoolMiniSerializer(read_only=True)
+    curriculum = CurriculumSerializer(read_only=True)
+
+    class Meta:
+        model = Department
+        fields = [
+            'id', 'school', 'curriculum', 'name', 'short_name', 'code'
+        ]
+        read_only_fields = ['school']
+
+
+class DepartmentCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Department
+        fields = ['id', 'curriculum', 'name', 'short_name', 'code', 'school'
+        
+        ]
+
+def validate_school(self, value):
+        request = self.context['request']
+        user = request.user
+        if not School.objects.filter(id=value, users=user).exists():
+            raise serializers.ValidationError(
+                "You do not have permission to create department for this school."
+            )
+        return value

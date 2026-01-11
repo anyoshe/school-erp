@@ -2,7 +2,10 @@ from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from .models import User, Permission, UserPermission
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.contrib.auth import get_user_model
+from apps.school.models import School
 
+User = get_user_model()
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
@@ -34,6 +37,7 @@ class UserSerializer(serializers.ModelSerializer):
             'id',
             'email',
             'role',
+            'full_name',
             'is_active',
             'is_staff',
             'created_at',
@@ -60,6 +64,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             'email',
             'password',
             'role',
+            'first_name', 'last_name',
             'is_active',
             'is_staff',
         ]
@@ -119,3 +124,27 @@ class UserPermissionSerializer(serializers.ModelSerializer):
             'permission',
             'permission_code',
         ]
+
+class CurrentUserSerializer(serializers.ModelSerializer):
+    # schools = SchoolMiniSerializer(many=True, read_only=True)
+    full_name = serializers.CharField(read_only=True)
+    schools = serializers.SerializerMethodField()
+    class Meta:
+        model = User
+        fields = ["id", "email", "full_name", "schools", "role"]
+    
+
+    def get_full_name(self, obj):
+        # combine first_name and last_name safely
+        # return f"{obj.first_name or ''} {obj.last_name or ''}".strip()
+        return getattr(obj, "full_name", None) or obj.email
+
+    # def get_schools(self, obj):
+    #     from apps.school.serializers import SchoolMiniSerializer
+    #     return SchoolMiniSerializer(obj.schools.all(), many=True).data
+
+    def get_schools(self, obj):
+        from apps.school.serializers import SchoolMiniSerializer
+    # Prefetch modules to avoid N+1 queries
+        schools_qs = obj.schools.prefetch_related('modules').all()
+        return SchoolMiniSerializer(schools_qs, many=True).data

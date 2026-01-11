@@ -1,84 +1,121 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { getCurrentUser } from "@/utils/api";
+import { CurrentSchoolProvider } from "@/contexts/CurrentSchoolContext";
 import Sidebar from "./components/layout/Sidebar";
 import Navbar from "./components/layout/Navbar";
-import { Menu, X } from "lucide-react";
 
 interface DashboardLayoutProps {
   children: ReactNode;
 }
 
-export default function Layout({ children }: DashboardLayoutProps) {
+export default function DashboardLayout({ children }: DashboardLayoutProps) {
+  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const validateAuth = async () => {
+      try {
+        console.log("[DashboardLayout] Validating auth...");
+        // Force fresh fetch to avoid stale/cached user data
+        await getCurrentUser(true);
+        console.log("[DashboardLayout] Auth valid → proceed to dashboard");
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.error("[DashboardLayout] Auth failed:", error);
+        router.replace("/login");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    validateAuth();
+  }, [router]);
+
+  // Loading state: show spinner while checking auth
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-blue-50/50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-6 mx-auto" />
+          <p className="text-lg font-medium text-gray-700">Loading dashboard...</p>
+          <p className="text-sm text-gray-500 mt-2">Preparing your space</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Not authenticated → nothing renders (redirect already happened)
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  // Fully authenticated → render protected dashboard layout
+  return (
+    <CurrentSchoolProvider>
+      <InnerDashboardLayout>{children}</InnerDashboardLayout>
+    </CurrentSchoolProvider>
+  );
+}
+
+// Inner layout with sidebar, navbar, and responsive behavior
+function InnerDashboardLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (
-    <>
-      <div className="flex h-screen bg-gray-50 overflow-hidden">
-        {/* Desktop Sidebar - ZERO left margin/padding, max 20% width */}
-        <aside
-          className={`
-            hidden lg:flex flex-col
-            fixed left-0 top-0 bottom-0  /* Sticks to all edges */
-            transition-all duration-300 ease-in-out
-            bg-white border-r border-gray-200
-            ${sidebarOpen ? "lg:w-[20%] lg:max-w-[20%]" : "w-16"}
-            overflow-hidden
-            z-40  /* Above content if needed */
-          `}
-        >
-          <Sidebar 
-            isCollapsed={!sidebarOpen} 
-            onToggleCollapse={() => setSidebarOpen(!sidebarOpen)} 
-          />
+    <div className="flex h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50/50 overflow-hidden">
+      {/* Desktop Sidebar */}
+      <aside
+        className={`
+          hidden lg:flex flex-col fixed inset-y-0 left-0 z-30
+          transition-all duration-300 ease-in-out bg-white border-r border-gray-200 shadow-sm
+          ${sidebarOpen ? "w-[280px]" : "w-20"}
+        `}
+      >
+        <Sidebar
+          isCollapsed={!sidebarOpen}
+          onToggleCollapse={() => setSidebarOpen(!sidebarOpen)}
+        />
+      </aside>
+
+      {/* Mobile Sidebar Overlay */}
+      {mobileSidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-black/50" onClick={() => setMobileSidebarOpen(false)} />
+      )}
+
+      {/* Mobile Sidebar Panel */}
+      {mobileSidebarOpen && (
+        <aside className="lg:hidden fixed inset-y-0 left-0 z-50 w-[280px] bg-white shadow-2xl animate-in slide-in-from-left">
+          <Sidebar isCollapsed={false} onToggleCollapse={() => setMobileSidebarOpen(false)} />
         </aside>
+      )}
 
-        {/* Mobile Sidebar Drawer */}
-        {mobileSidebarOpen && (
-          <div className="fixed inset-0 z-50 lg:hidden">
-            <div
-              className="fixed inset-0 bg-black/50 backdrop-blur-sm"
-              onClick={() => setMobileSidebarOpen(false)}
-            />
-            <aside className="fixed left-0 top-0 h-full w-80 max-w-[85vw] bg-white shadow-2xl flex flex-col">
-              <div className="flex items-center justify-between p-5 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">Menu</h2>
-                <button
-                  onClick={() => setMobileSidebarOpen(false)}
-                  className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                >
-                  <X className="w-5 h-5 text-gray-600" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto">
-                <Sidebar isCollapsed={false} />
-              </div>
-            </aside>
-          </div>
-        )}
-
-        {/* Main Content Area - Offset by sidebar width when open */}
-        <div 
-          className={`
-            flex-1 flex flex-col min-w-0
-            transition-all duration-300 ease-in-out
-            ${sidebarOpen ? "lg:ml-[20%]" : "lg:ml-16"}
-          `}
-        >
-          {/* Navbar */}
+      {/* Main Content Area */}
+      <div
+        className={`
+          flex-1 flex flex-col
+          lg:transition-all lg:duration-300 lg:ease-in-out
+          ${sidebarOpen ? "lg:ml-[280px]" : "lg:ml-20"}
+        `}
+      >
+        {/* Navbar */}
+        <header className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm">
           <Navbar
             onMenuClick={() => setMobileSidebarOpen(true)}
             onDesktopSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
             isDesktopSidebarOpen={sidebarOpen}
           />
+        </header>
 
-          {/* Page Content */}
-          <main className="flex-1 overflow-y-auto bg-gray-50 p-4 sm:p-6 lg:p-8">
-            {children}
-          </main>
-        </div>
+        {/* Page Content */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="p-4 sm:p-6 lg:p-8">{children}</div>
+        </main>
       </div>
-    </>
+    </div>
   );
 }

@@ -4,16 +4,7 @@ module.exports = {
     "./app/**/*.{js,jsx,ts,tsx}",
     "./components/**/*.{js,jsx,ts,tsx}",
   ],
-  // theme: {
-  //   extend: {
-  //     colors: {
-  //       primary: "#1D4ED8",   // Blue for headers, sidebar
-  //       secondary: "#2563EB", // Slightly brighter blue for accents
-  //       accent: "#FBBF24",    // Yellow/orange highlights
-  //       neutral: "#F3F4F6",   // Background neutral
-  //     },
-  //   },
-  // },
+ 
   theme: {
   extend: {
     colors: {

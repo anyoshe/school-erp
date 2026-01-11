@@ -20,7 +20,7 @@
 
 "use client";
 
-import { useStudent } from "../hooks/useStudent";
+import { useStudent } from "../../hooks/useStudent";
 
 export default function StudentHeader({
   studentId,
