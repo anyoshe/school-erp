@@ -34,11 +34,6 @@ if (typeof window !== "undefined") {
 }
 
 // ✅ Add helper method
-// export const getCurrentUser = async (forceFresh = false) => {
-//   const params = forceFresh ? { t: Date.now() } : {};
-//   const res = await api.get("/accounts/me/", { params }); // existing endpoint
-//   return res.data;
-// };
 export const getCurrentUser = async (forceFresh: boolean = false) => {
   const params = forceFresh ? { t: Date.now() } : {};
   const res = await api.get("/accounts/me/", { params });

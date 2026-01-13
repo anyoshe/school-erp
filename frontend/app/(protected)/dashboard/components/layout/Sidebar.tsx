@@ -1,11 +1,12 @@
 "use client";
 
-import { 
-  Home, Settings, LogOut, 
-  Users, BookOpen, DollarSign, Calendar, Library, BarChart3 
+import {
+  Home, Settings, LogOut,
+  Users, BookOpen, DollarSign, Calendar, Library, BarChart3, Info, MapPin, Book, Image, Grid, ChevronDown
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
+import { useState } from "react";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 
 interface SidebarProps {
@@ -16,10 +17,11 @@ interface SidebarProps {
 interface MenuItem {
   icon: any;
   label: string;
-  href: string;
+  href?: string;
+  children?: MenuItem[];
 }
 
-// Module config: code → UI data
+// Module config
 const MODULE_CONFIG: Record<string, MenuItem> = {
   students: { label: "Students", icon: Users, href: "/dashboard/modules/students" },
   admissions: { label: "Admissions", icon: BookOpen, href: "/dashboard/modules/admissions" },
@@ -29,49 +31,35 @@ const MODULE_CONFIG: Record<string, MenuItem> = {
   library: { label: "Library", icon: Library, href: "/dashboard/modules/library" },
   reports: { label: "Reports", icon: BarChart3, href: "/dashboard/modules/reports" },
   hr: { label: "Human Resource", icon: Users, href: "/dashboard/modules/hr" },
-  // Add more as needed
 };
 
-export default function Sidebar({ isCollapsed, onToggleCollapse }: SidebarProps) {
+const SETTINGS_LINKS: MenuItem[] = [
+  { label: "Basic Info", href: "/dashboard/settings/school/basic-info", icon: Info },
+  { label: "Contact & Address", href: "/dashboard/settings/school/contact", icon: MapPin },
+  { label: "Academic Config", href: "/dashboard/settings/school/academic", icon: Book },
+  { label: "Branding", href: "/dashboard/settings/school/branding", icon: Image },
+  { label: "Modules", href: "/dashboard/settings/modules", icon: Grid },
+  { label: "Users & Roles", href: "/dashboard/settings/users", icon: Users },
+
+];
+
+export default function Sidebar({ isCollapsed }: SidebarProps) {
   const pathname = usePathname();
   const { currentSchool, loading } = useCurrentSchool();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  if (loading) {
-    return <div className="p-6 text-gray-400">Loading modules...</div>;
-  }
+  if (loading) return <div className="p-6 text-gray-400">Loading modules...</div>;
 
-  // Get enabled modules (array of objects)
   const enabledModules = currentSchool?.modules || [];
-
-  // Build dynamic module items
   const dynamicItems: MenuItem[] = enabledModules
     .map(module => module.code ? MODULE_CONFIG[module.code] : undefined)
     .filter((item): item is MenuItem => !!item);
 
-  // Core items - only Dashboard at top
-  const topCoreItems: MenuItem[] = [
-    { icon: Home, label: "Dashboard", href: "/dashboard" },
-  ];
-
-  // Settings as the very last item
-  const bottomCoreItem: MenuItem = {
-    icon: Settings,
-    label: "Settings",
-    href: "/dashboard/settings"
-  };
-
-  // Final menu: Dashboard → All Modules (incl. HR) → Settings
-  const menuItems: MenuItem[] = [
-    ...topCoreItems,
-    ...dynamicItems,
-    bottomCoreItem
-  ];
-
   return (
-    <div className="flex flex-col h-full">
-      {/* Header: School Logo + Name */}
+    <div className="flex flex-col h-full bg-white shadow-lg">
+      {/* Header */}
       <div className="p-6 border-b border-gray-200">
-        <div className={clsx("flex items-center gap-3 transition-all", isCollapsed && "justify-center")}>
+        <div className={clsx("flex items-center gap-3 transition-all")}>
           <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold">
             {currentSchool?.logo ? (
               <img
@@ -99,46 +87,116 @@ export default function Sidebar({ isCollapsed, onToggleCollapse }: SidebarProps)
       {/* Menu */}
       <nav className="flex-1 p-4 overflow-y-auto">
         <ul className="space-y-2">
-          {menuItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href);
-            const Icon = item.icon;
+          {/* Dashboard */}
+          <li>
+            <a
+              href="/dashboard"
+              className={clsx(
+                "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
+                pathname === "/dashboard"
+                  ? "bg-blue-50 text-blue-600 font-medium"
+                  : "text-gray-700 hover:bg-gray-100"
+              )}
+            >
+              <Home className="w-5 h-5" />
+              {!isCollapsed && <span>Dashboard</span>}
+            </a>
+          </li>
 
-            return (
-              <li key={item.label}>
-                <a
-                  href={item.href}
+          {/* Dynamic modules */}
+          {dynamicItems.map(item => (
+            <li key={item.label}>
+              <a
+                href={item.href}
+                className={clsx(
+                  "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
+                  // pathname.startsWith(item.href)
+                  pathname.startsWith(item.href || "")
+                    ? "bg-blue-50 text-blue-600 font-medium"
+                    : "text-gray-700 hover:bg-gray-100"
+                )}
+              >
+                <item.icon className="w-5 h-5" />
+                {!isCollapsed && <span>{item.label}</span>}
+              </a>
+            </li>
+          ))}
+
+          {/* Settings (expandable) */}
+          <li>
+            <button
+              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              className={clsx(
+                "flex items-center justify-between px-3 py-3 w-full rounded-lg text-sm transition-all",
+                pathname.startsWith("/dashboard/settings")
+                  ? "bg-blue-50 text-blue-600 font-medium"
+                  : "text-gray-700 hover:bg-gray-100"
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <Settings className="w-5 h-5" />
+                {!isCollapsed && <span>Settings</span>}
+              </div>
+              {!isCollapsed && (
+                <ChevronDown
                   className={clsx(
-                    "flex items-center gap-3 px-3 py-3 rounded-lg transition-all group relative",
-                    isActive ? "bg-blue-50 text-blue-600 font-medium" : "text-gray-700 hover:bg-gray-100",
-                    isCollapsed && "justify-center px-3"
+                    "w-4 h-4 transition-transform duration-200",
+                    isSettingsOpen ? "rotate-180" : "rotate-0"
                   )}
-                >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
-                  {!isCollapsed && <span>{item.label}</span>}
+                />
+              )}
+            </button>
 
-                  {isCollapsed && (
-                    <span className="absolute left-full ml-3 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
-                      {item.label}
-                    </span>
-                  )}
-                </a>
-              </li>
-            );
-          })}
+            {/* Submenu */}
+            <ul
+              className={clsx(
+                "overflow-hidden transition-all duration-300",
+                isSettingsOpen ? "max-h-[1000px] mt-1" : "max-h-0"
+              )}
+            >
+              {SETTINGS_LINKS.map(link => {
+                const isActive = pathname.startsWith(link.href || "");
+                const Icon = link.icon;
+                return (
+                  <li key={link.label}>
+                    <a
+                      href={link.href}
+                      className={clsx(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
+                        isActive
+                          ? "bg-blue-50 text-blue-600 font-medium"
+                          : "text-gray-600 hover:bg-gray-50 hover:text-blue-600"
+                      )}
+                    >
+                      <Icon className="w-4 h-4 flex-shrink-0" />
+                      {!isCollapsed && <span>{link.label}</span>}
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          </li>
+          <li>
+            <button
+              onClick={() => window.location.href = "/onboarding/setup"}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-green-600 hover:bg-green-50 hover:text-green-700 transition-all"
+            >
+              <Users className="w-4 h-4 flex-shrink-0" />
+              {!isCollapsed && <span>Add School</span>}
+            </button>
+          </li>
+
         </ul>
       </nav>
 
       {/* Logout */}
       <div className="p-4 border-t border-gray-200">
         <button
-          className={clsx(
-            "flex items-center gap-3 w-full px-3 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-all",
-            isCollapsed && "justify-center"
-          )}
+          className="flex items-center gap-3 w-full px-3 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-all"
           onClick={() => window.location.href = "/login"}
         >
           <LogOut className="w-5 h-5" />
-          {!isCollapsed && <span>Logout</span>}
+          <span>Logout</span>
         </button>
       </div>
     </div>

@@ -410,10 +410,11 @@ export default function SetupWizardPage() {
 
       // router.push("/onboarding/select-modules");
       // Mark complete – wait for success
+      console.log("Sending setup_complete patch with:", { setup_complete: true });
       const completeRes = await api.patch(`/schools/${currentSchoolId}/`, {
         setup_complete: true
       });
-
+     console.log("Response from server after setting complete:", completeRes.data);
       // Optional: verify the response actually shows it's complete
       if (!completeRes.data?.setup_complete) {
         console.warn("Server did NOT confirm setup_complete = true", completeRes.data);

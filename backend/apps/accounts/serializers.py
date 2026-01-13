@@ -127,7 +127,7 @@ class UserPermissionSerializer(serializers.ModelSerializer):
 
 class CurrentUserSerializer(serializers.ModelSerializer):
     # schools = SchoolMiniSerializer(many=True, read_only=True)
-    full_name = serializers.CharField(read_only=True)
+    full_name = serializers.SerializerMethodField()
     schools = serializers.SerializerMethodField()
     class Meta:
         model = User
@@ -135,13 +135,11 @@ class CurrentUserSerializer(serializers.ModelSerializer):
     
 
     def get_full_name(self, obj):
-        # combine first_name and last_name safely
-        # return f"{obj.first_name or ''} {obj.last_name or ''}".strip()
-        return getattr(obj, "full_name", None) or obj.email
+        # Compute properly – this is what you want
+        if hasattr(obj, 'full_name') and obj.full_name:
+            return obj.full_name
+        return f"{obj.first_name or ''} {obj.last_name or ''}".strip() or obj.email.split('@')[0]
 
-    # def get_schools(self, obj):
-    #     from apps.school.serializers import SchoolMiniSerializer
-    #     return SchoolMiniSerializer(obj.schools.all(), many=True).data
 
     def get_schools(self, obj):
         from apps.school.serializers import SchoolMiniSerializer

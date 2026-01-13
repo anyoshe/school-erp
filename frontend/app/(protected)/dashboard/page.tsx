@@ -4,29 +4,67 @@ import { Users, BookOpen, DollarSign, TrendingUp, Calendar, Library, BarChart3, 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getCurrentUser } from "@/utils/api";
+import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 
 export default function DashboardHome() {
   const [activeFilter, setActiveFilter] = useState("today");
+  const { currentSchool, loading: schoolLoading } = useCurrentSchool();
   const [userName, setUserName] = useState("User");
   const router = useRouter();
 
   useEffect(() => {
     async function fetchUser() {
       try {
-        const user = await getCurrentUser(true); // force fresh
-        const fullName = user.full_name || 
-                        `${user.first_name || ''} ${user.last_name || ''}`.trim() || 
-                        user.email?.split('@')[0] || 
-                        "User";
+        const user = await getCurrentUser(true);
+        let fullName =
+          user.full_name ||
+          `${user.first_name || ""} ${user.last_name || ""}`.trim() ||
+          user.email?.split("@")[0] ||
+          "User";
+
+        // Capitalize each word properly
+        fullName = fullName
+          .split(" ")
+          .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(" ");
+
         setUserName(fullName);
       } catch (error) {
         console.error("Failed to fetch user name:", error);
-        setUserName("User"); // Fallback
+        setUserName("User");
       }
     }
-
     fetchUser();
   }, []);
+  // Very simple loading state while school context is initializing
+  if (schoolLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your school context...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // No school selected → guide the user
+  if (!currentSchool) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-6 sm:p-8 text-center max-w-2xl mx-auto mt-8">
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3">
+          No School Selected
+        </h2>
+        <p className="text-gray-600 mb-6">
+          Please use the school switcher in the top bar to select a school you manage.
+        </p>
+        <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg">
+          <Target className="w-5 h-5" />
+          <span className="font-medium">Select a school to begin</span>
+        </div>
+      </div>
+    );
+  }
   const stats = [
     { name: "Pending Admissions", value: "38", change: "+15", icon: TrendingUp, color: "indigo" },
     { name: "Total Students", value: "2,847", change: "+12%", icon: Users, color: "blue" },
@@ -70,52 +108,52 @@ export default function DashboardHome() {
 
   const getColorClass = (color: string) => {
     const colors: Record<string, { bg: string; text: string; ring: string; hover: string; gradient: string }> = {
-      blue: { 
-        bg: "bg-blue-600", 
-        text: "text-blue-600", 
-        ring: "ring-blue-200", 
+      blue: {
+        bg: "bg-blue-600",
+        text: "text-blue-600",
+        ring: "ring-blue-200",
         hover: "hover:bg-blue-50",
         gradient: "from-blue-500 to-blue-600"
       },
-      emerald: { 
-        bg: "bg-emerald-600", 
-        text: "text-emerald-600", 
-        ring: "ring-emerald-200", 
+      emerald: {
+        bg: "bg-emerald-600",
+        text: "text-emerald-600",
+        ring: "ring-emerald-200",
         hover: "hover:bg-emerald-50",
         gradient: "from-emerald-500 to-emerald-600"
       },
-      amber: { 
-        bg: "bg-amber-500", 
-        text: "text-amber-600", 
-        ring: "ring-amber-200", 
+      amber: {
+        bg: "bg-amber-500",
+        text: "text-amber-600",
+        ring: "ring-amber-200",
         hover: "hover:bg-amber-50",
         gradient: "from-amber-400 to-amber-500"
       },
-      purple: { 
-        bg: "bg-purple-600", 
-        text: "text-purple-600", 
-        ring: "ring-purple-200", 
+      purple: {
+        bg: "bg-purple-600",
+        text: "text-purple-600",
+        ring: "ring-purple-200",
         hover: "hover:bg-purple-50",
         gradient: "from-purple-500 to-purple-600"
       },
-      rose: { 
-        bg: "bg-rose-600", 
-        text: "text-rose-600", 
-        ring: "ring-rose-200", 
+      rose: {
+        bg: "bg-rose-600",
+        text: "text-rose-600",
+        ring: "ring-rose-200",
         hover: "hover:bg-rose-50",
         gradient: "from-rose-500 to-rose-600"
       },
-      indigo: { 
-        bg: "bg-indigo-600", 
-        text: "text-indigo-600", 
-        ring: "ring-indigo-200", 
+      indigo: {
+        bg: "bg-indigo-600",
+        text: "text-indigo-600",
+        ring: "ring-indigo-200",
         hover: "hover:bg-indigo-50",
         gradient: "from-indigo-500 to-indigo-600"
       },
-      teal: { 
-        bg: "bg-teal-600", 
-        text: "text-teal-600", 
-        ring: "ring-teal-200", 
+      teal: {
+        bg: "bg-teal-600",
+        text: "text-teal-600",
+        ring: "ring-teal-200",
         hover: "hover:bg-teal-50",
         gradient: "from-teal-500 to-teal-600"
       },
@@ -127,14 +165,28 @@ export default function DashboardHome() {
 
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* Welcome Header */}
+      {/* Welcome Header – now school-aware */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 sm:p-5 border border-blue-100">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
-              Welcome back, <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">{userName}</span>
+              Welcome back,{" "}
+              <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                {userName}
+              </span>
             </h1>
-            <p className="text-gray-600 text-sm sm:text-base mt-1">Here&apos;s what&apos;s happening with your institution today.</p>
+            <p className="text-gray-600 text-sm sm:text-base mt-1 flex items-center gap-2">
+              In{" "}
+              <span className="font-semibold text-gray-900">
+                {currentSchool.name}
+                {currentSchool.short_name && (
+                  <span className="text-gray-500 ml-1.5 text-base">
+                    ({currentSchool.short_name})
+                  </span>
+                )}
+              </span>
+              • Here's what's happening today.
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <div className="px-3 sm:px-4 py-2 bg-white rounded-lg sm:rounded-xl border border-gray-200">
@@ -160,8 +212,8 @@ export default function DashboardHome() {
                 key={period}
                 onClick={() => setActiveFilter(period)}
                 className={`px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-md capitalize transition-all ${activeFilter === period
-                    ? "bg-white text-blue-600"
-                    : "text-gray-600 hover:text-gray-900"
+                  ? "bg-white text-blue-600"
+                  : "text-gray-600 hover:text-gray-900"
                   }`}
               >
                 {period}
@@ -314,9 +366,9 @@ export default function DashboardHome() {
             {recentActivities.map((activity, i) => (
               <div key={i} className="flex items-start gap-3">
                 <div className={`p-2 rounded-lg ${activity.type === "academic" ? "bg-blue-100" :
-                    activity.type === "finance" ? "bg-emerald-100" :
-                      activity.type === "admin" ? "bg-purple-100" :
-                        "bg-gray-100"
+                  activity.type === "finance" ? "bg-emerald-100" :
+                    activity.type === "admin" ? "bg-purple-100" :
+                      "bg-gray-100"
                   }`}>
                   {activity.type === "academic" ? <BookOpen className="w-4 h-4 text-blue-600" /> :
                     activity.type === "finance" ? <DollarSign className="w-4 h-4 text-emerald-600" /> :

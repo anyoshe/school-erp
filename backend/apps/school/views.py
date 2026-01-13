@@ -2,6 +2,7 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.db.models import Q
 from rest_framework import status
 from .models import School, Module
 from .serializers import SchoolSerializer, SchoolCreateUpdateSerializer, ModuleSerializer, SchoolMiniSerializer
@@ -21,17 +22,11 @@ class SchoolViewSet(ModelViewSet):
     queryset = School.objects.prefetch_related('modules').all().order_by('name')
     permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
 
-    # def get_serializer_class(self):
-    #     if self.action in ['create', 'update', 'partial_update']:
-    #         return SchoolCreateUpdateSerializer
-    #     return SchoolSerializer
     def get_serializer_class(self):
-        if self.action == 'partial_update':
-            return SchoolMiniSerializer  # ← Use Mini for PATCH response (has setup_complete)
-        if self.action in ['create', 'update']:
+        if self.action in ['create', 'update', 'partial_update']:
             return SchoolCreateUpdateSerializer
         return SchoolSerializer
-
+   
     def get_serializer_context(self):
         context = super().get_serializer_context()
         context['request'] = self.request
@@ -45,21 +40,7 @@ class SchoolViewSet(ModelViewSet):
         school.users.add(self.request.user)
         return school
         
-    # @action(detail=False, methods=['get'], url_path='active')
-    # def active(self, request):
-    #     """
-    #     Get the first school the user is associated with.
-    #     In future, you could add logic for user.active_school_id or priority.
-    #     """
-    #     # .first() is fine for now; consider ordering by created_at or is_active later
-    #     school = School.objects.filter(users=request.user).first()
-    #     if not school:
-    #         return Response(
-    #             {"detail": "No active school found for this user."},
-    #             status=status.HTTP_404_NOT_FOUND
-    #         )
-    #     serializer = self.get_serializer(school)
-    #     return Response(serializer.data)
+    
     @action(detail=False, methods=['get'], url_path='active')
     def active(self, request):
         school = School.objects.filter(users=request.user).first()
@@ -89,3 +70,30 @@ class SchoolViewSet(ModelViewSet):
 
         # If you reach here → permission passed → proceed with normal update
         return super().update(request, *args, **kwargs)
+    
+ 
+    @action(detail=False, methods=['get'], url_path='my-schools',
+            permission_classes=[IsAuthenticated])
+   
+   
+    def my_schools(self, request):
+        """
+        Return all schools where the current user is either:
+        - the owner, or
+        - explicitly added as a member (via users M2M)
+        """
+        print("=== MY-SCHOOLS ENDPOINT CALLED ===")
+        print(f"Current user: {request.user.email} (ID: {request.user.id})")
+        print(f"Is staff? {request.user.is_staff}")
+    
+    # Raw queryset count - most important!
+        total_raw = School.objects.count()
+        print(f"Total schools in DB (unfiltered): {total_raw}")
+        schools = School.objects.filter(
+            Q(owner=request.user) | Q(users=request.user)
+        ).distinct().order_by('name')
+        
+        serializer = SchoolSerializer(schools, many=True, context={'request': request})
+        # serializer = SchoolMiniSerializer(schools, many=True, context={'request': request})
+        
+        return Response(serializer.data)
