@@ -26,6 +26,9 @@ class School(models.Model):
     short_name = models.CharField(max_length=50, blank=True)
     email = models.EmailField(blank=True, null=True)
     phone = models.CharField(max_length=20, blank=True)
+    alternative_phone = models.CharField(max_length=20, blank=True, verbose_name="Alternative Phone")
+    emergency_phone = models.CharField(max_length=20, blank=True, verbose_name="Emergency Phone")
+    postal_address = models.TextField(blank=True, verbose_name="Postal Address")
     address = models.TextField(blank=True)
     city = models.CharField(max_length=100, blank=True)
     country = models.CharField(max_length=100, default="Kenya")
@@ -63,6 +66,35 @@ class School(models.Model):
     number_of_terms = models.PositiveIntegerField(default=3)
     grading_system = models.CharField(max_length=20, default="percentage")
     passing_mark = models.PositiveIntegerField(default=50)
+
+    # ── NEW: Admission Number Configuration ───────────────────────────────
+    ADMISSION_NUMBER_FORMAT_CHOICES = [
+        ('YEAR_SEQ', 'Year + Sequential (2026-0001)'),
+        ('PREFIX_YEAR_SEQ', 'Prefix + Year + Sequential (ABC-2026-0001)'),
+        ('CUSTOM', 'Manual entry (admin enters number)'),
+    ]
+
+    admission_number_format = models.CharField(
+        max_length=20,
+        choices=ADMISSION_NUMBER_FORMAT_CHOICES,
+        default='YEAR_SEQ',
+        verbose_name="Admission Number Format",
+        help_text="How admission/application numbers should be generated for this school"
+    )
+
+    admission_prefix = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name="Admission Number Prefix",
+        help_text="Optional prefix (e.g. 'KCB-', 'INT-', 'SCH-'). Only used if format includes prefix."
+    )
+
+    admission_seq_padding = models.PositiveSmallIntegerField(
+        default=4,
+        verbose_name="Sequence Number Padding",
+        help_text="Number of digits for the sequential part (e.g. 4 → 0001, 5 → 00001)"
+    )
+    # ────────────────────────────────────────────────────────────────────────
 
     # Activated features/modules
     modules = models.ManyToManyField(Module, blank=True, related_name="schools")

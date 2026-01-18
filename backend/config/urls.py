@@ -1,21 +1,26 @@
-
 # from django.contrib import admin
 # from django.urls import path, include
 # from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-# from apps.students.views import StudentViewSet
 # from django.conf import settings
 # from django.conf.urls.static import static
 
 # urlpatterns = [
 #     path('admin/', admin.site.urls),
 
-#     # ACCOUNTS API
-#     path('api/accounts/', include('apps.accounts.urls')),
-
-#     # JWT AUTH
+#     # JWT Auth
 #     path('api/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
 #     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
+#     # Accounts & Users
+#     path('api/accounts/', include('apps.accounts.urls')),
+
+#     # Core School & Modules (this exposes /api/schools/, /api/modules/, etc.)
+#     path('api/', include('apps.school.urls')),
+
+#     # Students - use router or explicit (your choice - explicit is fine)
+#     path('api/students/', include('apps.students.urls')),  # ← keep this
+
+#     # All other existing apps
 #     path('api/academics/', include('apps.academics.urls')),
 #     path('api/admissions/', include('apps.admissions.urls')),
 #     path('api/attendance/', include('apps.attendance.urls')),
@@ -25,71 +30,59 @@
 #     path('api/reports/', include('apps.reports.urls')),
 #     path('api/staff/', include('apps.staff.urls')),
 
-#     # 🔑 STUDENTS (explicit, no router conflict)
-#     path('api/students/', StudentViewSet.as_view({
-#         'get': 'list',
-#         'post': 'create',
-#     })),
-#     path('api/students/<uuid:pk>/', StudentViewSet.as_view({
-#         'get': 'retrieve',
-#         'patch': 'partial_update',
-#         'delete': 'destroy',
-#     })),
-
-#     # Sub-resources
-#     path('api/students/', include('apps.students.urls')),
-#     path('api/schools/', include('apps.school.urls')),
-
+#     # Media in debug
 # ]
 
-# # Add this at the very end
 # if settings.DEBUG:
 #     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
 
-
-# config/urls.py
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from apps.students.views import StudentViewSet
 from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
+    # 1. Admin (standard)
     path('admin/', admin.site.urls),
 
-    # ACCOUNTS API
-    path('api/accounts/', include('apps.accounts.urls')),
-
-    # JWT AUTH
+    # 2. JWT Auth - CRITICAL (first)
     path('api/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
-    # All other apps (your existing ones)
-    path('api/academics/', include('apps.academics.urls')),
+    # 3. Accounts & Users (critical - user management)
+    path('api/accounts/', include('apps.accounts.urls')),
+
+    # 3. Core Multi-Tenancy (School setup - your foundation)
+    path('api/', include('apps.school.urls')),
+
+    # 4. PHASE 1: Students + Admissions (your current work)
+    path('api/students/', include('apps.students.urls')),
     path('api/admissions/', include('apps.admissions.urls')),
-    path('api/attendance/', include('apps.attendance.urls')),
-    path('api/core/', include('apps.core.urls')),
+
+    # 5. PHASE 2 Priority: Staff + Finance (M-Pesa, fees for Kenyan schools)
+    path('api/staff/', include('apps.staff.urls')),
     path('api/finance/', include('apps.finance.urls')),
+
+    # 6. Academic Flow (attendance → academics)
+    path('api/attendance/', include('apps.attendance.urls')),
+    path('api/academics/', include('apps.academics.urls')),
+
+    # 7. Supporting modules (alphabetical)
     path('api/library/', include('apps.library.urls')),
     path('api/reports/', include('apps.reports.urls')),
-    path('api/staff/', include('apps.staff.urls')),
+    path('api/core/', include('apps.core.urls')),
+    # path('api/parent-portal/', include('apps.parent_portal.urls')),
+    # path('api/elearning/', include('apps.elearning.urls')),
+    # path('api/health/', include('apps.health.urls')),
+    # path('api/events/', include('apps.events.urls')),
+    # path('api/alumni/', include('apps.alumni.urls')),
+    # path('api/transport/', include('apps.transport.urls')),
+    # path('api/inventory/', include('apps.inventory.urls')),
+    # path('api/procurement/', include('apps.procurement.urls')),
+    
 
-    # STUDENTS (your explicit paths - keep them)
-    path('api/students/', StudentViewSet.as_view({
-        'get': 'list',
-        'post': 'create',
-    })),
-    path('api/students/<uuid:pk>/', StudentViewSet.as_view({
-        'get': 'retrieve',
-        'patch': 'partial_update',
-        'delete': 'destroy',
-    })),
-    path('api/students/', include('apps.students.urls')),  # if needed
-
-    # SCHOOL & MODULES - change to this to expose /api/schools/ and /api/modules/
-    path('api/', include('apps.school.urls')),  # ← Key fix: no 'schools/' prefix
-
+    # 8. Media (debug only)
 ]
 
 if settings.DEBUG:

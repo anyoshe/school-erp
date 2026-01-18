@@ -1,119 +1,75 @@
-from rest_framework.viewsets import ModelViewSet
-from rest_framework import viewsets  # <-- Add this import
-from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.decorators import action
+from django_filters.rest_framework import DjangoFilterBackend
 from .models import Student, Guardian, StudentGuardian, MedicalRecord
 from .serializers import (
-    StudentSerializer,
-    StudentCreateUpdateSerializer,
+    StudentSerializer, StudentCreateUpdateSerializer,
     GuardianSerializer,
-    StudentGuardianSerializer,
-    LinkExistingGuardianSerializer,  # <-- Make sure this is imported
-    MedicalRecordSerializer,
-    MedicalRecordCreateUpdateSerializer
+    StudentGuardianSerializer, LinkExistingGuardianSerializer,
+    MedicalRecordSerializer, MedicalRecordCreateUpdateSerializer
 )
 
-# ----------------------------
-# STUDENT VIEWSET
-# ----------------------------
-
-class StudentViewSet(ModelViewSet):
-    queryset = Student.objects.all().order_by('admission_number')
+class StudentViewSet(viewsets.ModelViewSet):
+    queryset = Student.objects.all()
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['school', 'status', 'current_class', 'gender', 'nationality']
+
+    def get_queryset(self):
+        return self.queryset.filter(school=self.request.user.school)  # Tenancy filter (adjust if user has school)
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return StudentCreateUpdateSerializer
         return StudentSerializer
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        if not serializer.is_valid():
-            print("Validation errors:", serializer.errors)  # <-- Add this
-        serializer.is_valid(raise_exception=True)
-        return super().create(request, *args, **kwargs)
-    
-    def partial_update(self, request, *args, **kwargs):
-        serializer = self.get_serializer(
-            self.get_object(),
-            data=request.data,
-            partial=True
-        )
-        if not serializer.is_valid():
-            print("PATCH ERRORS:", serializer.errors)
-        serializer.is_valid(raise_exception=True)
-        return super().partial_update(request, *args, **kwargs)
-
-
-# ----------------------------
-# GUARDIAN VIEWSET
-# ----------------------------
-class GuardianViewSet(ModelViewSet):
-    queryset = Guardian.objects.all().order_by('full_name')
-    permission_classes = [IsAuthenticated]
+class GuardianViewSet(viewsets.ModelViewSet):
+    queryset = Guardian.objects.all()
     serializer_class = GuardianSerializer
+    permission_classes = [IsAuthenticated]
 
+    def get_queryset(self):
+        return self.queryset.filter(school=self.request.user.school)
 
-# ----------------------------
-# STUDENT-GUARDIAN VIEWSET
-# ----------------------------
-class StudentGuardianViewSet(viewsets.ModelViewSet):  # <-- Use viewsets.ModelViewSet
-    queryset = StudentGuardian.objects.select_related('student', 'guardian').all()
+class StudentGuardianViewSet(viewsets.ModelViewSet):
+    queryset = StudentGuardian.objects.all()
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['student']
+    filterset_fields = ['student', 'is_primary', 'is_active']
 
     def get_serializer_class(self):
-        # Use different serializer for linking existing guardians
         if self.action == 'link_existing':
             return LinkExistingGuardianSerializer
         return StudentGuardianSerializer
-    
+
+    def get_queryset(self):
+        return self.queryset.filter(student__school=self.request.user.school)
+
     @action(detail=False, methods=['post'])
     def link_existing(self, request):
-        """Link an existing guardian to a student"""
         serializer = self.get_serializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=201)
-        return Response(serializer.errors, status=400)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=201)
 
-
-# ----------------------------
-# MEDICAL RECORD VIEWSET
-# ----------------------------
-class MedicalRecordViewSet(ModelViewSet):
-    queryset = MedicalRecord.objects.select_related("student").prefetch_related("documents").all()
+class MedicalRecordViewSet(viewsets.ModelViewSet):
+    queryset = MedicalRecord.objects.all()
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["student"]
+    filterset_fields = ['student', 'immunization_status']
+
+    def get_queryset(self):
+        return self.queryset.filter(school=self.request.user.school)
 
     def get_serializer_class(self):
-        if self.action in ["create", "update", "partial_update"]:
+        if self.action in ['create', 'update', 'partial_update']:
             return MedicalRecordCreateUpdateSerializer
         return MedicalRecordSerializer
 
     def perform_create(self, serializer):
-        serializer.save(recorded_by=self.request.user)
+        serializer.save(school=self.request.user.school, recorded_by=self.request.user)
 
     def perform_update(self, serializer):
         serializer.save(reviewed_by=self.request.user)
-
-    def create(self, request, *args, **kwargs):
-        print("CREATE DATA:", request.data)
-        print("FILES:", request.FILES)
-        return super().create(request, *args, **kwargs)
-
-    def update(self, request, *args, **kwargs):
-        print("UPDATE DATA:", request.data)
-        print("FILES:", request.FILES)
-        return super().update(request, *args, **kwargs)
-
-    def partial_update(self, request, *args, **kwargs):
-        print("PATCH DATA:", request.data)
-        print("FILES:", request.FILES)
-        return super().partial_update(request, *args, **kwargs)
-        
-    

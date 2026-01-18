@@ -54,6 +54,14 @@ INSTALLED_APPS = [
     'apps.reports',
     'apps.core',
     'apps.school', 
+    'apps.inventory',
+    'apps.transport',
+    'apps.parent_portal',
+    'apps.elearning',
+    'apps.health',
+    'apps.events',
+    'apps.alumni',
+    'apps.procurement',
 ]
 
 

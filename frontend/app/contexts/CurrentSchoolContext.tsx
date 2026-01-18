@@ -1,9 +1,13 @@
 // app/contexts/CurrentSchoolContext.tsx
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import api from "@/utils/api";
+import { toast } from "sonner";
 
+// ────────────────────────────────────────────────────────────────
+// Types (expanded to include all current fields from your backend)
+// ────────────────────────────────────────────────────────────────
 export interface Module {
   id: number;
   name: string;
@@ -17,7 +21,10 @@ export interface School {
   short_name?: string;
   email?: string;
   phone?: string;
+  alternative_phone?: string;
+  emergency_phone?: string;
   address?: string;
+  postal_address?: string;
   city?: string;
   country?: string;
   website?: string;
@@ -31,10 +38,13 @@ export interface School {
   official_registration_number?: string;
   registration_authority?: string;
   registration_date?: string;
+  admission_fee?: number;
   logo?: string | null;
   module_ids?: number[];
   modules: Module[];
   setup_complete?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 interface CurrentSchoolContextType {
@@ -54,82 +64,75 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch schools and current school on mount
-  useEffect(() => {
-    const fetchSchools = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  // ────────────────────────────────────────────────────────────────
+  // Core fetch logic (full details every time)
+  // ────────────────────────────────────────────────────────────────
+  const fetchAndSetSchools = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        // 1️⃣ Fetch all schools for the user
-        const res = await api.get("/schools/my-schools/");
-        const fetchedSchools: School[] = res.data;
-        setSchools(fetchedSchools);
+      // 1. Get list of all accessible schools
+      const schoolsRes = await api.get("/schools/my-schools/");
+      const fetchedSchools: School[] = schoolsRes.data;
+      setSchools(fetchedSchools);
 
-        if (fetchedSchools.length > 0) {
-          // 2️⃣ Determine saved or first school
-          const savedId = localStorage.getItem("currentSchoolId");
-          const selected =
-            (savedId && fetchedSchools.find((s) => s.id === savedId)) ||
-            fetchedSchools[0];
-
-          if (selected) {
-            // 3️⃣ Fetch full details for selected school
-            const detailRes = await api.get(`/schools/${selected.id}/`);
-            setCurrentSchoolState(detailRes.data);
-            localStorage.setItem("currentSchoolId", selected.id);
-          }
-        } else {
-          setCurrentSchoolState(null);
-          localStorage.removeItem("currentSchoolId");
-        }
-      } catch (err) {
-        console.error("Failed to load schools:", err);
-        setError("Could not load your schools. Please try again.");
-      } finally {
-        setLoading(false);
+      if (fetchedSchools.length === 0) {
+        setCurrentSchoolState(null);
+        localStorage.removeItem("currentSchoolId");
+        return;
       }
-    };
 
-    fetchSchools();
+      // 2. Decide which one to select as current
+      const savedId = localStorage.getItem("currentSchoolId");
+      let selected = savedId ? fetchedSchools.find((s) => s.id === savedId) : null;
+
+      // Fallback: newest or first school
+      if (!selected) {
+        selected = fetchedSchools.sort((a, b) => 
+          new Date(b.updated_at || b.created_at || 0).getTime() - 
+          new Date(a.updated_at || a.created_at || 0).getTime()
+        )[0];
+      }
+
+      if (selected) {
+        // 3. Always fetch FULL details (important for new fields!)
+        const detailRes = await api.get(`/schools/${selected.id}/`);
+        const fullSchool = detailRes.data as School;
+
+        setCurrentSchoolState(fullSchool);
+        localStorage.setItem("currentSchoolId", selected.id);
+        console.log("[Context] Current school loaded:", fullSchool.id, fullSchool.name);
+      }
+    } catch (err: any) {
+      console.error("[Context] Failed to load schools:", err);
+      setError("Could not load your schools. Please try again later.");
+      toast.error("Failed to load school data", {
+        description: err.response?.data?.detail || "Network or authentication issue",
+      });
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // Custom setter for current school (with persistence)
+  // Initial load
+  useEffect(() => {
+    fetchAndSetSchools();
+  }, [fetchAndSetSchools]);
+
+  // Public refresh method (called from pages after updates)
+  const refreshSchools = async () => {
+    console.log("[Context] Manual refresh triggered");
+    await fetchAndSetSchools();
+  };
+
+  // Custom setter with persistence
   const setCurrentSchool = (school: School | null) => {
     setCurrentSchoolState(school);
     if (school) {
       localStorage.setItem("currentSchoolId", school.id);
     } else {
       localStorage.removeItem("currentSchoolId");
-    }
-  };
-
-  // Manual refresh
-  const refreshSchools = async () => {
-    setLoading(true);
-    try {
-      const res = await api.get("/schools/my-schools/");
-      const fetchedSchools: School[] = res.data;
-      setSchools(fetchedSchools);
-
-      if (fetchedSchools.length > 0) {
-        const savedId = localStorage.getItem("currentSchoolId");
-        const selected =
-          (savedId && fetchedSchools.find((s) => s.id === savedId)) || fetchedSchools[0];
-
-        if (selected) {
-          const detailRes = await api.get(`/schools/${selected.id}/`);
-          setCurrentSchoolState(detailRes.data);
-          localStorage.setItem("currentSchoolId", selected.id);
-        }
-      } else {
-        setCurrentSchoolState(null);
-        localStorage.removeItem("currentSchoolId");
-      }
-    } catch (err) {
-      console.error("Refresh failed:", err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -149,7 +152,7 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// Hook for consuming the context
+// Hook
 export function useCurrentSchool() {
   const context = useContext(CurrentSchoolContext);
   if (!context) {

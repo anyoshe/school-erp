@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, ChangeEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import api from "@/utils/api";
 import {
@@ -63,6 +63,9 @@ const steps = [
 
 export default function SetupWizardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isNewSchoolMode = searchParams.get("mode") === "new";
+
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [schoolId, setSchoolId] = useState<string | null>(null);
@@ -102,56 +105,106 @@ export default function SetupWizardPage() {
   });
 
   useEffect(() => {
-    // Optional: Try to load existing school for pre-fill (but DON'T fail if missing)
-    const loadExisting = async () => {
-      try {
-        // Try to get existing active school
-        const res = await api.get("/schools/active/");
-        setSchoolId(res.data.id);
-        // Pre-fill form with existing data
-        setFormData((prev) => ({
-          ...prev,
-          schoolName: res.data.name || prev.schoolName,
-          shortName: res.data.short_name || prev.shortName,
-          address: res.data.address || prev.address,
-          city: res.data.city || prev.city,
-          country: res.data.country || prev.country,
-          officialRegistrationNumber: res.data.official_registration_number || prev.officialRegistrationNumber,
-          registrationAuthority: res.data.registration_authority || prev.registrationAuthority,
-          registrationDate: res.data.registration_date || prev.registrationDate,
-          phone: res.data.phone || prev.phone,
-          email: res.data.email || prev.email,
-          website: res.data.website || prev.website,
-          currency: res.data.currency || prev.currency,
-          academicYearStart: res.data.academic_year_start_month || prev.academicYearStart,
-          academicYearEnd: res.data.academic_year_end_month || prev.academicYearEnd,
-          termSystem: res.data.term_system || prev.termSystem,
-          numberOfTerms: res.data.number_of_terms || prev.numberOfTerms,
-          gradingSystem: res.data.grading_system || prev.gradingSystem,
-          passingMark: res.data.passing_mark || prev.passingMark,
-        }));
-      } catch (err: any) {
-        console.log("No existing school - will create on complete");
-        // Do NOT redirect to login here!
-      }
-    };
-
-    loadExisting();
-  }, [router]);
+    if (!isNewSchoolMode) {
+      const loadExisting = async () => {
+        try {
+          const res = await api.get("/schools/active/");
+          console.log("[INIT] Loaded existing active school:", res.data.id, res.data.name);
+          setSchoolId(res.data.id);
+          setFormData((prev) => ({
+            ...prev,
+            schoolName: res.data.name || prev.schoolName,
+            // ... other pre-fills ...
+          }));
+        } catch (err) {
+          console.log("[INIT] No existing school found - will create new");
+        }
+      };
+      loadExisting();
+    } else {
+      console.log("[INIT] Running in NEW SCHOOL mode (forced creation)");
+    }
+  }, [isNewSchoolMode]);
 
   const updateForm = <K extends keyof FormData>(key: K, value: FormData[K]) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
 
   const nextStep = () => {
-    if (currentStep < steps.length - 1) {
-      setCurrentStep((prev) => prev + 1);
-    }
+    if (currentStep < steps.length - 1) setCurrentStep((prev) => prev + 1);
   };
 
   const prevStep = () => {
-    if (currentStep > 0) {
-      setCurrentStep((prev) => prev - 1);
+    if (currentStep > 0) setCurrentStep((prev) => prev - 1);
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // ROBUST HELPER: Get or Create with heavy logging & fallbacks
+  // ─────────────────────────────────────────────────────────────
+  const getOrCreateResource = async (
+    endpoint: string,
+    searchParams: Record<string, any>,
+    payload: Record<string, any>
+  ): Promise<string> => {
+    console.group(`[RESOURCE ${endpoint}]`);
+
+    console.log("Search params:", searchParams);
+    console.log("Payload (school):", payload.school);
+
+    // Step 1: Search
+    try {
+      const searchRes = await api.get(endpoint, { params: searchParams });
+      const count = searchRes.data.results?.length || 0;
+      console.log(`Search found ${count} items`);
+
+      if (count > 0) {
+        const foundId = searchRes.data.results[0].id;
+        console.log(`→ Reusing existing ID: ${foundId}`);
+        console.groupEnd();
+        return foundId;
+      }
+    } catch (searchErr: any) {
+      console.warn("Search failed:", searchErr.response?.status, searchErr.response?.data);
+    }
+
+    // Step 2: Create
+    try {
+      console.log("Creating new resource...");
+      const createRes = await api.post(endpoint, payload);
+      const newId = createRes.data.id;
+      console.log(`→ Created new ID: ${newId}`);
+      console.groupEnd();
+      return newId;
+    } catch (createErr: any) {
+      console.error("Create failed:", {
+        status: createErr.response?.status,
+        data: createErr.response?.data,
+      });
+
+      // Duplicate handling
+      if (createErr.response?.status === 400) {
+        const detail = createErr.response?.data?.non_field_errors?.[0] || "";
+        if (detail.includes("unique") || detail.includes("duplicate")) {
+          console.warn("Duplicate detected - retrying search...");
+
+          try {
+            const retryRes = await api.get(endpoint, { params: searchParams });
+            if (retryRes.data.results?.length > 0) {
+              const retryId = retryRes.data.results[0].id;
+              console.log(`→ Retry found ID: ${retryId}`);
+              console.groupEnd();
+              return retryId;
+            } else {
+              console.error("Retry search found NOTHING - possible ID mismatch!");
+            }
+          } catch (retryErr) {
+            console.error("Retry search also failed:", retryErr);
+          }
+        }
+      }
+
+      console.groupEnd();
+      throw createErr;
     }
   };
 
@@ -159,285 +212,167 @@ export default function SetupWizardPage() {
     setIsLoading(true);
     setError(null);
 
+    console.group("=== SETUP WIZARD COMPLETE FLOW ===");
+    console.log("Mode:", isNewSchoolMode ? "NEW SCHOOL" : "UPDATE EXISTING");
+    console.log("Current schoolId before start:", schoolId);
+
     try {
-      let currentSchoolId = schoolId;
+      let currentSchoolId: string;
 
-      // === CREATE NEW SCHOOL IF NONE EXISTS ===
-      if (!currentSchoolId) {
-        console.log("No school exists yet - creating new one...");
+      // ── SCHOOL CREATION / UPDATE ───────────────────────────────────
+      const schoolForm = new FormData();
+      schoolForm.append("name", formData.schoolName || "My New School");
+      schoolForm.append("short_name", formData.shortName || "MNS");
+      schoolForm.append("address", formData.address || "");
+      schoolForm.append("city", formData.city || "");
+      schoolForm.append("country", formData.country || "Kenya");
+      schoolForm.append("official_registration_number", formData.officialRegistrationNumber || "");
+      schoolForm.append("registration_authority", formData.registrationAuthority || "");
+      schoolForm.append("registration_date", formData.registrationDate || "");
+      schoolForm.append("phone", formData.phone || "");
+      schoolForm.append("email", formData.email || "");
+      schoolForm.append("website", formData.website || "");
+      schoolForm.append("currency", formData.currency || "KES");
+      schoolForm.append("academic_year_start_month", formData.academicYearStart || "January");
+      schoolForm.append("academic_year_end_month", formData.academicYearEnd || "December");
+      schoolForm.append("term_system", formData.termSystem || "terms");
+      schoolForm.append("number_of_terms", formData.numberOfTerms.toString() || "3");
+      schoolForm.append("grading_system", formData.gradingSystem || "percentage");
+      schoolForm.append("passing_mark", formData.passingMark.toString() || "50");
 
-        const schoolForm = new FormData();
-        schoolForm.append("name", formData.schoolName || "My New School");
-        schoolForm.append("short_name", formData.shortName || "MNS");
-        schoolForm.append("address", formData.address || "");
-        schoolForm.append("city", formData.city || "");
-        schoolForm.append("country", formData.country || "Kenya");
-        schoolForm.append("official_registration_number", formData.officialRegistrationNumber || "");
-        schoolForm.append("registration_authority", formData.registrationAuthority || "");
-        schoolForm.append("registration_date", formData.registrationDate || "");
-        schoolForm.append("phone", formData.phone || "");
-        schoolForm.append("email", formData.email || "");
-        schoolForm.append("website", formData.website || "");
-        schoolForm.append("currency", formData.currency || "KES");
-        schoolForm.append("academic_year_start_month", formData.academicYearStart || "January");
-        schoolForm.append("academic_year_end_month", formData.academicYearEnd || "December");
-        schoolForm.append("term_system", formData.termSystem || "terms");
-        schoolForm.append("number_of_terms", formData.numberOfTerms.toString() || "3");
-        schoolForm.append("grading_system", formData.gradingSystem || "percentage");
-        schoolForm.append("passing_mark", formData.passingMark.toString() || "50");
+      if (formData.logo) {
+        console.log("Uploading logo:", formData.logo.name, formData.logo.size);
+        schoolForm.append("logo", formData.logo);
+      }
 
-        if (formData.logo) {
-          console.log("Uploading logo:", formData.logo.name, formData.logo.size);
-          schoolForm.append("logo", formData.logo);
-        }
-
+      if (isNewSchoolMode || !schoolId) {
+        console.log("Creating NEW school...");
         const newSchoolRes = await api.post("/schools/", schoolForm);
         currentSchoolId = newSchoolRes.data.id;
-        setSchoolId(currentSchoolId); // Update state for future use
-        console.log("New school created with ID:", currentSchoolId);
+        console.log("→ New school created! ID:", currentSchoolId);
+        setSchoolId(currentSchoolId);
       } else {
-        // Update existing school
-        console.log("Updating existing school:", currentSchoolId);
-        const schoolForm = new FormData();
-        schoolForm.append("name", formData.schoolName || "");
-        schoolForm.append("short_name", formData.shortName || "");
-        schoolForm.append("address", formData.address || "");
-        schoolForm.append("city", formData.city || "");
-        schoolForm.append("country", formData.country || "Kenya");
-        schoolForm.append("official_registration_number", formData.officialRegistrationNumber || "");
-        schoolForm.append("registration_authority", formData.registrationAuthority || "");
-        schoolForm.append("registration_date", formData.registrationDate || "");
-        schoolForm.append("phone", formData.phone || "");
-        schoolForm.append("email", formData.email || "");
-        schoolForm.append("website", formData.website || "");
-        schoolForm.append("currency", formData.currency || "KES");
-        schoolForm.append("academic_year_start_month", formData.academicYearStart || "January");
-        schoolForm.append("academic_year_end_month", formData.academicYearEnd || "December");
-        schoolForm.append("term_system", formData.termSystem || "terms");
-        schoolForm.append("number_of_terms", formData.numberOfTerms.toString() || "3");
-        schoolForm.append("grading_system", formData.gradingSystem || "percentage");
-        schoolForm.append("passing_mark", formData.passingMark.toString() || "50");
-
-        if (formData.logo) {
-          console.log("Uploading logo:", formData.logo.name, formData.logo.size);
-          schoolForm.append("logo", formData.logo);
-        }
-
-        await api.patch(`/schools/${currentSchoolId}/`, schoolForm);
+        console.log("Updating EXISTING school:", schoolId);
+        await api.patch(`/schools/${schoolId}/`, schoolForm);
+        currentSchoolId = schoolId;
       }
+      // Do NOT trust active school during setup
+      console.log("Using authoritative schoolId for setup:", currentSchoolId);
+      // ── CRITICAL: Save to localStorage immediately ──────────────────
+      localStorage.setItem("currentSchoolId", currentSchoolId);
+      console.log("→ Saved currentSchoolId to localStorage:", currentSchoolId);
 
-      // === Check if curriculum exists, create if not ===
-      let curriculumId = null;
-
-      try {
-        const existingCurriculum = await api.get("/academics/curricula/", {
-          params: { school: currentSchoolId, name: formData.curriculumName },
-        });
-
-        if (existingCurriculum.data.results?.length > 0) {
-          curriculumId = existingCurriculum.data.results[0].id;
-          console.log("Existing curriculum found, using ID:", curriculumId);
-        }
-      } catch (err) {
-        console.warn("Failed to check existing curriculum:", err);
-        // Optional: proceed to create if check fails (fail-open)
-      }
-
-      // Only create if no existing curriculum was found
-      if (!curriculumId) {
-        try {
-          const curriculumRes = await api.post("/academics/curricula/", {
-            name: formData.curriculumName || "CBC",
-            short_code: formData.curriculumShortCode || "CBC",
-            description: formData.curriculumDescription || "Competency Based Curriculum",
-            is_active: true,
-            school: currentSchoolId,
-          });
-          curriculumId = curriculumRes.data.id;
-          console.log("New curriculum created with ID:", curriculumId);
-        } catch (err: any) {
-          if (err.response?.status === 400) {
-            // Handle duplicate error gracefully
-            console.warn("Curriculum creation failed (likely duplicate):", err.response?.data);
-            // Optional: fallback to search again
-            const fallback = await api.get("/academics/curricula/", {
-              params: { school: currentSchoolId, name: formData.curriculumName },
-            });
-            if (fallback.data.results?.length > 0) {
-              curriculumId = fallback.data.results[0].id;
-            } else {
-              throw new Error("Failed to create or find curriculum");
-            }
-          } else {
-            throw err; // Other errors
-          }
-        }
-      }
-
-      if (!curriculumId) {
-        throw new Error("Curriculum ID not set - cannot continue");
-      }
-      // === Create Grade Levels (check for duplicates if needed) ===
-      for (const [index, name] of formData.gradeLevels.entries()) {
-        let alreadyExists = false;
-
-        try {
-          const existing = await api.get("/academics/grade-levels/", {
-            params: { school: currentSchoolId, name },
-          });
-          if (existing.data.results?.length > 0) {
-            alreadyExists = true;
-            console.log(`Grade level "${name}" already exists, skipping`);
-          }
-        } catch (err) {
-          console.warn(`Failed to check grade level "${name}":`, err);
-        }
-
-        if (alreadyExists) continue;
-
-        await api.post("/academics/grade-levels/", {
-          curriculum: curriculumId,
-          name,
-          order: index + 1,
+      // ── CURRICULUM ─────────────────────────────────────────────────
+      const curriculumId = await getOrCreateResource(
+        "/academics/curricula/",
+        { school: currentSchoolId, name: formData.curriculumName },
+        {
+          name: formData.curriculumName || "CBC",
+          short_code: formData.curriculumShortCode || "CBC",
+          description: formData.curriculumDescription || "Competency Based Curriculum",
+          is_active: true,
           school: currentSchoolId,
-        });
-        console.log(`Created grade level: ${name}`);
-      }
-      // === Create Departments (check for duplicates) ===
-      for (const name of formData.departments) {
-        let alreadyExists = false;
-
-        try {
-          const existing = await api.get("/academics/departments/", {
-            params: { school: currentSchoolId, name },
-          });
-
-          if (existing.data.results?.length > 0) {
-            console.log(`Department "${name}" already exists, skipping`);
-            alreadyExists = true;
-          }
-        } catch (err) {
-          console.warn(`Failed to check department "${name}":`, err);
         }
+      );
 
-        if (alreadyExists) continue;
+      // ── GRADE LEVELS ───────────────────────────────────────────────
+      for (const [index, name] of formData.gradeLevels.entries()) {
+        await getOrCreateResource(
+          "/academics/grade-levels/",
+          { school: currentSchoolId, name },
+          {
+            curriculum: curriculumId,
+            name,
+            order: index + 1,
+            school: currentSchoolId,
+          }
+        );
+      }
 
-        try {
-          await api.post("/academics/departments/", {
+      // ── DEPARTMENTS ────────────────────────────────────────────────
+      for (const name of formData.departments) {
+        await getOrCreateResource(
+          "/academics/departments/",
+          { school: currentSchoolId, name },
+          {
             curriculum: curriculumId,
             name,
             school: currentSchoolId,
-          });
-          console.log(`Created department: ${name}`);
-        } catch (err: any) {
-          if (err.response?.status === 400 && err.response.data?.non_field_errors?.[0]?.includes("unique set")) {
-            console.warn(`Duplicate department "${name}" detected by backend - skipping`);
-          } else {
-            throw err;
           }
-        }
+        );
       }
 
-      // 5. Fees - with robust duplicate check
-      let categoryId = null;
+      // ── FEES (same pattern) ────────────────────────────────────────
+      let categoryId: string | null = null;
 
       if (formData.hasTuitionPerTerm || formData.hasAdmissionFee || formData.hasUniformFee) {
-        try {
-          const existingCategory = await api.get("/finance/fee-categories/", {
-            params: { school: currentSchoolId, name: "Basic Fees" },
-          });
-
-          if (existingCategory.data.results?.length > 0) {
-            categoryId = existingCategory.data.results[0].id;
-            console.log("Existing 'Basic Fees' category found, using ID:", categoryId);
+        categoryId = await getOrCreateResource(
+          "/finance/fee-categories/",
+          { school: currentSchoolId, name: "Basic Fees" },
+          {
+            name: "Basic Fees",
+            is_mandatory: true,
+            school: currentSchoolId,
           }
-        } catch (err) {
-          console.warn("Failed to check fee category:", err);
-          // Proceed to create if check fails (fail-open is safe)
-        }
+        );
 
-        // Only create if no existing category was found
-        if (!categoryId) {
-          try {
-            console.log("DEBUG: Fee category school value:", currentSchoolId);
-            console.log("DEBUG: Type of school value:", typeof currentSchoolId);
-            console.log("DEBUG: Full payload:", {
-              name: "Basic Fees",
-              is_mandatory: true,
-              school: currentSchoolId,
-            });
-            const categoryRes = await api.post("/finance/fee-categories/", {
-              name: "Basic Fees",
-              is_mandatory: true,
-              school: currentSchoolId,
-            });
-            categoryId = categoryRes.data.id;
-            console.log("New fee category created with ID:", categoryId);
-          } catch (err: any) {
-            if (err.response?.status === 400) {
-              // Handle duplicate error gracefully
-              console.warn("Fee category creation failed (likely duplicate):", err.response?.data);
-              // Fallback: search again
-              const fallback = await api.get("/finance/fee-categories/", {
-                params: { school: currentSchoolId, name: "Basic Fees" },
-              });
-              if (fallback.data.results?.length > 0) {
-                categoryId = fallback.data.results[0].id;
-              } else {
-                throw new Error("Failed to create or find fee category");
-              }
-            } else {
-              throw err;
-            }
-          }
-        }
-
-        // Proceed with fee items if category exists
         if (categoryId && formData.hasTuitionPerTerm && formData.tuitionPerTerm > 0) {
-          await api.post("/finance/fee-items/", {
-            category: categoryId,
-            name: "Tuition per Term",
-            amount: formData.tuitionPerTerm,
-            frequency: "per_term",
-            currency: formData.currency,
-          });
-          console.log("Tuition fee item created");
+          await getOrCreateResource(
+            "/finance/fee-items/",
+            { category: categoryId, name: "Tuition per Term" },
+            {
+              category: categoryId,
+              name: "Tuition per Term",
+              amount: formData.tuitionPerTerm,
+              frequency: "per_term",
+              currency: formData.currency,
+            }
+          );
         }
+        // Admission fee
+        if (formData.hasAdmissionFee && formData.admissionFee > 0) {
+          await getOrCreateResource(
+            "/finance/fee-items/",
+            { category: categoryId, name: "Admission Fee" },
+            {
+              category: categoryId,
+              name: "Admission Fee",
+              amount: formData.admissionFee,
+              frequency: "once",
+              currency: formData.currency,
+            }
+          );
+        }
+        // Add similar blocks for admissionFee, uniformFee if needed
       }
 
-      // Mark complete
-      // await api.patch(`/schools/${currentSchoolId}/`, { setup_complete: true });
-
-      // router.push("/onboarding/select-modules");
-      // Mark complete – wait for success
-      console.log("Sending setup_complete patch with:", { setup_complete: true });
+      // ── FINALIZE SETUP ─────────────────────────────────────────────
+      console.log("Patching setup_complete = true on school:", currentSchoolId);
       const completeRes = await api.patch(`/schools/${currentSchoolId}/`, {
-        setup_complete: true
+        setup_complete: true,
       });
-     console.log("Response from server after setting complete:", completeRes.data);
-      // Optional: verify the response actually shows it's complete
-      if (!completeRes.data?.setup_complete) {
-        console.warn("Server did NOT confirm setup_complete = true", completeRes.data);
-        throw new Error("Setup complete flag was not set on server");
-      }
+      console.log("Setup complete response:", completeRes.data);
 
       router.push("/onboarding/select-modules");
-
     } catch (error: any) {
-      console.error("Setup failed:", error.response?.data || error.message);
+      console.error("Setup failed:", error);
+      const errData = error.response?.data;
+      let msg = "Setup failed. Please try again.";
 
-      let userMessage = "Setup failed. Please try again.";
       if (error.response?.status === 400) {
-        const detail = error.response.data?.non_field_errors?.[0];
-        if (detail?.includes("unique set")) {
-          userMessage = "Some items (e.g. curriculum name or grade level) already exist. Skipping duplicates.";
+        if (errData?.non_field_errors?.[0]?.includes("unique set")) {
+          msg = "Some items (curriculum, grades, departments) already exist for this school. Using existing ones.";
+        } else if (errData?.school?.[0]) {
+          msg = "Invalid school reference. Please contact support.";
         } else {
-          userMessage = detail || "Invalid data provided.";
+          msg = errData?.detail || errData?.name?.[0] || "Invalid data provided.";
         }
       }
-      setError(userMessage);
+
+      setError(msg);
     } finally {
       setIsLoading(false);
+      console.groupEnd();
     }
   };
 
@@ -591,7 +526,7 @@ export default function SetupWizardPage() {
                         type="text"
                         value={formData.address}
                         onChange={(e) => updateForm("address", e.target.value)}
-                        placeholder="P.O. Box 123 - 00100, Nairobi"
+                        placeholder="Malindi Complex, Along Malindi - Lamu Road, Malindi"
                         className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
                       />
                     </div>

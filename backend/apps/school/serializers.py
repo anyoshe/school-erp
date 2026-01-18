@@ -37,9 +37,20 @@ class SchoolSerializer(serializers.ModelSerializer):
     class Meta:
         model = School
         fields = [
-            'id', 'owner', 'name', 'email', 'phone', 'address', 'city', 'country', 'currency', 
-            'modules',
-            'logo',
+            'id', 'owner', 'name', 'short_name',           
+            'email', 'phone', 'address', 'city', 'country',
+            'website',   
+            'alternative_phone',                       
+            'emergency_phone',                          
+            'postal_address',                   
+            'currency',
+            'academic_year_start_month',                  
+            'academic_year_end_month',
+            'term_system', 'number_of_terms',
+            'grading_system', 'passing_mark',
+            'official_registration_number',
+            'registration_authority', 'registration_date',
+            'modules', 'logo',
             'created_at', 'updated_at'
         ]
 
@@ -63,6 +74,9 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
             'term_system', 'number_of_terms', 'grading_system', 'passing_mark',
             'logo', 'official_registration_number',
             'registration_authority', 'registration_date',
+            'alternative_phone',          
+            'emergency_phone',
+            'postal_address',
             'module_ids',
             'modules',
             'setup_complete',

@@ -1,21 +1,30 @@
-// frontend/(protected)/dashboard/modules/admissions/components/OnboardButton.tsx
-import axios from 'axios';
+// components/OnboardButton.tsx
+"use client";
 
-const OnboardButton = ({ applicationId, onSuccess }: { applicationId: string; onSuccess: (studentId: string) => void }) => {
-  const handleOnboard = async () => {
+import api from "@/utils/api";
+
+interface Props {
+  applicationId: string;
+  onSuccess: (student: { id: string; admission_number: string; full_name: string }) => void;
+}
+
+export default function OnboardButton({ applicationId, onSuccess }: Props) {
+  const handleEnroll = async () => {
     try {
-      const res = await axios.post(`/api/admissions/applications/${applicationId}/onboard_to_student/`);
-      onSuccess(res.data.student_id);
-    } catch (error) {
-      console.error('Error onboarding:', error);
+      const res = await api.post(`/admissions/applications/${applicationId}/enroll/`);
+      onSuccess(res.data); // { student_id, admission_number, student_name }
+    } catch (err: any) {
+      console.error(err);
+      alert("Enrollment failed: " + (err.response?.data?.detail || "Unknown error"));
     }
   };
 
   return (
-    <button onClick={handleOnboard} className="bg-purple-500 text-white px-4 py-2 rounded mt-4">
-      Onboard to Student
+    <button
+      onClick={handleEnroll}
+      className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg"
+    >
+      Enroll as Student
     </button>
   );
-};
-
-export default OnboardButton;
+}

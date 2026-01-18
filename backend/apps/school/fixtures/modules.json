@@ -1,0 +1,130 @@
+[
+  {
+    "model": "school.module",
+    "pk": 1,
+    "fields": {
+      "name": "Student Management",
+      "code": "students"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 2,
+    "fields": {
+      "name": "Admissions Management",
+      "code": "admissions"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 3,
+    "fields": {
+      "name": "Events Management",
+      "code": "events"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 4,
+    "fields": {
+      "name": "Health & Wellness",
+      "code": "health"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 5,
+    "fields": {
+      "name": "Parent Portal",
+      "code": "parent_portal"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 6,
+    "fields": {
+      "name": "Alumni Management",
+      "code": "alumni"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 7,
+    "fields": {
+      "name": "Transport Management",
+      "code": "transport"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 8,
+    "fields": {
+      "name": "Academic Management",
+      "code": "academics"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 9,
+    "fields": {
+      "name": "Attendance Tracking",
+      "code": "attendance"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 10,
+    "fields": {
+      "name": "E-Learning",
+      "code": "elearning"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 11,
+    "fields": {
+      "name": "Finance & Accounting",
+      "code": "finance"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 12,
+    "fields": {
+      "name": "Inventory Management",
+      "code": "inventory"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 13,
+    "fields": {
+      "name": "Library Management",
+      "code": "library"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 14,
+    "fields": {
+      "name": "Procurement Management",
+      "code": "procurement"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 15,
+    "fields": {
+      "name": "Reports & Analytics",
+      "code": "reports"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 16,
+    "fields": {
+      "name": "Human Resource Management",
+      "code": "staff"
+    }
+  }
+]

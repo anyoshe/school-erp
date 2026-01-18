@@ -43,7 +43,14 @@ class SchoolViewSet(ModelViewSet):
     
     @action(detail=False, methods=['get'], url_path='active')
     def active(self, request):
-        school = School.objects.filter(users=request.user).first()
+        # school = School.objects.filter(users=request.user).first()
+        school = (
+           School.objects
+           .filter(users=request.user)
+           .order_by('-updated_at', '-created_at')
+           .first()
+        )
+
         if not school:
             return Response({"detail": "No active school found."}, status=404)
     
