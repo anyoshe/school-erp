@@ -1,7 +1,7 @@
 // frontend/(protected)/dashboard/modules/admissions/direct-enroll/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/utils/api";
@@ -9,6 +9,13 @@ import ApplicationForm from "../components/ApplicationForm";
 import { toast } from "sonner";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import { Button } from "@/components/ui/button";
+
+interface GradeLevel {
+  id: number;
+  name: string;
+  short_name: string;
+  order: number;
+}
 
 export default function DirectEnrollPage() {
   // ────────────────────────────────────────────────────────────────
@@ -19,6 +26,30 @@ export default function DirectEnrollPage() {
   const { currentSchool, loading: schoolLoading, error: schoolError } = useCurrentSchool();
 
   const [submitting, setSubmitting] = useState(false);
+  const [gradeLevels, setGradeLevels] = useState<GradeLevel[]>([]);
+  const [loadingGrades, setLoadingGrades] = useState(false);
+
+  // Fetch grade levels when school is loaded
+  useEffect(() => {
+    if (!currentSchool?.id) return;
+
+    const fetchGradeLevels = async () => {
+      try {
+        setLoadingGrades(true);
+        const res = await api.get("/academics/grade-levels/", {
+          headers: { "X-School-ID": currentSchool.id },
+        });
+        setGradeLevels(res.data || []);
+      } catch (err) {
+        console.error("Failed to load grade levels:", err);
+        toast.error("Could not load grade levels for this school");
+      } finally {
+        setLoadingGrades(false);
+      }
+    };
+
+    fetchGradeLevels();
+  }, [currentSchool?.id]);
 
   const createStudentMutation = useMutation({
     mutationFn: async (formData: globalThis.FormData) => {
@@ -64,12 +95,12 @@ export default function DirectEnrollPage() {
   // ────────────────────────────────────────────────────────────────
   // Early returns ONLY AFTER all hooks
   // ────────────────────────────────────────────────────────────────
-  if (schoolLoading) {
+  if (schoolLoading || loadingGrades) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center p-8">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading school information...</p>
+          <p className="text-gray-600 font-medium">Loading school information and classes...</p>
         </div>
       </div>
     );
@@ -85,6 +116,25 @@ export default function DirectEnrollPage() {
             {schoolError || "No school is currently selected."}
             <br />
             Please select a school first.
+          </p>
+          <Button variant="outline" onClick={() => router.back()}>
+            Go Back
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (gradeLevels.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="max-w-md text-center">
+          <div className="text-yellow-500 text-6xl mb-6">⚠</div>
+          <h2 className="text-2xl font-semibold text-gray-800 mb-3">No Classes Found</h2>
+          <p className="text-gray-600 mb-6">
+            {currentSchool.name} does not have any grade levels configured yet.
+            <br />
+            Please contact the school administrator to set up classes.
           </p>
           <Button variant="outline" onClick={() => router.back()}>
             Go Back
@@ -118,6 +168,7 @@ export default function DirectEnrollPage() {
             onSubmit={handleDirectSubmit}
             isDirectEnroll={true}
             school={currentSchool}
+            gradeLevels={gradeLevels}
           />
 
           {submitting && (

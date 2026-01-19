@@ -17,7 +17,30 @@ import {
   MapPin,
   Phone,
   Mail,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
+
+interface CurriculumTemplate {
+  id: number;
+  name: string;
+  short_code: string;
+  description: string;
+}
+
+interface GradeLevelTemplate {
+  id: number;
+  name: string;
+  short_name: string;
+  order: number;
+}
+
+interface DepartmentTemplate {
+  id: number;
+  name: string;
+  short_name: string;
+  code: string;
+}
 
 interface FormData {
   schoolName: string;
@@ -39,24 +62,22 @@ interface FormData {
   numberOfTerms: number;
   gradingSystem: "percentage" | "points" | "grades";
   passingMark: number;
-  departments: string[];
-  gradeLevels: string[];
+  selectedCurriculumId?: number;
+  selectedGradeLevelIds: number[];
+  selectedDepartmentIds: number[];
   hasUniformFee: boolean;
   uniformFee: number;
   hasAdmissionFee: boolean;
   admissionFee: number;
   hasTuitionPerTerm: boolean;
   tuitionPerTerm: number;
-  curriculumName: string;
-  curriculumShortCode: string;
-  curriculumDescription: string;
 }
 
 const steps = [
   { id: 1, name: "School Info", icon: Building2 },
   { id: 2, name: "Academic Structure", icon: Calendar },
   { id: 3, name: "Curriculum Setup", icon: GraduationCap },
-  { id: 4, name: "Departments", icon: GraduationCap },
+  { id: 4, name: "Departments & Grades", icon: GraduationCap },
   { id: 5, name: "Fee Setup", icon: DollarSign },
   { id: 6, name: "Complete", icon: CheckCircle },
 ] as const;
@@ -70,6 +91,11 @@ export default function SetupWizardPage() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [schoolId, setSchoolId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Dynamic data from backend
+  const [curriculumTemplates, setCurriculumTemplates] = useState<CurriculumTemplate[]>([]);
+  const [gradeLevels, setGradeLevels] = useState<GradeLevelTemplate[]>([]);
+  const [departments, setDepartments] = useState<DepartmentTemplate[]>([]);
 
   const [formData, setFormData] = useState<FormData>({
     schoolName: "",
@@ -91,11 +117,9 @@ export default function SetupWizardPage() {
     numberOfTerms: 3,
     gradingSystem: "percentage",
     passingMark: 50,
-    curriculumName: "CBC",
-    curriculumShortCode: "CBC",
-    curriculumDescription: "Competency Based Curriculum",
-    departments: ["Science", "Humanities", "Technical", "Commercial"],
-    gradeLevels: ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Form 1", "Form 2", "Form 3", "Form 4"],
+    selectedCurriculumId: undefined,
+    selectedGradeLevelIds: [],
+    selectedDepartmentIds: [],
     hasUniformFee: true,
     uniformFee: 5000,
     hasAdmissionFee: true,
@@ -104,34 +128,119 @@ export default function SetupWizardPage() {
     tuitionPerTerm: 25000,
   });
 
+  // Fetch curriculum templates on mount
   useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const res = await api.get("/academics/curriculum-templates/");
+        setCurriculumTemplates(res.data);
+      } catch (err) {
+        console.error("Failed to load curriculum templates:", err);
+        toast.error("Could not load curriculum options");
+      }
+    };
+    fetchTemplates();
+
+    // Load existing school data if editing
     if (!isNewSchoolMode) {
       const loadExisting = async () => {
         try {
           const res = await api.get("/schools/active/");
-          console.log("[INIT] Loaded existing active school:", res.data.id, res.data.name);
+          console.log("[INIT] Loaded existing school:", res.data.id, res.data.name);
           setSchoolId(res.data.id);
           setFormData((prev) => ({
             ...prev,
             schoolName: res.data.name || prev.schoolName,
-            // ... other pre-fills ...
+            shortName: res.data.short_name || prev.shortName,
+            address: res.data.address || prev.address,
+            city: res.data.city || prev.city,
+            country: res.data.country || prev.country,
+            phone: res.data.phone || prev.phone,
+            email: res.data.email || prev.email,
+            currency: res.data.currency || prev.currency,
           }));
         } catch (err) {
-          console.log("[INIT] No existing school found - will create new");
+          console.log("[INIT] No existing school - proceeding as new");
         }
       };
       loadExisting();
-    } else {
-      console.log("[INIT] Running in NEW SCHOOL mode (forced creation)");
     }
   }, [isNewSchoolMode]);
+
+  // When user selects curriculum → fetch its grade levels & all global departments
+  useEffect(() => {
+    if (!formData.selectedCurriculumId) return;
+
+    const fetchStructure = async () => {
+      try {
+        setIsLoading(true);
+
+        // 1. Grade levels for selected curriculum (templates only)
+        const glRes = await api.get("/academics/grade-levels/", {
+          params: { curriculum: formData.selectedCurriculumId, school__isnull: true },
+        });
+        const fetchedGrades = glRes.data;
+        setGradeLevels(fetchedGrades);
+        // Pre-select all by default
+        setFormData((prev) => ({
+          ...prev,
+          selectedGradeLevelIds: fetchedGrades.map((g: any) => g.id),
+        }));
+
+        // 2. All global departments
+        const depRes = await api.get("/academics/departments/", {
+          params: { school__isnull: true },
+        });
+        const fetchedDepts = depRes.data;
+        setDepartments(fetchedDepts);
+        // Pre-select all by default
+        setFormData((prev) => ({
+          ...prev,
+          selectedDepartmentIds: fetchedDepts.map((d: any) => d.id),
+        }));
+      } catch (err) {
+        toast.error("Failed to load grade levels or departments");
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    console.log("Selected Curriculum ID:", formData.selectedCurriculumId);
+    console.log("Fetched Grades:", gradeLevels);
+    console.log("Fetched Departments:", departments);
+    fetchStructure();
+  }, [formData.selectedCurriculumId]);
 
   const updateForm = <K extends keyof FormData>(key: K, value: FormData[K]) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
 
+  const toggleGradeLevel = (id: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      selectedGradeLevelIds: prev.selectedGradeLevelIds.includes(id)
+        ? prev.selectedGradeLevelIds.filter((g) => g !== id)
+        : [...prev.selectedGradeLevelIds, id],
+    }));
+  };
+
+  const toggleDepartment = (id: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      selectedDepartmentIds: prev.selectedDepartmentIds.includes(id)
+        ? prev.selectedDepartmentIds.filter((d) => d !== id)
+        : [...prev.selectedDepartmentIds, id],
+    }));
+  };
+
   const nextStep = () => {
-    if (currentStep < steps.length - 1) setCurrentStep((prev) => prev + 1);
+    if (currentStep === 2 && !formData.selectedCurriculumId) {
+      toast.error("Please select a curriculum");
+      return;
+    }
+    if (currentStep < steps.length - 1) {
+      setCurrentStep((prev) => prev + 1);
+    }
   };
 
   const prevStep = () => {
@@ -139,7 +248,7 @@ export default function SetupWizardPage() {
   };
 
   // ─────────────────────────────────────────────────────────────
-  // ROBUST HELPER: Get or Create with heavy logging & fallbacks
+  // Robust Get-or-Create Helper
   // ─────────────────────────────────────────────────────────────
   const getOrCreateResource = async (
     endpoint: string,
@@ -147,58 +256,44 @@ export default function SetupWizardPage() {
     payload: Record<string, any>
   ): Promise<string> => {
     console.group(`[RESOURCE ${endpoint}]`);
-
     console.log("Search params:", searchParams);
-    console.log("Payload (school):", payload.school);
 
-    // Step 1: Search
+    // Step 1: Try to find existing
     try {
       const searchRes = await api.get(endpoint, { params: searchParams });
-      const count = searchRes.data.results?.length || 0;
-      console.log(`Search found ${count} items`);
-
+      const count = searchRes.data.results?.length || searchRes.data.length || 0;
       if (count > 0) {
-        const foundId = searchRes.data.results[0].id;
+        const foundId = searchRes.data.results?.[0]?.id || searchRes.data[0]?.id;
         console.log(`→ Reusing existing ID: ${foundId}`);
         console.groupEnd();
         return foundId;
       }
     } catch (searchErr: any) {
-      console.warn("Search failed:", searchErr.response?.status, searchErr.response?.data);
+      console.warn("Search failed:", searchErr?.response?.status, searchErr?.response?.data);
     }
 
-    // Step 2: Create
+    // Step 2: Create new
     try {
-      console.log("Creating new resource...");
+      console.log("Creating new...");
       const createRes = await api.post(endpoint, payload);
       const newId = createRes.data.id;
       console.log(`→ Created new ID: ${newId}`);
       console.groupEnd();
       return newId;
     } catch (createErr: any) {
-      console.error("Create failed:", {
-        status: createErr.response?.status,
-        data: createErr.response?.data,
-      });
+      console.error("Create failed:", createErr?.response?.data);
 
-      // Duplicate handling
-      if (createErr.response?.status === 400) {
-        const detail = createErr.response?.data?.non_field_errors?.[0] || "";
+      // Handle duplicate gracefully
+      if (createErr?.response?.status === 400) {
+        const detail = createErr?.response?.data?.non_field_errors?.[0] || "";
         if (detail.includes("unique") || detail.includes("duplicate")) {
-          console.warn("Duplicate detected - retrying search...");
-
-          try {
-            const retryRes = await api.get(endpoint, { params: searchParams });
-            if (retryRes.data.results?.length > 0) {
-              const retryId = retryRes.data.results[0].id;
-              console.log(`→ Retry found ID: ${retryId}`);
-              console.groupEnd();
-              return retryId;
-            } else {
-              console.error("Retry search found NOTHING - possible ID mismatch!");
-            }
-          } catch (retryErr) {
-            console.error("Retry search also failed:", retryErr);
+          console.warn("Duplicate - retrying search...");
+          const retryRes = await api.get(endpoint, { params: searchParams });
+          const retryId = retryRes.data.results?.[0]?.id || retryRes.data[0]?.id;
+          if (retryId) {
+            console.log(`→ Retry found ID: ${retryId}`);
+            console.groupEnd();
+            return retryId;
           }
         }
       }
@@ -214,7 +309,7 @@ export default function SetupWizardPage() {
 
     console.group("=== SETUP WIZARD COMPLETE FLOW ===");
     console.log("Mode:", isNewSchoolMode ? "NEW SCHOOL" : "UPDATE EXISTING");
-    console.log("Current schoolId before start:", schoolId);
+    console.log("Current schoolId:", schoolId);
 
     try {
       let currentSchoolId: string;
@@ -256,120 +351,134 @@ export default function SetupWizardPage() {
         await api.patch(`/schools/${schoolId}/`, schoolForm);
         currentSchoolId = schoolId;
       }
-      // Do NOT trust active school during setup
-      console.log("Using authoritative schoolId for setup:", currentSchoolId);
-      // ── CRITICAL: Save to localStorage immediately ──────────────────
+
       localStorage.setItem("currentSchoolId", currentSchoolId);
       console.log("→ Saved currentSchoolId to localStorage:", currentSchoolId);
 
-      // ── CURRICULUM ─────────────────────────────────────────────────
-      const curriculumId = await getOrCreateResource(
-        "/academics/curricula/",
-        { school: currentSchoolId, name: formData.curriculumName },
-        {
-          name: formData.curriculumName || "CBC",
-          short_code: formData.curriculumShortCode || "CBC",
-          description: formData.curriculumDescription || "Competency Based Curriculum",
-          is_active: true,
-          school: currentSchoolId,
-        }
-      );
+      // ── COPY CURRICULUM TEMPLATE WITH SELECTED GRADES & DEPARTMENTS ──
+      if (formData.selectedCurriculumId && (formData.selectedGradeLevelIds.length > 0 || formData.selectedDepartmentIds.length > 0)) {
+        console.log("Copying curriculum template:", {
+          template_id: formData.selectedCurriculumId,
+          grade_ids: formData.selectedGradeLevelIds,
+          dept_ids: formData.selectedDepartmentIds,
+        });
 
-      // ── GRADE LEVELS ───────────────────────────────────────────────
-      for (const [index, name] of formData.gradeLevels.entries()) {
-        await getOrCreateResource(
-          "/academics/grade-levels/",
-          { school: currentSchoolId, name },
+        await api.post(
+          "/academics/copy-template/",
           {
-            curriculum: curriculumId,
-            name,
-            order: index + 1,
-            school: currentSchoolId,
+            template_id: formData.selectedCurriculumId,
+            grade_level_ids: formData.selectedGradeLevelIds,
+            department_ids: formData.selectedDepartmentIds,
+          },
+          {
+            headers: { "X-School-ID": currentSchoolId },
           }
         );
+
+        console.log("→ Curriculum template copied successfully");
       }
 
-      // ── DEPARTMENTS ────────────────────────────────────────────────
-      for (const name of formData.departments) {
-        await getOrCreateResource(
-          "/academics/departments/",
-          { school: currentSchoolId, name },
-          {
-            curriculum: curriculumId,
-            name,
-            school: currentSchoolId,
-          }
-        );
-      }
-
-      // ── FEES (same pattern) ────────────────────────────────────────
-      let categoryId: string | null = null;
-
+      // ── FEE SETUP ──────────────────────────────────────────────────
       if (formData.hasTuitionPerTerm || formData.hasAdmissionFee || formData.hasUniformFee) {
-        categoryId = await getOrCreateResource(
-          "/finance/fee-categories/",
-          { school: currentSchoolId, name: "Basic Fees" },
-          {
-            name: "Basic Fees",
-            is_mandatory: true,
-            school: currentSchoolId,
-          }
-        );
+        console.log("Setting up fees...");
 
-        if (categoryId && formData.hasTuitionPerTerm && formData.tuitionPerTerm > 0) {
-          await getOrCreateResource(
-            "/finance/fee-items/",
-            { category: categoryId, name: "Tuition per Term" },
+        try {
+          const categoryRes = await api.post(
+            "/finance/fee-categories/",
             {
-              category: categoryId,
-              name: "Tuition per Term",
-              amount: formData.tuitionPerTerm,
-              frequency: "per_term",
-              currency: formData.currency,
+              name: "Basic Fees",
+              is_mandatory: true,
+              school: currentSchoolId,
+            },
+            {
+              headers: { "X-School-ID": currentSchoolId },
             }
           );
+          const categoryId = categoryRes.data.id;
+          console.log("→ Fee category created:", categoryId);
+
+          if (formData.hasTuitionPerTerm && formData.tuitionPerTerm > 0) {
+            await api.post(
+              "/finance/fee-items/",
+              {
+                category: categoryId,
+                name: "Tuition per Term",
+                amount: formData.tuitionPerTerm,
+                frequency: "per_term",
+                currency: formData.currency,
+              },
+              {
+                headers: { "X-School-ID": currentSchoolId },
+              }
+            );
+            console.log("→ Tuition fee item created");
+          }
+
+          if (formData.hasAdmissionFee && formData.admissionFee > 0) {
+            await api.post(
+              "/finance/fee-items/",
+              {
+                category: categoryId,
+                name: "Admission Fee",
+                amount: formData.admissionFee,
+                frequency: "once",
+                currency: formData.currency,
+              },
+              {
+                headers: { "X-School-ID": currentSchoolId },
+              }
+            );
+            console.log("→ Admission fee item created");
+          }
+
+          if (formData.hasUniformFee && formData.uniformFee > 0) {
+            await api.post(
+              "/finance/fee-items/",
+              {
+                category: categoryId,
+                name: "Uniform Fee",
+                amount: formData.uniformFee,
+                frequency: "once",
+                currency: formData.currency,
+              },
+              {
+                headers: { "X-School-ID": currentSchoolId },
+              }
+            );
+            console.log("→ Uniform fee item created");
+          }
+
+          console.log("→ Fees created successfully");
+        } catch (feeErr: any) {
+          console.warn("Fee setup failed (non-blocking):", {
+            status: feeErr.response?.status,
+            data: feeErr.response?.data,
+          });
+          // Don't throw - fees are optional, continue with setup
+          toast.warning("Fees could not be set up automatically. You can add them later in the Finance module.");
         }
-        // Admission fee
-        if (formData.hasAdmissionFee && formData.admissionFee > 0) {
-          await getOrCreateResource(
-            "/finance/fee-items/",
-            { category: categoryId, name: "Admission Fee" },
-            {
-              category: categoryId,
-              name: "Admission Fee",
-              amount: formData.admissionFee,
-              frequency: "once",
-              currency: formData.currency,
-            }
-          );
-        }
-        // Add similar blocks for admissionFee, uniformFee if needed
       }
 
-      // ── FINALIZE SETUP ─────────────────────────────────────────────
-      console.log("Patching setup_complete = true on school:", currentSchoolId);
-      const completeRes = await api.patch(`/schools/${currentSchoolId}/`, {
-        setup_complete: true,
-      });
-      console.log("Setup complete response:", completeRes.data);
+      // ── MARK SETUP COMPLETE ────────────────────────────────────────
+      console.log("Marking setup_complete = true on school:", currentSchoolId);
+      await api.patch(`/schools/${currentSchoolId}/`, { setup_complete: true });
 
+      console.log("✓ Setup completed successfully!");
       router.push("/onboarding/select-modules");
+      toast.success("School setup completed successfully!");
     } catch (error: any) {
       console.error("Setup failed:", error);
       const errData = error.response?.data;
       let msg = "Setup failed. Please try again.";
 
       if (error.response?.status === 400) {
-        if (errData?.non_field_errors?.[0]?.includes("unique set")) {
-          msg = "Some items (curriculum, grades, departments) already exist for this school. Using existing ones.";
-        } else if (errData?.school?.[0]) {
-          msg = "Invalid school reference. Please contact support.";
-        } else {
-          msg = errData?.detail || errData?.name?.[0] || "Invalid data provided.";
-        }
+        msg = errData?.detail || errData?.non_field_errors?.[0] || "Invalid data provided.";
+      } else if (error.response?.status === 404) {
+        msg = "Template not found. Please select a valid curriculum.";
       }
 
       setError(msg);
+      toast.error(msg);
     } finally {
       setIsLoading(false);
       console.groupEnd();
@@ -400,9 +509,7 @@ export default function SetupWizardPage() {
             {steps.map((step, index) => (
               <div key={step.id} className="flex items-center">
                 <div
-                  className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${index <= currentStep
-                    ? "bg-blue-600 text-white shadow-lg"
-                    : "bg-gray-200 text-gray-500"
+                  className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${index <= currentStep ? "bg-blue-600 text-white shadow-lg" : "bg-gray-200 text-gray-500"
                     }`}
                 >
                   <step.icon className="w-6 h-6" />
@@ -419,9 +526,7 @@ export default function SetupWizardPage() {
           </div>
 
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-gray-900">
-              {steps[currentStep].name}
-            </h2>
+            <h2 className="text-2xl font-bold text-gray-900">{steps[currentStep].name}</h2>
             <p className="text-gray-600 mt-2">
               Step {currentStep + 1} of {steps.length}
             </p>
@@ -451,16 +556,12 @@ export default function SetupWizardPage() {
             {currentStep === 0 && (
               <div className="space-y-6">
                 <div className="text-center mb-8">
-                  <h3 className="text-xl font-semibold text-gray-900">
-                    Tell us about your school
-                  </h3>
+                  <h3 className="text-xl font-semibold text-gray-900">Tell us about your school</h3>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      School Full Name
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">School Full Name</label>
                     <input
                       type="text"
                       value={formData.schoolName}
@@ -472,9 +573,7 @@ export default function SetupWizardPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Short Name / Acronym
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Short Name / Acronym</label>
                     <input
                       type="text"
                       value={formData.shortName}
@@ -485,9 +584,7 @@ export default function SetupWizardPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Phone Number
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
                       <input
@@ -501,9 +598,7 @@ export default function SetupWizardPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      School Email
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">School Email</label>
                     <div className="relative">
                       <Mail className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
                       <input
@@ -517,9 +612,7 @@ export default function SetupWizardPage() {
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Physical Address
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Physical Address</label>
                     <div className="relative">
                       <MapPin className="absolute left-3 top-3.5 w-5 h-5 text-gray-400" />
                       <input
@@ -533,9 +626,7 @@ export default function SetupWizardPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Currency
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
                     <select
                       value={formData.currency}
                       onChange={(e) => updateForm("currency", e.target.value)}
@@ -549,9 +640,7 @@ export default function SetupWizardPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Academic Year
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Academic Year</label>
                     <div className="grid grid-cols-2 gap-3">
                       <select
                         value={formData.academicYearStart}
@@ -573,7 +662,7 @@ export default function SetupWizardPage() {
                       </select>
                     </div>
                   </div>
-                  {/* Official Registration details */}
+
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Official Registration / Licence Number (Optional)
@@ -582,43 +671,34 @@ export default function SetupWizardPage() {
                       type="text"
                       value={formData.officialRegistrationNumber}
                       onChange={(e) => updateForm("officialRegistrationNumber", e.target.value)}
-                      placeholder="e.g. MOE/12345/2023, CBSE Affiliation No, DepEd ID..."
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g. MOE/12345/2023"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
                     />
-                    <p className="mt-1 text-xs text-gray-500">
-                      Enter your school's official registration number from the education authority (if applicable).
-                    </p>
                   </div>
 
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Issuing Authority (Optional)
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Issuing Authority (Optional)</label>
                     <input
                       type="text"
                       value={formData.registrationAuthority}
                       onChange={(e) => updateForm("registrationAuthority", e.target.value)}
-                      placeholder="e.g. Ministry of Education, KNEC, State Board, Ofsted..."
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g. Ministry of Education, KNEC"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Registration Date (Optional)
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Registration Date (Optional)</label>
                     <input
                       type="date"
                       value={formData.registrationDate}
                       onChange={(e) => updateForm("registrationDate", e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
-                  {/* In Step 1 JSX - Replace your logo block with this */}
+
                   <div className="mt-8 pt-6 border-t border-gray-200">
-                    <label className="block text-sm font-medium text-gray-700 mb-4">
-                      School Logo (Optional)
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-4">School Logo (Optional)</label>
                     <div className="flex items-center justify-center w-full">
                       <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
                         <div className="flex flex-col items-center justify-center pt-5 pb-6">
@@ -638,13 +718,12 @@ export default function SetupWizardPage() {
                           onChange={(e: ChangeEvent<HTMLInputElement>) => {
                             const file = e.target.files?.[0];
                             if (file) {
-                              // Optional: Validate file type/size
                               if (!file.type.startsWith("image/")) {
-                                alert("Please upload an image file (PNG/JPG)");
+                                toast.error("Please upload an image file (PNG/JPG)");
                                 return;
                               }
                               if (file.size > 5 * 1024 * 1024) {
-                                alert("File size exceeds 5MB");
+                                toast.error("File size exceeds 5MB");
                                 return;
                               }
                               updateForm("logo", file);
@@ -655,7 +734,6 @@ export default function SetupWizardPage() {
                     </div>
                   </div>
                 </div>
-
               </div>
             )}
 
@@ -667,16 +745,12 @@ export default function SetupWizardPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-4">
-                    Term System
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-4">Term System</label>
                   <div className="grid grid-cols-2 gap-4">
                     <button
                       type="button"
                       onClick={() => updateForm("termSystem", "terms")}
-                      className={`p-6 rounded-xl border-2 transition-all ${formData.termSystem === "terms"
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-gray-300 hover:border-gray-400"
+                      className={`p-6 rounded-xl border-2 transition-all ${formData.termSystem === "terms" ? "border-blue-600 bg-blue-50" : "border-gray-300 hover:border-gray-400"
                         }`}
                     >
                       <div className="font-semibold text-lg">Terms</div>
@@ -685,9 +759,7 @@ export default function SetupWizardPage() {
                     <button
                       type="button"
                       onClick={() => updateForm("termSystem", "semesters")}
-                      className={`p-6 rounded-xl border-2 transition-all ${formData.termSystem === "semesters"
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-gray-300 hover:border-gray-400"
+                      className={`p-6 rounded-xl border-2 transition-all ${formData.termSystem === "semesters" ? "border-blue-600 bg-blue-50" : "border-gray-300 hover:border-gray-400"
                         }`}
                     >
                       <div className="font-semibold text-lg">Semesters</div>
@@ -697,12 +769,10 @@ export default function SetupWizardPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-4">
-                    Grading System
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-4">Grading System</label>
                   <select
                     value={formData.gradingSystem}
-                    onChange={(e) => updateForm("gradingSystem", e.target.value as FormData["gradingSystem"])}
+                    onChange={(e) => updateForm("gradingSystem", e.target.value as "percentage" | "points" | "grades")}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="percentage">Percentage (0–100%)</option>
@@ -710,9 +780,7 @@ export default function SetupWizardPage() {
                     <option value="grades">Letter Grades (A+, A, B+, etc.)</option>
                   </select>
                   <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Passing Mark
-                    </label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Passing Mark</label>
                     <input
                       type="number"
                       value={formData.passingMark}
@@ -731,109 +799,119 @@ export default function SetupWizardPage() {
             {currentStep === 2 && (
               <div className="space-y-6">
                 <div className="text-center mb-8">
-                  <h3 className="text-xl font-semibold text-gray-900">
-                    Set up your curriculum
-                  </h3>
+                  <h3 className="text-xl font-semibold text-gray-900">Choose Your Curriculum</h3>
+                  <p className="text-gray-600 mt-2">Select the academic system your school follows</p>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Curriculum Name
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.curriculumName}
-                    onChange={(e) => updateForm("curriculumName", e.target.value)}
-                    placeholder="e.g. CBC, IGCSE, 8-4-4"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Short Code
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.curriculumShortCode}
-                    onChange={(e) => updateForm("curriculumShortCode", e.target.value)}
-                    placeholder="e.g. CBC, IGCSE"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Description (Optional)
-                  </label>
-                  <textarea
-                    value={formData.curriculumDescription}
-                    onChange={(e) => updateForm("curriculumDescription", e.target.value)}
-                    placeholder="e.g. Competency Based Curriculum"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {curriculumTemplates.map((template) => (
+                    <div
+                      key={template.id}
+                      onClick={() => updateForm("selectedCurriculumId", template.id)}
+                      className={`p-6 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${formData.selectedCurriculumId === template.id
+                          ? "border-blue-600 bg-blue-50 shadow-md"
+                          : "border-gray-200 hover:border-blue-300"
+                        }`}
+                    >
+                      <h4 className="text-lg font-semibold">{template.name}</h4>
+                      <p className="text-sm text-gray-600">{template.short_code}</p>
+                      <p className="text-xs text-gray-500 mt-2">{template.description}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* Step 4: Departments */}
+            {/* Step 4: Departments & Grades */}
             {currentStep === 3 && (
-              <div className="space-y-8">
+              <div className="space-y-10">
                 <div className="text-center mb-8">
-                  <h3 className="text-xl font-semibold">Set up departments and grade levels</h3>
+                  <h3 className="text-xl font-semibold">Select Your School Structure</h3>
+                  <p className="text-gray-600 mt-2">
+                    Choose the grade levels and departments currently active in your school
+                  </p>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-4">
-                    Common Departments / Streams
-                  </label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {["Science", "Humanities", "Technical", "Commercial", "Languages", "Arts", "Business", "Vocational"].map((dept) => (
-                      <label key={dept} className="flex items-center gap-3 p-4 border rounded-xl hover:bg-gray-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.departments.includes(dept)}
-                          onChange={(e) => {
-                            const updated = e.target.checked
-                              ? [...formData.departments, dept]
-                              : formData.departments.filter((d) => d !== dept);
-                            updateForm("departments", updated);
-                          }}
-                          className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
-                        />
-                        <span className="font-medium">{dept}</span>
-                      </label>
-                    ))}
+                {isLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
+                    <p className="text-gray-600">Loading available structure...</p>
                   </div>
-                </div>
+                ) : !formData.selectedCurriculumId ? (
+                  <div className="text-center py-12 bg-gray-50 rounded-xl border border-gray-200">
+                    <p className="text-gray-700 font-medium">
+                      Please go back and select a curriculum first
+                    </p>
+                    <button
+                      onClick={() => setCurrentStep(2)}
+                      className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                    >
+                      Back to Curriculum Selection
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    {/* Grade Levels */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-4 font-semibold">
+                        Grade / Form Levels
+                      </label>
+                      {gradeLevels.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-xl">
+                          No grade levels found for this curriculum
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {gradeLevels.map((level) => (
+                            <label
+                              key={level.id}
+                              className="flex items-center gap-3 p-4 border rounded-xl hover:bg-gray-50 cursor-pointer transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={formData.selectedGradeLevelIds.includes(level.id)}
+                                onChange={() => toggleGradeLevel(level.id)}
+                                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                              />
+                              <span className="font-medium">{level.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-4">
-                    Grade / Form Levels in Your School
-                  </label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {["DayCare", "PP1", "PP2", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12", "Form 1", "Form 2", "Form 3", "Form 4"].map((level) => (
-                      <label key={level} className="flex items-center gap-3 p-4 border rounded-xl hover:bg-gray-50 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.gradeLevels.includes(level)}
-                          onChange={(e) => {
-                            const updated = e.target.checked
-                              ? [...formData.gradeLevels, level]
-                              : formData.gradeLevels.filter((l) => l !== level);
-                            updateForm("gradeLevels", updated);
-                          }}
-                          className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
-                        />
-                        <span className="font-medium">{level}</span>
+                    {/* Departments */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-4 font-semibold">
+                        Departments / Streams
                       </label>
-                    ))}
-                  </div>
-                </div>
+                      {departments.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-xl">
+                          No departments available
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          {departments.map((dept) => (
+                            <label
+                              key={dept.id}
+                              className="flex items-center gap-3 p-4 border rounded-xl hover:bg-gray-50 cursor-pointer transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={formData.selectedDepartmentIds.includes(dept.id)}
+                                onChange={() => toggleDepartment(dept.id)}
+                                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                              />
+                              <span className="font-medium">{dept.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             )}
-
             {/* Step 5: Fee Setup */}
             {currentStep === 4 && (
               <div className="space-y-8">
@@ -897,9 +975,7 @@ export default function SetupWizardPage() {
                 <div className="w-24 h-24 mx-auto mb-6 bg-green-100 rounded-full flex items-center justify-center">
                   <CheckCircle className="w-16 h-16 text-green-600" />
                 </div>
-                <h3 className="text-3xl font-bold text-gray-900 mb-4">
-                  All Set! Your school is ready
-                </h3>
+                <h3 className="text-3xl font-bold text-gray-900 mb-4">All Set! Your school is ready</h3>
                 <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-8">
                   You've completed the initial setup. You can now start adding students, staff, and managing your school efficiently.
                 </p>
@@ -910,7 +986,6 @@ export default function SetupWizardPage() {
                     <p><span className="font-medium">School:</span> {formData.schoolName || "Not set"}</p>
                     <p><span className="font-medium">Currency:</span> {formData.currency}</p>
                     <p><span className="font-medium">Academic Year:</span> {formData.academicYearStart} – {formData.academicYearEnd}</p>
-                    <p><span className="font-medium">Curriculum:</span> {formData.curriculumName}</p>
                     <p><span className="font-medium">Grading:</span> {formData.gradingSystem} (Pass: {formData.passingMark}%)</p>
                     <p><span className="font-medium">Tuition per term:</span> {formData.currency} {formData.tuitionPerTerm.toLocaleString()}</p>
                   </div>
@@ -934,7 +1009,7 @@ export default function SetupWizardPage() {
           <div className="mt-10 flex justify-between">
             <button
               onClick={prevStep}
-              disabled={currentStep === 0}
+              disabled={currentStep === 0 || isLoading}
               className="px-6 py-3 text-gray-700 font-medium rounded-xl hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               <ChevronLeft className="w-5 h-5" />
@@ -944,7 +1019,7 @@ export default function SetupWizardPage() {
             <button
               onClick={nextStep}
               disabled={isLoading}
-              className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl flex items-center gap-2"
+              className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-70 flex items-center gap-2"
             >
               {currentStep === steps.length - 2 ? "Review" : "Next"}
               <ChevronRight className="w-5 h-5" />

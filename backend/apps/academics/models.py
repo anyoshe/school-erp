@@ -1,71 +1,142 @@
-# academics/models.py
+# apps/academics/models.py
 from django.db import models
+from django.core.exceptions import ValidationError
 from apps.school.models import School
 
 
 class Curriculum(models.Model):
-    """
-    Different academic systems a school might run (can have multiple)
-    Examples: CBC, 8-4-4, IGCSE, Cambridge, IB, etc.
-    """
-    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="curricula")
-    name = models.CharField(max_length=120)  # "CBC", "8-4-4", "Cambridge IGCSE"
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="curricula",
+        null=True,
+        blank=True,
+        help_text="Null for global templates"
+    )
+    name = models.CharField(max_length=120)
     short_code = models.CharField(max_length=20, blank=True)
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+    is_template = models.BooleanField(
+        default=False,
+        help_text="True if this is a global template (school should be null)"
+    )
 
-    # Optional overrides of school defaults
+    # Optional school overrides
     term_system = models.CharField(max_length=20, blank=True, null=True)
     number_of_terms = models.PositiveIntegerField(null=True, blank=True)
     grading_system = models.CharField(max_length=20, blank=True, null=True)
     passing_mark = models.PositiveIntegerField(null=True, blank=True)
 
     class Meta:
-        unique_together = ["school", "name"]
-        ordering = ["name"]
+        ordering = ["-is_template", "name"]
+        constraints = [
+            # Ensure template consistency
+            models.CheckConstraint(
+                check=models.Q(school__isnull=True, is_template=True) |
+                      models.Q(school__isnull=False, is_template=False),
+                name="curriculum_template_school_consistency"
+            ),
+            # Unique name per school (when school is not null)
+            models.UniqueConstraint(
+                fields=['school', 'name'],
+                condition=models.Q(school__isnull=False),
+                name="curriculum_unique_name_per_school"
+            ),
+            # Unique name among templates
+            models.UniqueConstraint(
+                fields=['name'],
+                condition=models.Q(school__isnull=True, is_template=True),
+                name="curriculum_unique_template_name"
+            ),
+        ]
+
+    def clean(self):
+        if self.is_template and self.school is not None:
+            raise ValidationError("Templates must have school = null")
+        if not self.is_template and self.school is None:
+            raise ValidationError("School-specific curricula must have a school")
 
     def __str__(self):
+        if self.is_template:
+            return f"[Template] {self.name}"
         return f"{self.name} ({self.school})"
 
 
 class GradeLevel(models.Model):
-    """
-    Classes / Forms / Years / Grades
-    Example: PP1, Grade 4, Form 2, Year 9
-    """
-    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="grade_levels")
-    curriculum = models.ForeignKey(
-        Curriculum, on_delete=models.CASCADE, related_name="grade_levels", null=True, blank=True
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="grade_levels",
+        null=True,
+        blank=True
     )
-    name = models.CharField(max_length=80)          # "Grade 4", "Form 2", "Year 9"
+    curriculum = models.ForeignKey(
+        Curriculum,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="grade_levels"
+    )
+    name = models.CharField(max_length=80)
     short_name = models.CharField(max_length=30, blank=True)
-    order = models.PositiveIntegerField(default=0)  # for sorting
-    code = models.CharField(max_length=20, blank=True)  # optional internal code
+    order = models.PositiveIntegerField(default=0)
+    code = models.CharField(max_length=20, blank=True)
 
     class Meta:
         ordering = ["order", "name"]
-        unique_together = ["school", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'name'],
+                condition=models.Q(school__isnull=False),
+                name="gradelevel_unique_name_per_school"
+            ),
+        ]
+
+    def clean(self):
+        if self.school is None and self.curriculum and self.curriculum.is_template:
+            pass  # Allow templates without school
+        elif self.school is None:
+            raise ValidationError("School-specific grade levels must have a school")
 
     def __str__(self):
         return self.name
 
 
 class Department(models.Model):
-    """
-    Streams / Departments / Faculties
-    Example: Science, Humanities, Technical, Commercial
-    """
-    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="departments")
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="departments",
+        null=True,
+        blank=True
+    )
     curriculum = models.ForeignKey(
-        Curriculum, on_delete=models.SET_NULL, null=True, blank=True, related_name="departments"
+        Curriculum,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="departments"
     )
     name = models.CharField(max_length=120)
     short_name = models.CharField(max_length=50, blank=True)
     code = models.CharField(max_length=20, blank=True)
 
     class Meta:
-        unique_together = ["school", "name"]
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'name'],
+                condition=models.Q(school__isnull=False),
+                name="department_unique_name_per_school"
+            ),
+        ]
+
+    def clean(self):
+        if self.school is None and self.curriculum and self.curriculum.is_template:
+            pass
+        elif self.school is None:
+            raise ValidationError("School-specific departments must have a school")
 
     def __str__(self):
         return self.name

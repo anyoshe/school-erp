@@ -1,18 +1,18 @@
 [
   {
     "model": "school.module",
-    "pk": 1,
-    "fields": {
-      "name": "Student Management",
-      "code": "students"
-    }
-  },
-  {
-    "model": "school.module",
     "pk": 2,
     "fields": {
       "name": "Admissions Management",
       "code": "admissions"
+    }
+  },
+  {
+    "model": "school.module",
+    "pk": 1,
+    "fields": {
+      "name": "Student Management",
+      "code": "students"
     }
   },
   {

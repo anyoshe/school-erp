@@ -23,8 +23,8 @@ interface MenuItem {
 
 // Map backend module codes to friendly names, icons, and URLs
 const MODULE_CONFIG: Record<string, MenuItem> = {
-  students: { label: "Student Management", icon: Users, href: "/dashboard/modules/students" },
   admissions: { label: "Admissions Management", icon: GraduationCap, href: "/dashboard/modules/admissions" },
+  students: { label: "Student Management", icon: Users, href: "/dashboard/modules/students" },
   finance: { label: "Finance & Accounting", icon: DollarSign, href: "/dashboard/modules/finance" },
   academics: { label: "Academic Management", icon: BookOpen, href: "/dashboard/modules/academics" },
   attendance: { label: "Attendance Tracking", icon: Calendar, href: "/dashboard/modules/attendance" },

@@ -1,14 +1,21 @@
 # apps/academics/serializers.py
 from rest_framework import serializers
 from .models import Curriculum, GradeLevel, Department
-from apps.school.models import School  # if needed for nested school display
+from apps.school.models import School
 
 
 class SchoolMiniSerializer(serializers.ModelSerializer):
-    """Minimal school info for nested display"""
     class Meta:
         model = School
         fields = ['id', 'name', 'short_name']
+
+
+class CurriculumTemplateSerializer(serializers.ModelSerializer):
+    """Used only for listing templates in setup wizard"""
+    class Meta:
+        model = Curriculum
+        fields = ['id', 'name', 'short_code', 'description', 'is_active']
+        read_only_fields = fields
 
 
 class CurriculumSerializer(serializers.ModelSerializer):
@@ -18,10 +25,11 @@ class CurriculumSerializer(serializers.ModelSerializer):
         model = Curriculum
         fields = [
             'id', 'school', 'name', 'short_code', 'description',
-            'is_active', 'term_system', 'number_of_terms',
+            'is_active', 'is_template',
+            'term_system', 'number_of_terms',
             'grading_system', 'passing_mark'
         ]
-        read_only_fields = ['school']  # set via view/context
+        read_only_fields = ['school', 'is_template']
 
 
 class CurriculumCreateUpdateSerializer(serializers.ModelSerializer):
@@ -30,17 +38,18 @@ class CurriculumCreateUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'short_code', 'description',
             'is_active', 'term_system', 'number_of_terms',
-            'grading_system', 'passing_mark', 'school'
+            'grading_system', 'passing_mark'
         ]
 
-def validate_school(self, value):
-        request = self.context['request']
-        user = request.user
-        if not School.objects.filter(id=value, users=user).exists():
-            raise serializers.ValidationError(
-                "You do not have permission to create curriculum for this school."
-            )
-        return value
+    def validate(self, data):
+        # During creation in wizard: allow no school (will be set in view)
+        if self.context.get('is_wizard'):
+            return data
+        # Normal creation → require school
+        if 'school' not in data and not self.instance:
+            raise serializers.ValidationError({"school": "This field is required."})
+        return data
+
 
 class GradeLevelSerializer(serializers.ModelSerializer):
     school = SchoolMiniSerializer(read_only=True)
@@ -48,52 +57,27 @@ class GradeLevelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = GradeLevel
-        fields = [
-            'id', 'school', 'curriculum', 'name', 'short_name',
-            'order', 'code'
-        ]
+        fields = '__all__'
         read_only_fields = ['school']
+
 
 class GradeLevelCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = GradeLevel
-        fields = [
-            'id', 'curriculum', 'name', 'short_name',
-            'order', 'code', 'school'
-        ]
+        fields = ['id', 'curriculum', 'name', 'short_name', 'order', 'code']
 
-def validate_school(self, value):
-        request = self.context['request']
-        user = request.user
-        if not School.objects.filter(id=value, users=user).exists():
-            raise serializers.ValidationError(
-                "You do not have permission to create grade level for this school."
-            )
-        return value
+
 class DepartmentSerializer(serializers.ModelSerializer):
     school = SchoolMiniSerializer(read_only=True)
     curriculum = CurriculumSerializer(read_only=True)
 
     class Meta:
         model = Department
-        fields = [
-            'id', 'school', 'curriculum', 'name', 'short_name', 'code'
-        ]
+        fields = '__all__'
         read_only_fields = ['school']
 
 
 class DepartmentCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Department
-        fields = ['id', 'curriculum', 'name', 'short_name', 'code', 'school'
-        
-        ]
-
-def validate_school(self, value):
-        request = self.context['request']
-        user = request.user
-        if not School.objects.filter(id=value, users=user).exists():
-            raise serializers.ValidationError(
-                "You do not have permission to create department for this school."
-            )
-        return value
+        fields = ['id', 'curriculum', 'name', 'short_name', 'code']
