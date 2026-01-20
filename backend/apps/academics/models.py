@@ -2,6 +2,7 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 from apps.school.models import School
+from rest_framework.decorators import action
 
 
 class Curriculum(models.Model):

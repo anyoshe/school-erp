@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.decorators import action
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.db.models import Q
@@ -92,6 +93,42 @@ class GradeLevelViewSet(viewsets.ModelViewSet):
         if not school.users.filter(id=self.request.user.id).exists():
             raise PermissionDenied("No access to this school")
         serializer.save(school=school)
+
+    def perform_destroy(self, instance):
+        """Delete individual grade level with school permission check"""
+        school_id = self.request.headers.get('X-School-ID')
+        if not school_id:
+            raise PermissionDenied("X-School-ID header required for deleting grade levels")
+        
+        # Verify grade belongs to the school being accessed
+        if str(instance.school_id) != school_id:
+            raise PermissionDenied("This grade level does not belong to your school")
+        
+        # Verify user has access to the school
+        school = get_object_or_404(School, id=school_id)
+        if not school.users.filter(id=self.request.user.id).exists():
+            raise PermissionDenied("No access to this school")
+        
+        instance.delete()
+
+    @action(detail=False, methods=['delete'], url_path='bulk-delete')
+    @transaction.atomic
+    def bulk_delete(self, request):
+        ids = request.data.get('ids', [])
+        if not ids:
+            return Response({"detail": "No ids provided"}, status=400)
+
+        # Security: only delete from current school
+        school_id = request.headers.get('X-School-ID')
+        if not school_id:
+            return Response({"detail": "X-School-ID required"}, status=400)
+
+        deleted = GradeLevel.objects.filter(
+            id__in=ids,
+            school_id=school_id
+        ).delete()
+
+        return Response({"detail": f"Deleted {deleted[0]} grade levels"}, status=204)
 
 
 class DepartmentViewSet(viewsets.ModelViewSet):

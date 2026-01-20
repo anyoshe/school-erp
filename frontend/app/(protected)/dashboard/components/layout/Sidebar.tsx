@@ -45,6 +45,7 @@ const MODULE_CONFIG: Record<string, MenuItem> = {
 const SETTINGS_LINKS: MenuItem[] = [
   { label: "Basic Info", href: "/dashboard/settings/school/basic-info", icon: Info },
   { label: "Contact & Address", href: "/dashboard/settings/school/contact", icon: MapPin },
+  { label: "Academic Departments", href: "/dashboard/settings/school/departments", icon: Book },
   { label: "Academic Config", href: "/dashboard/settings/school/academic", icon: Book },
   { label: "Branding", href: "/dashboard/settings/school/branding", icon: Image },
   { label: "Modules", href: "/dashboard/settings/modules", icon: Grid },
