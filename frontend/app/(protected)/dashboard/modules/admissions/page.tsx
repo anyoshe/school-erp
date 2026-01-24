@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useCurrentSchool } from '@/contexts/CurrentSchoolContext';
 import api from '@/utils/api';
 import ApplicationTable from './components/ApplicationTable';
 import Link from 'next/link';
@@ -9,20 +10,30 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, ChevronRight, Users, Clock, CalendarCheck, UserCheck } from 'lucide-react';
+import { Search, Plus, ChevronRight, Users, Clock, CalendarCheck, UserCheck, Loader } from 'lucide-react';
 
 const AdmissionsPage = () => {
+  const { currentSchool, loading: schoolLoading } = useCurrentSchool();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('ALL');
-  const [showMobileSearch, setShowMobileSearch] = useState(false);
 
+  // Fetch applications for the current school
   const { data: applications = [], isLoading } = useQuery({
-    queryKey: ['applications'],
-    queryFn: () => api.get('/admissions/applications/').then(r => r.data),
+    queryKey: ['applications', currentSchool?.id],
+    queryFn: async () => {
+      if (!currentSchool?.id) throw new Error("No school selected");
+      const res = await api.get('/admissions/applications/', {
+        headers: { 'X-School-ID': currentSchool.id },
+      });
+      return res.data;
+    },
+    enabled: !!currentSchool?.id && !schoolLoading,
   });
 
+  // Calculate counts per status
   const counts = applications.reduce(
-    (acc: Record<string, number>, app: any) => {
+    (acc: Record<string, number>, app: { status?: string }) => {
       const status = app.status || 'UNKNOWN';
       acc[status] = (acc[status] || 0) + 1;
       acc.ALL = (acc.ALL || 0) + 1;
@@ -31,13 +42,18 @@ const AdmissionsPage = () => {
     { ALL: 0 } as Record<string, number>
   );
 
+  // Ready to enroll: ACCEPTED + has fee payment + not yet student
   const readyToEnrollCount = applications.filter(
-    (app: any) => app.status === 'ACCEPTED' && (app.fee_payments?.length ?? 0) > 0 && !app.student
+    (app: { status?: string; fee_payments?: unknown[]; student?: unknown }) =>
+      app.status === 'ACCEPTED' &&
+      (app.fee_payments?.length ?? 0) > 0 &&
+      !app.student
   ).length;
 
   const statusTabs = [
     { key: 'ALL', label: 'All', mobileLabel: 'All' },
-    { key: 'SUBMITTED', label: 'Pending', mobileLabel: 'Pending' },
+    { key: 'DRAFT', label: 'Drafts', mobileLabel: 'Drafts' },
+    { key: 'SUBMITTED', label: 'Submitted', mobileLabel: 'Pending' },
     { key: 'UNDER_REVIEW', label: 'Review', mobileLabel: 'Review' },
     { key: 'TEST_SCHEDULED', label: 'Test Scheduled', mobileLabel: 'Test' },
     { key: 'OFFERED', label: 'Offered', mobileLabel: 'Offered' },
@@ -46,54 +62,52 @@ const AdmissionsPage = () => {
     { key: 'REJECTED', label: 'Rejected', mobileLabel: 'Rejected' },
   ];
 
+  if (schoolLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader className="animate-spin h-10 w-10" />
+      </div>
+    );
+  }
+
+  if (!currentSchool) {
+    return (
+      <div className="p-6 text-center">
+        <h2 className="text-xl font-bold">No school selected</h2>
+        <p className="mt-2 text-gray-600">Please select a school first</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50/50">
-      {/* Centered content container */}
       <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Header + Actions */}
+        {/* Header */}
         <div className="py-6 lg:py-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
-                Admissions Management
+                Admissions - {currentSchool.name}
               </h1>
               <p className="mt-2 text-sm text-gray-600">
-                Manage applications, review submissions, and track enrollment progress
+                Manage drafts, submitted applications, reviews, and enrollment
               </p>
             </div>
 
-            {/* Action buttons – stacked on mobile, row on larger screens */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
               {readyToEnrollCount > 0 && (
-                <Button
-                  variant="outline"
-                  className="border-green-600 text-green-700 hover:bg-green-50 w-full sm:w-auto"
-                  size="sm"
-                >
+                <Button variant="outline" className="border-green-600 text-green-700 hover:bg-green-50">
                   <span className="flex items-center gap-2">
-                    <span>{readyToEnrollCount} Ready to Enroll</span>
+                    {readyToEnrollCount} Ready to Enroll
                     <ChevronRight className="h-4 w-4" />
                   </span>
                 </Button>
               )}
 
-              {/* Regular New Application */}
-              <Link href="/dashboard/modules/admissions/new" className="w-full sm:w-auto">
-                <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700">
+              <Link href="/dashboard/modules/admissions/new">
+                <Button className="bg-blue-600 hover:bg-blue-700">
                   <Plus className="mr-2 h-4 w-4" />
                   New Application
-                </Button>
-              </Link>
-
-              {/* NEW: Direct Enroll button */}
-              <Link href="/dashboard/modules/admissions/direct-enroll" className="w-full sm:w-auto">
-                <Button
-                  variant="outline"
-                  className="w-full sm:w-auto border-indigo-600 text-indigo-700 hover:bg-indigo-50"
-                  size="sm"
-                >
-                  <UserCheck className="mr-2 h-4 w-4" />
-                  Direct Enroll
                 </Button>
               </Link>
             </div>
@@ -113,19 +127,17 @@ const AdmissionsPage = () => {
           <div className="rounded-xl border bg-white p-4 shadow-sm">
             <div className="flex items-center gap-3">
               <Clock className="h-5 w-5 text-amber-600" />
-              <span className="text-sm font-medium text-gray-600">Pending</span>
+              <span className="text-sm font-medium text-gray-600">Drafts</span>
             </div>
-            <p className="mt-2 text-2xl font-bold">{counts.SUBMITTED || 0}</p>
+            <p className="mt-2 text-2xl font-bold">{counts.DRAFT || 0}</p>
           </div>
 
           <div className="rounded-xl border bg-white p-4 shadow-sm">
             <div className="flex items-center gap-3">
               <CalendarCheck className="h-5 w-5 text-purple-600" />
-              <span className="text-sm font-medium text-gray-600">Interviews</span>
+              <span className="text-sm font-medium text-gray-600">Submitted</span>
             </div>
-            <p className="mt-2 text-2xl font-bold">
-              {counts.TEST_SCHEDULED || counts.INTERVIEW || 0}
-            </p>
+            <p className="mt-2 text-2xl font-bold">{counts.SUBMITTED || 0}</p>
           </div>
 
           <div className="rounded-xl border bg-white p-4 shadow-sm">
@@ -137,10 +149,9 @@ const AdmissionsPage = () => {
           </div>
         </div>
 
-        {/* Filter & Search */}
+        {/* Tabs & Search */}
         <div className="mb-6 lg:mb-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            {/* Tabs */}
             <div className="w-full overflow-x-auto lg:flex-1">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="inline-flex bg-transparent border-b pb-1 gap-1.5">
@@ -150,7 +161,7 @@ const AdmissionsPage = () => {
                       value={key}
                       className="px-3 py-1.5 text-sm data-[state=active]:bg-blue-600 data-[state=active]:text-white rounded-t-md whitespace-nowrap"
                     >
-                      {mobileLabel}
+                      {label}
                       {counts[key] > 0 && (
                         <Badge variant="secondary" className="ml-1.5 text-xs">
                           {counts[key]}
@@ -162,7 +173,6 @@ const AdmissionsPage = () => {
               </Tabs>
             </div>
 
-            {/* Search */}
             <div className="relative w-full lg:w-80">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
@@ -175,7 +185,7 @@ const AdmissionsPage = () => {
           </div>
         </div>
 
-        {/* Main content area */}
+        {/* Applications Table */}
         <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
           {isLoading ? (
             <div className="p-12 text-center text-gray-500">Loading applications...</div>
@@ -186,22 +196,14 @@ const AdmissionsPage = () => {
                 No applications yet
               </h3>
               <p className="text-gray-600 mb-6">
-                Start by adding a new application or directly enrolling a placed student.
+                Start by adding a new application.
               </p>
-              <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-                <Link href="/dashboard/modules/admissions/new">
-                  <Button className="bg-blue-600 hover:bg-blue-700">
-                    <Plus className="mr-2 h-4 w-4" />
-                    New Application
-                  </Button>
-                </Link>
-                <Link href="/dashboard/modules/admissions/direct-enroll">
-                  <Button variant="outline" className="border-indigo-600 text-indigo-700 hover:bg-indigo-50">
-                    <UserCheck className="mr-2 h-4 w-4" />
-                    Direct Enroll
-                  </Button>
-                </Link>
-              </div>
+              <Link href="/dashboard/modules/admissions/new">
+                <Button className="bg-blue-600 hover:bg-blue-700">
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Application
+                </Button>
+              </Link>
             </div>
           ) : (
             <ApplicationTable
@@ -225,11 +227,6 @@ const AdmissionsPage = () => {
             )}
           </div>
           <div className="flex gap-3">
-            <Link href="/dashboard/modules/admissions/direct-enroll">
-              <Button variant="outline" size="sm" className="border-indigo-600 text-indigo-700">
-                <UserCheck className="h-4 w-4" />
-              </Button>
-            </Link>
             <Link href="/dashboard/modules/admissions/new">
               <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
                 <Plus className="h-4 w-4" />

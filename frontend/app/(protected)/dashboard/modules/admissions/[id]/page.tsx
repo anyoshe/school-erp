@@ -14,47 +14,48 @@ import { Button } from "@/components/ui/button";
 
 export default function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params); // Unwrap Promise safely
-  const isNew = id === "new";
   const router = useRouter();
 
   const { currentSchool, loading: schoolLoading, error: schoolError } = useCurrentSchool();
 
   const [application, setApplication] = useState<Application | null>(null);
-  const [loading, setLoading] = useState(!isNew);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isNew || !id) return;
-
+    if (!id) return;
     if (schoolLoading) return;
     if (!currentSchool) {
-      setError("No school selected. Please select a school first.");
-      setLoading(false);
       return;
     }
 
-    setLoading(true);
-    api
-      .get<Application>(`/admissions/applications/${id}/`)
-      .then((res) => {
-        // Optional: validate school match (extra safety)
+    const fetchApplication = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await api.get<Application>(`/admissions/applications/${id}/`);
+        // Validate school match
         if (res.data.school !== currentSchool.id) {
           throw new Error("Application belongs to a different school.");
         }
         setApplication(res.data);
-      })
-      .catch((err) => {
+      } catch (err: any) {
         console.error(err);
-        setError(err.response?.data?.detail || "Failed to load application.");
+        const errorMsg = err.response?.data?.detail || "Failed to load application.";
+        setError(errorMsg);
         toast.error("Could not load application", {
           description: err.response?.data?.detail || "Network or permission issue",
         });
-      })
-      .finally(() => setLoading(false));
-  }, [id, isNew, currentSchool, schoolLoading]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchApplication();
+  }, [id, currentSchool, schoolLoading]);
 
   const refreshApplication = async () => {
-    if (!id || isNew) return;
+    if (!id) return;
     try {
       const res = await api.get<Application>(`/admissions/applications/${id}/`);
       setApplication(res.data);
@@ -70,22 +71,14 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     }
 
     try {
-      if (isNew) {
-        const res = await api.post<Application>("/admissions/applications/", formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        toast.success("Application created!");
-        router.push(`/dashboard/modules/admissions/${res.data.id}`);
-      } else {
-        await api.patch<Application>(`/admissions/applications/${id}/`, formData, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        toast.success("Application updated!");
-        await refreshApplication();
-      }
+      await api.patch<Application>(`/admissions/applications/${id}/`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      toast.success("Application updated successfully!");
+      await refreshApplication();
     } catch (err: any) {
       console.error(err);
-      toast.error("Submission failed", {
+      toast.error("Update failed", {
         description: err.response?.data?.detail || "Unknown error",
       });
     }
@@ -118,12 +111,6 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     );
   }
 
-  const canEnroll =
-    !isNew &&
-    application?.status === "ACCEPTED" &&
-    (application?.fee_payments?.length ?? 0) > 0 &&
-    !application?.student;
-
   return (
     <div className="min-h-screen bg-gray-50/50 py-6 lg:py-8">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
@@ -132,10 +119,10 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-                {isNew ? "New Application" : `Application ${application?.admission_number || id}`}
+                Application {application?.admission_number || id}
               </h1>
               <p className="mt-1 text-sm text-gray-600">
-                {isNew ? "Create a new admission application" : "View and update this application"}
+                Status: <span className="font-medium">{application?.status}</span>
               </p>
             </div>
 
@@ -154,11 +141,10 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
               school={currentSchool}
             />
 
-            {!isNew && application && (
+            {application && (
               <div className="mt-10 border-t pt-8">
                 <AdmissionActions
                   applicationId={id}
-                  status={application.status}
                   onUpdated={refreshApplication}
                   onEnrolled={(student) => {
                     toast.success("Student enrolled successfully!");

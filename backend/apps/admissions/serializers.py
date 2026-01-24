@@ -1,101 +1,3 @@
-# # admissions/serializers.py
-# from rest_framework import serializers
-# from .models import Application, ApplicationDocument, AdmissionFeePayment
-# from apps.academics.serializers import GradeLevelSerializer
-
-# class ApplicationDocumentSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = ApplicationDocument
-#         fields = ['id', 'file', 'description', 'uploaded_at']
-
-# class AdmissionFeePaymentSerializer(serializers.ModelSerializer):
-#     class Meta:
-#         model = AdmissionFeePayment
-#         fields = ['id', 'amount', 'payment_date', 'payment_method', 'receipt_number']
-
-# class ApplicationSerializer(serializers.ModelSerializer):
-#     """
-#     READ-ONLY: Includes nested class, documents, payments
-#     """
-#     class_applied = GradeLevelSerializer(read_only=True)
-#     documents = ApplicationDocumentSerializer(many=True, read_only=True)
-#     fee_payments = AdmissionFeePaymentSerializer(many=True, read_only=True)
-
-# # Optional: Add read-only computed fields for convenience
-#     full_name = serializers.CharField(source='__str__', read_only=True)
-#     application_age_days = serializers.SerializerMethodField(read_only=True)
-#     class Meta:
-#         model = Application
-#         fields = [
-#             'id', 'admission_number', 'first_name', 'last_name', 'gender', 'date_of_birth',
-#             'class_applied', 'parent_name', 'parent_phone', 'parent_email', 'address',
-#             'previous_school', 'nationality', 'religion', 'category', 'status',
-#             'submitted_at', 'admission_date', 'notes', 'student', 'documents', 'fee_payments',
-#             'created_at', 'updated_at'
-#         ]
-
-# class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
-#     """
-#     CREATE / UPDATE: Supports file uploads for documents
-#     """
-#     documents = serializers.ListField(
-#         child=serializers.FileField(),
-#         write_only=True,
-#         required=False
-#     )
-#     fee_payments = AdmissionFeePaymentSerializer(many=True, required=False)  # For adding payments
-
-#     class Meta:
-#         model = Application
-#         fields = [
-#             'id', 'admission_number', 'first_name', 'last_name', 'gender', 'date_of_birth',
-#             'class_applied', 'parent_name', 'parent_phone', 'parent_email', 'address',
-#             'previous_school', 'nationality', 'religion', 'category', 'status',
-#             'admission_date', 'notes', 'documents', 'fee_payments'
-#         ]
-#         extra_kwargs = {
-#             # Make new fields optional
-#             'gender': {'required': False}, 'date_of_birth': {'required': False},
-#             'parent_name': {'required': False}, 'parent_phone': {'required': False},
-#             'parent_email': {'required': False, 'allow_blank': True},
-#             'address': {'required': False, 'allow_blank': True},
-#             'previous_school': {'required': False, 'allow_blank': True},
-#             'nationality': {'required': False, 'allow_blank': True},
-#             'religion': {'required': False, 'allow_blank': True},
-#             'category': {'required': False, 'allow_blank': True},
-#             'admission_date': {'required': False},
-#             'notes': {'required': False, 'allow_blank': True},
-#         }
-
-#     def create(self, validated_data):
-#         documents = validated_data.pop('documents', [])
-#         fee_payments = validated_data.pop('fee_payments', [])
-#         application = Application.objects.create(**validated_data)
-        
-#         for file in documents:
-#             ApplicationDocument.objects.create(application=application, file=file)
-        
-#         for payment_data in fee_payments:
-#             AdmissionFeePayment.objects.create(application=application, **payment_data)
-        
-#         return application
-
-#     def update(self, instance, validated_data):
-#         documents = validated_data.pop('documents', [])
-#         fee_payments = validated_data.pop('fee_payments', [])
-        
-#         for attr, value in validated_data.items():
-#             setattr(instance, attr, value)
-#         instance.save()
-        
-#         for file in documents:
-#             ApplicationDocument.objects.create(application=instance, file=file)
-        
-#         for payment_data in fee_payments:
-#             AdmissionFeePayment.objects.create(application=instance, **payment_data)
-        
-#         return instance
-
 # admissions/serializers.py
 from rest_framework import serializers
 from .models import Application, ApplicationDocument, AdmissionFeePayment
@@ -128,7 +30,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
     # Computed read-only fields
     full_name = serializers.SerializerMethodField()
     guardian_contact = serializers.SerializerMethodField()
-
+    created_by = serializers.StringRelatedField(read_only=True)
     class Meta:
         model = Application
         fields = [
@@ -144,8 +46,8 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'date_of_birth',
             'nationality',
             'passport_number',
-            'county',
-            'sub_county',
+            'region',
+            'district',
             'address',
             'religion',
             'category',
@@ -163,7 +65,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'documents',
             'fee_payments',
             'student',
-            'created_at',
+            'created_by',
             'updated_at',
         ]
         read_only_fields = [
@@ -182,114 +84,112 @@ class ApplicationSerializer(serializers.ModelSerializer):
 
 
 class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
-    """
-    Create & Update serializer - handles nested writes for documents & payments
-    """
     documents = serializers.ListField(
         child=serializers.FileField(),
         write_only=True,
         required=False,
         allow_empty=True
     )
-    fee_payments = AdmissionFeePaymentSerializer(many=True, required=False)
+    photo = serializers.ImageField(required=False, allow_null=True)
 
     class Meta:
         model = Application
         fields = [
-            'first_name',
-            'middle_name',
-            'last_name',
-            'preferred_name',
-            'gender',
-            'date_of_birth',
-            'nationality',
-            'passport_number',
-            'county',
-            'sub_county',
-            'address',
-            'religion',
-            'category',
-            'previous_school',
+            'id',
+            'first_name', 'middle_name', 'last_name', 'preferred_name',
+            'gender', 'date_of_birth', 'nationality', 'passport_number',
             'class_applied',
-            'primary_guardian_name',
-            'primary_guardian_phone',
-            'primary_guardian_email',
-            'primary_guardian_relationship',
-            'status',
-            'notes',
-            'admission_date',
-            'documents',
-            'fee_payments',
+            'primary_guardian_name', 'primary_guardian_phone',
+            'primary_guardian_email', 'primary_guardian_relationship',
+            'primary_guardian_id_number',
+            'address', 'region', 'district',
+            'previous_school', 'religion', 'category', 'placement_type',
+            'blood_group', 'allergies', 'chronic_conditions', 'disability',
+            'emergency_contact_name', 'emergency_contact_phone', 'emergency_relationship',
+            'notes', 'status', 'admission_date',
+            'school',  # ← keep this so frontend can send it
+            'documents', 'photo',
         ]
-        extra_kwargs = {
-            'middle_name': {'required': False, 'allow_blank': True},
-            'preferred_name': {'required': False, 'allow_blank': True},
-            'gender': {'required': False},
-            'date_of_birth': {'required': False},
-            'nationality': {'required': False, 'allow_blank': True},
-            'passport_number': {'required': False, 'allow_blank': True},
-            'county': {'required': False, 'allow_blank': True},
-            'sub_county': {'required': False, 'allow_blank': True},
-            'address': {'required': False, 'allow_blank': True},
-            'religion': {'required': False, 'allow_blank': True},
-            'category': {'required': False, 'allow_blank': True},
-            'previous_school': {'required': False, 'allow_blank': True},
-            'primary_guardian_name': {'required': False, 'allow_blank': True},
-            'primary_guardian_phone': {'required': False, 'allow_blank': True},
-            'primary_guardian_email': {'required': False, 'allow_blank': True},
-            'primary_guardian_relationship': {'required': False, 'allow_blank': True},
-            'status': {'required': False},
-            'admission_date': {'required': False},
-            'notes': {'required': False, 'allow_blank': True},
-        }
+        read_only_fields = ['id']
+
+    extra_kwargs = {
+        'middle_name':          {'required': False, 'allow_blank': True},
+        'preferred_name':       {'required': False, 'allow_blank': True},
+        'nationality':          {'required': False, 'allow_blank': True},
+        'passport_number':      {'required': False, 'allow_blank': True},
+        'address':              {'required': False, 'allow_blank': True},
+        'region':               {'required': False, 'allow_blank': True},
+        'district':             {'required': False, 'allow_blank': True},
+        'previous_school':      {'required': False, 'allow_blank': True},
+        'religion':             {'required': False, 'allow_blank': True},
+        'category':             {'required': False, 'allow_blank': True},
+        'allergies':            {'required': False, 'allow_blank': True},
+        'chronic_conditions':   {'required': False, 'allow_blank': True},
+        'disability':           {'required': False, 'allow_blank': True},
+        'emergency_contact_name':    {'required': False, 'allow_blank': True},
+        'emergency_contact_phone':   {'required': False, 'allow_blank': True},
+        'emergency_relationship':    {'required': False, 'allow_blank': True},
+        'primary_guardian_id_number': {'required': False, 'allow_blank': True},
+        'notes':                {'required': False, 'allow_blank': True},
+        'school':               {'required': True},  # ← enforce frontend sends it
+    }
 
     def validate(self, data):
-        # Optional: add custom validation, e.g. require guardian info if status=SUBMITTED
-        if data.get('status') == Application.Status.SUBMITTED:
-            if not data.get('primary_guardian_name') or not data.get('primary_guardian_phone'):
-                raise serializers.ValidationError("Primary guardian name and phone are required when submitting.")
+        if data.get('status') in [Application.Status.SUBMITTED, Application.Status.UNDER_REVIEW]:
+            required = ['first_name', 'last_name', 'class_applied',
+                        'primary_guardian_name', 'primary_guardian_phone']
+            missing = [f for f in required if not data.get(f)]
+            if missing:
+                raise serializers.ValidationError(f"Required for submission: {', '.join(missing)}")
         return data
 
     def create(self, validated_data):
         documents_data = validated_data.pop('documents', [])
-        payments_data = validated_data.pop('fee_payments', [])
 
-        # Auto-set school from request context
-        request = self.context['request']
-        validated_data['school'] = request.user.school  # Assuming user has school attribute
+        # IMPORTANT: Do NOT set school here — frontend sends it
+        # If 'school' is missing, DRF will raise validation error (because required=True)
 
         application = Application.objects.create(**validated_data)
+        print("Created application ID:", application.id)
 
-        # Handle documents
         for file in documents_data:
             ApplicationDocument.objects.create(application=application, file=file)
 
-        # Handle payments
-        for payment_data in payments_data:
-            AdmissionFeePayment.objects.create(application=application, **payment_data)
-
         return application
+    # class Meta:
+    #     model = Application
+    #     fields = [
+    #         'id',
+    #         'first_name', 'middle_name', 'last_name', 'preferred_name',
+    #         'gender', 'date_of_birth', 'nationality', 'passport_number',
+    #         'class_applied',
+    #         'primary_guardian_name', 'primary_guardian_phone',
+    #         'primary_guardian_email', 'primary_guardian_relationship',
+    #         'primary_guardian_id_number',
+    #         'address', 'region', 'district',
+    #         'previous_school', 'religion', 'category', 'placement_type',
+    #         'blood_group', 'allergies', 'chronic_conditions', 'disability',
+    #         'emergency_contact_name', 'emergency_contact_phone', 'emergency_relationship',
+    #         'notes', 'status', 'admission_date',
+    #         'school',  # ← keep this so frontend can send it
+    #         'documents', 'photo',
+    #     ]
+    #     read_only_fields = ['id']
+
 
     def update(self, instance, validated_data):
         documents_data = validated_data.pop('documents', [])
-        payments_data = validated_data.pop('fee_payments', [])
 
+        # Again: no school override here
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
         instance.save()
 
-        # Add new documents (not replacing old ones)
         for file in documents_data:
             ApplicationDocument.objects.create(application=instance, file=file)
 
-        # Add new payments
-        for payment_data in payments_data:
-            AdmissionFeePayment.objects.create(application=instance, **payment_data)
-
         return instance
-
-
 # Optional: Minimal serializer for list view (faster)
 class ApplicationListSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()

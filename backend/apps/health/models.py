@@ -31,7 +31,7 @@ class Vaccination(models.Model):
 
 class Allergy(models.Model):
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='allergies')
-    student = models.ForeignKey('students.Student', on_delete=models.CASCADE, related_name='allergies')
+    student = models.ForeignKey('students.Student', on_delete=models.CASCADE, related_name='allergy_records')
     allergen = models.CharField(max_length=150)
     severity = models.CharField(max_length=50, choices=[('mild', 'Mild'), ('moderate', 'Moderate'), ('severe', 'Severe')])
     reaction = models.TextField(blank=True)

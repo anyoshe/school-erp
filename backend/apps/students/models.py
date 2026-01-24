@@ -42,6 +42,17 @@ class Student(models.Model):
     sub_county = models.CharField(max_length=100, blank=True)
     religion = models.CharField(max_length=50, blank=True)
     photo = models.ImageField(upload_to='student_photos/', blank=True, null=True)
+
+    kcpe_index = models.CharField(max_length=20, blank=True)  # Renamed for consistency
+    kcpe_year = models.PositiveIntegerField(null=True, blank=True)
+    # upi_number already exists
+    blood_group = models.CharField(max_length=5, blank=True)
+    allergies = models.TextField(blank=True, help_text="e.g. peanuts, bee stings, penicillin")
+    chronic_conditions = models.TextField(blank=True)
+    disability = models.CharField(max_length=100, blank=True)
+    emergency_name = models.CharField(max_length=100, blank=True)
+    emergency_phone = models.CharField(max_length=20, blank=True)
+    emergency_relation = models.CharField(max_length=50, blank=True)
     
     # Academic Info
     current_class = models.ForeignKey(

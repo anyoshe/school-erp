@@ -8,24 +8,30 @@ from .views import (
     PublicApplicationSubmissionViewSet,
 )
 
-# Main router for authenticated school staff/admin endpoints
 router = DefaultRouter()
 router.register(r'applications', ApplicationViewSet, basename='application')
 router.register(r'application-documents', ApplicationDocumentViewSet, basename='application-document')
 router.register(r'admission-fee-payments', AdmissionFeePaymentViewSet, basename='admission-fee-payment')
 
-# Public submission endpoint (no authentication required)
-# You can later secure this with CAPTCHA, rate limiting, or a school-specific token
+# Public endpoints (manual paths - no duplicate router.register)
 public_urls = [
+    # Create new application (POST)
     path('applications/submit/', PublicApplicationSubmissionViewSet.as_view({
-        'post': 'create'
+        'post': 'create',
     }), name='public-application-submit'),
+
+    # NEW: Fetch existing draft (GET)
+    path('applications/<uuid:pk>/', PublicApplicationSubmissionViewSet.as_view({
+        'get': 'retrieve',
+    }), name='public-application-detail'),
+
+    # Update existing draft (PATCH) - using custom action
+    path('applications/<uuid:pk>/update/', PublicApplicationSubmissionViewSet.as_view({
+        'patch': 'update_draft',
+    }), name='public-application-update'),
 ]
 
 urlpatterns = [
-    # All authenticated staff endpoints
     path('', include(router.urls)),
-    
-    # Public-facing application submission (optional - comment out if not needed)
     path('public/', include(public_urls)),
 ]

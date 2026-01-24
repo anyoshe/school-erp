@@ -1,0 +1,681 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import api from "@/utils/api";           // authenticated api (with token)
+import publicApi from "@/utils/publicApi"; // no auth
+import { toast } from "sonner";
+import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
+import DocumentUpload from "../components/DocumentUpload";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Loader, ArrowLeft, CheckCircle2 } from "lucide-react";
+import Link from "next/link";
+
+// ──────────────────────────────
+// Form schema
+// ──────────────────────────────
+const formSchema = z.object({
+  first_name: z.string().min(1, "First name is required"),
+  middle_name: z.string().optional(),
+  last_name: z.string().min(1, "Last name is required"),
+  preferred_name: z.string().optional(),
+  gender: z.enum(["MALE", "FEMALE", "OTHER", ""]).optional(),
+  date_of_birth: z.string().optional(),
+  nationality: z.string().min(1, "Nationality is required"),
+  passport_number: z.string().optional(),
+  class_applied: z.string().min(1, "Class/Grade is required"),
+  primary_guardian_name: z.string().min(1, "Guardian name is required"),
+  primary_guardian_phone: z.string().min(9, "Valid phone number required"),
+  primary_guardian_email: z.string().email("Invalid email").optional(),
+  primary_guardian_relationship: z.string().min(1, "Relationship is required"),
+  primary_guardian_id_number: z.string().optional(),
+  address: z.string().optional(),
+  region: z.string().optional(),
+  district: z.string().optional(),
+  previous_school: z.string().optional(),
+  religion: z.string().optional(),
+  category: z.string().optional(),
+  placement_type: z.enum(["SELF", "PUBLIC", "TRANSFER", "OTHER"]).optional(),
+  blood_group: z.string().optional(),
+  allergies: z.string().optional(),
+  chronic_conditions: z.string().optional(),
+  disability: z.string().optional(),
+  emergency_contact_name: z.string().optional(),
+  emergency_contact_phone: z.string().optional(),
+  emergency_relationship: z.string().optional(),
+  notes: z.string().optional(),
+  photo: z.any().optional(),
+});
+
+type FormValues = z.infer<typeof formSchema>;
+
+interface GradeLevel {
+  id: string;
+  name: string;
+  short_name?: string;
+}
+
+// ──────────────────────────────
+// Page component
+// ──────────────────────────────
+export default function NewApplicationPage() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { currentSchool, loading: schoolLoading, error: schoolError } = useCurrentSchool();
+
+  const [currentStep, setCurrentStep] = useState(0);
+  const [documents, setDocuments] = useState<File[]>([]);
+  const [isFinalSubmitted, setIsFinalSubmitted] = useState(false);
+  const [savedAppId, setSavedAppId] = useState<string | null>(null);
+
+  const steps = ["Student", "Guardian", "Additional Info", "Documents"];
+
+  const {
+    control,
+    getValues,
+    formState: { errors, isValid, isSubmitting },
+    trigger,
+  } = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      first_name: "",
+      middle_name: "",
+      last_name: "",
+      preferred_name: "",
+      gender: "",
+      date_of_birth: "",
+      nationality: "",
+      passport_number: "",
+      class_applied: "",
+      primary_guardian_name: "",
+      primary_guardian_phone: "",
+      primary_guardian_email: "",
+      primary_guardian_relationship: "",
+      primary_guardian_id_number: "",
+      address: "",
+      region: "",
+      district: "",
+      previous_school: "",
+      religion: "",
+      category: "",
+      placement_type: "SELF",
+      blood_group: "",
+      allergies: "",
+      chronic_conditions: "",
+      disability: "",
+      emergency_contact_name: "",
+      emergency_contact_phone: "",
+      emergency_relationship: "",
+      notes: "",
+      photo: undefined,
+    },
+    mode: "onChange",
+  });
+
+  // Fetch Grade Levels
+  const { data: gradeLevels = [], isLoading: gradesLoading } = useQuery<GradeLevel[]>({
+    queryKey: ["gradeLevels", currentSchool?.id],
+    queryFn: async () => {
+      if (!currentSchool?.id) throw new Error("No school selected");
+      const res = await api.get("/academics/grade-levels/", {
+        headers: { "X-School-ID": currentSchool.id },
+      });
+      return res.data || [];
+    },
+    enabled: !!currentSchool?.id && !schoolLoading,
+  });
+
+
+  // Save mutation (POST for new, PATCH for existing draft)
+  // Save mutation - both create and update via public endpoint
+  const saveMutation = useMutation({
+    mutationFn: async ({ fd, id }: { fd: FormData; id?: string }) => {
+      console.log(`[DEBUG] Save action - ${id ? 'UPDATE (PATCH)' : 'CREATE (POST)'} | ID: ${id ?? 'new'}`);
+
+      if (!currentSchool?.id) {
+        throw new Error("No school selected");
+      }
+      fd.append("school", currentSchool.id);
+
+      let res;
+      if (id) {
+        // PATCH existing draft (public)
+        const url = `/admissions/public/applications/${id}/update/`;
+        console.log(`[DEBUG] PATCH → ${url}`);
+        res = await publicApi.patch(url, fd);
+      } else {
+        // POST new draft (public)
+        console.log("[DEBUG] POST → /admissions/public/applications/submit/");
+        res = await publicApi.post("/admissions/public/applications/submit/", fd);
+      }
+
+      console.log("[DEBUG] Response data:", res.data);
+      return res.data;
+    },
+    onSuccess: (response, { id }) => {
+      const appId = response?.id || id;
+      if (!appId) {
+        toast.warning("Saved, but no reference ID received");
+        console.warn("[DEBUG] No ID in response");
+        return;
+      }
+
+      // Always update saved ID
+      setSavedAppId(appId);
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+
+      if (response.status === "DRAFT") {
+        toast.success("Draft saved successfully", {
+          description: `ID: ${appId} — you can continue editing`,
+          duration: 5000,
+        });
+        console.log(`[DEBUG] Draft saved/updated - ID: ${appId}`);
+      } else {
+        toast.success("Application submitted successfully!", {
+          description: `ID: ${appId}`,
+          duration: 6000,
+        });
+        console.log(`[DEBUG] Submitted - ID: ${appId}`);
+        setIsFinalSubmitted(true);
+      }
+    },
+    onError: (err: any) => {
+      console.error("[DEBUG] Save mutation error:", err);
+      toast.error("Failed to save", {
+        description: err.response?.data?.detail || err.message || "Check console",
+      });
+    },
+  });
+
+  // Handle Save Draft or Submit
+  const handleAction = async (action: "draft" | "submit") => {
+    if (action === "submit") {
+      const isFormValid = await trigger();
+      if (!isFormValid) {
+        toast.error("Please complete all required fields");
+        const firstError = document.querySelector(".text-red-500");
+        firstError?.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+    }
+
+    const values = getValues();
+    const fd = new FormData();
+
+    Object.entries(values).forEach(([key, value]) => {
+      if (value !== undefined && value !== "" && key !== "photo") {
+        fd.append(key, String(value));
+      }
+    });
+
+    if (values.photo instanceof File) fd.append("photo", values.photo);
+    documents.forEach((file) => fd.append("documents", file));
+
+    if (!currentSchool?.id) {
+      toast.error("No school selected");
+      return;
+    }
+
+    fd.append("status", action === "draft" ? "DRAFT" : "SUBMITTED");
+
+    // Debug log
+    console.log(`Action: ${action.toUpperCase()} | Current saved ID: ${savedAppId ?? "new"}`);
+    for (let [key, val] of fd.entries()) {
+      console.log(`${key}: ${val}`);
+    }
+
+    saveMutation.mutate({ fd, id: savedAppId ?? undefined });
+  };
+
+  // ──────────────────────────────
+  // Loading / Error States
+  // ──────────────────────────────
+  if (schoolLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader className="animate-spin h-10 w-10" />
+      </div>
+    );
+  }
+
+  if (schoolError || !currentSchool) {
+    return (
+      <div className="p-6">
+        <Link href="/dashboard/modules/admissions">
+          <Button variant="outline">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back
+          </Button>
+        </Link>
+        <Alert variant="destructive" className="mt-4">
+          <AlertDescription>{schoolError || "No school selected"}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // ──────────────────────────────
+  // Render
+  // ──────────────────────────────
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-sm border">
+        <div className="px-6 py-4 border-b bg-blue-50 flex justify-between items-center">
+          <p className="text-blue-800 font-medium">
+            Applying to: <span className="font-semibold">{currentSchool.name}</span>
+          </p>
+        </div>
+
+        {savedAppId && !isFinalSubmitted && (
+          <Alert className="mx-6 mt-4 bg-green-50 border-green-200">
+            <CheckCircle2 className="h-5 w-5 text-green-600" />
+            <AlertDescription className="text-green-800">
+              Draft saved (ID: <strong>{savedAppId}</strong>). Continue editing or submit when ready.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {isFinalSubmitted ? (
+          <div className="p-12 text-center space-y-6">
+            <CheckCircle2 className="mx-auto h-16 w-16 text-green-600" />
+            <h2 className="text-2xl font-bold text-green-800">Thank You!</h2>
+            <p className="text-lg text-gray-700">
+              Your application has been successfully submitted.
+            </p>
+            <p className="text-gray-600">
+              Reference ID: <strong>{savedAppId || "—"}</strong>
+            </p>
+            <div className="flex justify-center gap-4">
+              <Button variant="outline" onClick={() => router.push("/dashboard/modules/admissions")}>
+                Back to Applications
+              </Button>
+              <Button onClick={() => window.location.reload()}>
+                Start New Application
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <form className="p-6 space-y-8">
+            <Tabs
+              value={steps[currentStep]}
+              onValueChange={(val) => {
+                const idx = steps.indexOf(val);
+                if (idx !== -1) setCurrentStep(idx);
+              }}
+            >
+              <TabsList className="grid w-full grid-cols-4 gap-2 mb-6">
+                {steps.map((step) => (
+                  <TabsTrigger key={step} value={step}>
+                    {step}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+
+              {/* Student Details */}
+              <TabsContent value="Student" className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <Label>First Name *</Label>
+                    <Controller name="first_name" control={control} render={({ field }) => <Input {...field} />} />
+                    {errors.first_name && <p className="text-red-500 text-sm mt-1">{errors.first_name.message}</p>}
+                  </div>
+                  <div>
+                    <Label>Middle Name</Label>
+                    <Controller name="middle_name" control={control} render={({ field }) => <Input {...field} />} />
+                  </div>
+                  <div>
+                    <Label>Last Name *</Label>
+                    <Controller name="last_name" control={control} render={({ field }) => <Input {...field} />} />
+                    {errors.last_name && <p className="text-red-500 text-sm mt-1">{errors.last_name.message}</p>}
+                  </div>
+                  <div>
+                    <Label>Preferred Name</Label>
+                    <Controller name="preferred_name" control={control} render={({ field }) => <Input {...field} />} />
+                  </div>
+                  <div>
+                    <Label>Gender</Label>
+                    <Controller
+                      name="gender"
+                      control={control}
+                      render={({ field }) => (
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="MALE">Male</SelectItem>
+                            <SelectItem value="FEMALE">Female</SelectItem>
+                            <SelectItem value="OTHER">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  </div>
+                  <div>
+                    <Label>Date of Birth</Label>
+                    <Controller name="date_of_birth" control={control} render={({ field }) => <Input type="date" {...field} />} />
+                  </div>
+                  <div>
+                    <Label>Nationality *</Label>
+                    <Controller name="nationality" control={control} render={({ field }) => <Input {...field} />} />
+                    {errors.nationality && <p className="text-red-500 text-sm mt-1">{errors.nationality.message}</p>}
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>Class / Grade Applied *</Label>
+                    <Controller
+                      name="class_applied"
+                      control={control}
+                      render={({ field }) => {
+                        // Ensure we are working with a string for the Select component's internal state
+                        const safeValue = field.value ? String(field.value) : "";
+
+                        return (
+                          <Select
+                            // Key helps Radix UI reset the internal trigger state when value changes
+                            key={safeValue}
+                            value={safeValue}
+                            onValueChange={(val) => {
+                              // Explicitly cast to string before updating React Hook Form
+                              field.onChange(String(val));
+                              // Trigger validation to clear the "Invalid input" or "Required" error immediately
+                              trigger("class_applied");
+                            }}
+                            disabled={gradesLoading}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder={gradesLoading ? "Loading classes..." : "Select class"} />
+                            </SelectTrigger>
+
+                            <SelectContent>
+                              {gradesLoading ? (
+                                <div className="flex items-center justify-center p-4">
+                                  <Loader className="h-4 w-4 animate-spin mr-2" />
+                                  <span className="text-sm">Fetching grades...</span>
+                                </div>
+                              ) : gradeLevels.length === 0 ? (
+                                <div className="p-4 text-center text-sm text-muted-foreground">
+                                  No classes available for this school
+                                </div>
+                              ) : (
+                                gradeLevels.map((g) => (
+                                  <SelectItem
+                                    key={String(g.id)}
+                                    value={String(g.id)}
+                                  >
+                                    {g.name}
+                                    {g.short_name && ` (${g.short_name})`}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                        );
+                      }}
+                    />
+                    {errors.class_applied && (
+                      <p className="text-red-500 text-sm mt-1 font-medium">
+                        {errors.class_applied.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Guardian */}
+              <TabsContent value="Guardian" className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="md:col-span-2">
+                    <Label>Primary Guardian Name *</Label>
+                    <Controller name="primary_guardian_name" control={control} render={({ field }) => <Input {...field} />} />
+                    {errors.primary_guardian_name && <p className="text-red-500 text-sm mt-1">{errors.primary_guardian_name.message}</p>}
+                  </div>
+                  <div>
+                    <Label>Relationship *</Label>
+                    <Controller name="primary_guardian_relationship" control={control} render={({ field }) => <Input {...field} />} />
+                    {errors.primary_guardian_relationship && <p className="text-red-500 text-sm mt-1">{errors.primary_guardian_relationship.message}</p>}
+                  </div>
+                  <div>
+                    <Label>Phone Number *</Label>
+                    <Controller name="primary_guardian_phone" control={control} render={({ field }) => <Input type="tel" {...field} />} />
+                    {errors.primary_guardian_phone && <p className="text-red-500 text-sm mt-1">{errors.primary_guardian_phone.message}</p>}
+                  </div>
+                  <div>
+                    <Label>Email</Label>
+                    <Controller name="primary_guardian_email" control={control} render={({ field }) => <Input type="email" {...field} />} />
+                  </div>
+                  <div>
+                    <Label>ID / Passport Number</Label>
+                    <Controller name="primary_guardian_id_number" control={control} render={({ field }) => <Input {...field} />} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>Address</Label>
+                    <Controller name="address" control={control} render={({ field }) => <Input {...field} placeholder="Street, building, etc." />} />
+                  </div>
+                  <div>
+                    <Label>Region / Province / State</Label>
+                    <Controller name="region" control={control} render={({ field }) => <Input {...field} />} />
+                  </div>
+                  <div>
+                    <Label>District / City</Label>
+                    <Controller name="district" control={control} render={({ field }) => <Input {...field} />} />
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Additional Info */}
+              <TabsContent value="Additional Info" className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <Label>Previous School</Label>
+                    <Controller name="previous_school" control={control} render={({ field }) => <Input {...field} />} />
+                  </div>
+                  <div>
+                    <Label>Religion</Label>
+                    <Controller name="religion" control={control} render={({ field }) => <Input {...field} />} />
+                  </div>
+                  <div>
+                    <Label>Category (optional)</Label>
+                    <Controller name="category" control={control} render={({ field }) => <Input {...field} placeholder="e.g. General, Scholarship" />} />
+                  </div>
+                  <div>
+                    <Label>Placement Type</Label>
+                    <Controller
+                      name="placement_type"
+                      control={control}
+                      render={({ field }) => (
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="SELF">Self / Parent Application</SelectItem>
+                            <SelectItem value="PUBLIC">Government / Public Authority</SelectItem>
+                            <SelectItem value="TRANSFER">Transfer from Another School</SelectItem>
+                            <SelectItem value="OTHER">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  </div>
+                  <div>
+                    <Label>Blood Group</Label>
+                    <Controller
+                      name="blood_group"
+                      control={control}
+                      render={({ field }) => (
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map(bg => (
+                              <SelectItem key={bg} value={bg}>{bg}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>Allergies / Medical Conditions</Label>
+                    <Controller name="allergies" control={control} render={({ field }) => <Input {...field} placeholder="e.g. nuts, penicillin" />} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>Chronic Conditions / Disabilities</Label>
+                    <Controller name="chronic_conditions" control={control} render={({ field }) => <Input {...field} placeholder="e.g. asthma, epilepsy" />} />
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>Emergency Contact (if different from guardian)</Label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+                      <div>
+                        <Label className="text-sm">Name</Label>
+                        <Controller name="emergency_contact_name" control={control} render={({ field }) => <Input {...field} />} />
+                      </div>
+                      <div>
+                        <Label className="text-sm">Phone</Label>
+                        <Controller name="emergency_contact_phone" control={control} render={({ field }) => <Input type="tel" {...field} />} />
+                      </div>
+                      <div>
+                        <Label className="text-sm">Relationship</Label>
+                        <Controller name="emergency_relationship" control={control} render={({ field }) => <Input {...field} />} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="md:col-span-2">
+                    <Label>Additional Notes</Label>
+                    <Controller name="notes" control={control} render={({ field }) => <Input {...field} placeholder="Any other relevant information..." />} />
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Documents TabContent */}
+              <TabsContent value="Documents" className="space-y-6">
+                <div>
+                  <Label>Passport-size Photo</Label>
+                  <Controller
+                    name="photo"
+                    control={control}
+                    render={({ field: { onChange, value } }) => (
+                      <div className="mt-2">
+                        {/* If there is already a photo (string URL from server or File object), show a preview or name */}
+                        {value && (
+                          <p className="text-xs text-blue-600 mb-1">
+                            Current: {value instanceof File ? value.name : "Saved Photo"}
+                          </p>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) onChange(file);
+                          }}
+                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                        />
+                      </div>
+                    )}
+                  />
+                </div>
+                <div>
+                  <Label>Supporting Documents</Label>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Birth certificate, immunization records, previous reports, transfer letter, etc.
+                  </p>
+                  <DocumentUpload
+                    onFilesChange={setDocuments}
+                    initialFiles={documents} // Pass the state here!
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
+
+            <div className="flex justify-between pt-6 border-t">
+              <div>
+                {currentStep > 0 && (
+                  <Button
+                    type="button" // CRITICAL: Prevents form submission on "Back"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.preventDefault(); // Extra safety
+                      setCurrentStep((prev) => prev - 1);
+                    }}
+                    disabled={saveMutation.isPending}
+                  >
+                    Back
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex gap-4">
+                <Button
+                  type="button" // CRITICAL: Ensures "Save Draft" only runs handleAction
+                  variant="outline"
+                  onClick={() => handleAction("draft")}
+                  disabled={isSubmitting || saveMutation.isPending}
+                >
+                  {saveMutation.isPending ? (
+                    <>
+                      <Loader className="mr-2 h-4 w-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save as Draft"
+                  )}
+                </Button>
+
+                {currentStep < steps.length - 1 ? (
+                  <Button
+                    type="button" // CRITICAL: Prevents submission on "Next"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setCurrentStep((prev) => prev + 1);
+                    }}
+                  >
+                    Next
+                  </Button>
+                ) : (
+                  <Button
+                    type="button" // Kept as button because we manually call handleAction
+                    onClick={() => handleAction("submit")}
+                    disabled={!isValid || isSubmitting || saveMutation.isPending}
+                    className={`min-w-[180px] ${!isValid ? "opacity-70 cursor-not-allowed" : ""}`}
+                  >
+                    {saveMutation.isPending ? (
+                      <>
+                        <Loader className="mr-2 h-4 w-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      "Submit Application"
+                    )}
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {!isValid && currentStep === steps.length - 1 && (
+              <Alert variant="destructive" className="mt-4">
+                <AlertDescription>
+                  Some required fields are still missing. Please check all tabs.
+                </AlertDescription>
+              </Alert>
+            )}
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}

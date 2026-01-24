@@ -1,0 +1,175 @@
+[
+  {
+    "model": "academics.curriculum",
+    "pk": 1,
+    "fields": {
+      "school": null,
+      "name": "Kenya Competency Based Curriculum (CBC)",
+      "short_code": "KE-CBC",
+      "description": "2-6-3-3-3 system (Pre-Primary 2yrs + Primary 6yrs + Junior Sec 3yrs + Senior Sec 3yrs)",
+      "is_active": true,
+      "is_template": true
+    }
+  },
+  {
+    "model": "academics.curriculum",
+    "pk": 5,
+    "fields": {
+      "school": null,
+      "name": "Kenya 8-4-4 (Legacy)",
+      "short_code": "KE-844",
+      "description": "Old system - Primary 8yrs + Secondary 4yrs + University 4yrs",
+      "is_active": true,
+      "is_template": true
+    }
+  },
+  {
+    "model": "academics.curriculum",
+    "pk": 10,
+    "fields": {
+      "school": null,
+      "name": "K-12 International / American",
+      "short_code": "K12",
+      "description": "Standard US/International K-12 system",
+      "is_active": true,
+      "is_template": true
+    }
+  },
+  {
+    "model": "academics.curriculum",
+    "pk": 15,
+    "fields": {
+      "school": null,
+      "name": "Cambridge International",
+      "short_code": "CAMBRIDGE",
+      "description": "Cambridge Primary → Lower Secondary → IGCSE → AS/A-Level",
+      "is_active": true,
+      "is_template": true
+    }
+  },
+  {
+    "model": "academics.curriculum",
+    "pk": 16,
+    "fields": {
+      "school": null,
+      "name": "International Baccalaureate (IB)",
+      "short_code": "IB",
+      "description": "PYP → MYP → DP → CP",
+      "is_active": true,
+      "is_template": true
+    }
+  },
+  {
+    "model": "academics.curriculum",
+    "pk": 20,
+    "fields": {
+      "school": null,
+      "name": "Tanzania National Curriculum",
+      "short_code": "TZ-NAT",
+      "description": "7-4-2-3 system (Primary 7yrs + O-Level 4yrs + A-Level 2yrs)",
+      "is_active": true,
+      "is_template": true
+    }
+  },
+  {
+    "model": "academics.curriculum",
+    "pk": 30,
+    "fields": {
+      "school": null,
+      "name": "Uganda National Curriculum",
+      "short_code": "UG-NAT",
+      "description": "7-4-2 system (Primary 7yrs + O-Level 4yrs + A-Level 2yrs)",
+      "is_active": true,
+      "is_template": true
+    }
+  },
+  {
+    "model": "academics.curriculum",
+    "pk": 40,
+    "fields": {
+      "school": null,
+      "name": "Rwanda Competence-Based Curriculum",
+      "short_code": "RW-CBC",
+      "description": "6-3-3 system (Primary 6yrs + Lower Secondary 3yrs + Upper Secondary 3yrs)",
+      "is_active": true,
+      "is_template": true
+    }
+  },
+
+  
+  {"model": "academics.gradelevel", "pk": 1, "fields": {"school": null, "curriculum": 1, "name": "PP1", "short_name": "PP1", "order": 1, "code": "", "education_level": "PRE_PRIMARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 2, "fields": {"school": null, "curriculum": 1, "name": "PP2", "short_name": "PP2", "order": 2, "code": "", "education_level": "PRE_PRIMARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 3, "fields": {"school": null, "curriculum": 1, "name": "Grade 1", "short_name": "G1", "order": 3, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 4, "fields": {"school": null, "curriculum": 1, "name": "Grade 2", "short_name": "G2", "order": 4, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 5, "fields": {"school": null, "curriculum": 1, "name": "Grade 3", "short_name": "G3", "order": 5, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 6, "fields": {"school": null, "curriculum": 1, "name": "Grade 4", "short_name": "G4", "order": 6, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 7, "fields": {"school": null, "curriculum": 1, "name": "Grade 5", "short_name": "G5", "order": 7, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 8, "fields": {"school": null, "curriculum": 1, "name": "Grade 6", "short_name": "G6", "order": 8, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 9, "fields": {"school": null, "curriculum": 1, "name": "Grade 7", "short_name": "G7", "order": 9, "code": "", "education_level": "MIDDLE", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 10, "fields": {"school": null, "curriculum": 1, "name": "Grade 8", "short_name": "G8", "order": 10, "code": "", "education_level": "MIDDLE", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 11, "fields": {"school": null, "curriculum": 1, "name": "Grade 9", "short_name": "G9", "order": 11, "code": "", "education_level": "MIDDLE", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 12, "fields": {"school": null, "curriculum": 1, "name": "Grade 10", "short_name": "G10", "order": 12, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 13, "fields": {"school": null, "curriculum": 1, "name": "Grade 11", "short_name": "G11", "order": 13, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 14, "fields": {"school": null, "curriculum": 1, "name": "Grade 12", "short_name": "G12", "order": 14, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+
+  
+  {"model": "academics.gradelevel", "pk": 50, "fields": {"school": null, "curriculum": 5, "name": "Class 1", "short_name": "C1", "order": 1, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 51, "fields": {"school": null, "curriculum": 5, "name": "Class 2", "short_name": "C2", "order": 2, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 52, "fields": {"school": null, "curriculum": 5, "name": "Class 3", "short_name": "C3", "order": 3, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 53, "fields": {"school": null, "curriculum": 5, "name": "Class 4", "short_name": "C4", "order": 4, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 54, "fields": {"school": null, "curriculum": 5, "name": "Class 5", "short_name": "C5", "order": 5, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 55, "fields": {"school": null, "curriculum": 5, "name": "Class 6", "short_name": "C6", "order": 6, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 56, "fields": {"school": null, "curriculum": 5, "name": "Class 7", "short_name": "C7", "order": 7, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 57, "fields": {"school": null, "curriculum": 5, "name": "Class 8", "short_name": "C8", "order": 8, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 58, "fields": {"school": null, "curriculum": 5, "name": "Form 1", "short_name": "F1", "order": 9, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 59, "fields": {"school": null, "curriculum": 5, "name": "Form 2", "short_name": "F2", "order": 10, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 60, "fields": {"school": null, "curriculum": 5, "name": "Form 3", "short_name": "F3", "order": 11, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 61, "fields": {"school": null, "curriculum": 5, "name": "Form 4", "short_name": "F4", "order": 12, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+
+
+  {"model": "academics.gradelevel", "pk": 100, "fields": {"school": null, "curriculum": 10, "name": "Pre-Kindergarten", "short_name": "Pre-K", "order": 1, "code": "", "education_level": "PRE_PRIMARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 101, "fields": {"school": null, "curriculum": 10, "name": "Kindergarten", "short_name": "KG", "order": 2, "code": "", "education_level": "PRE_PRIMARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 102, "fields": {"school": null, "curriculum": 10, "name": "Grade 1", "short_name": "G1", "order": 3, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 103, "fields": {"school": null, "curriculum": 10, "name": "Grade 2", "short_name": "G2", "order": 4, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 104, "fields": {"school": null, "curriculum": 10, "name": "Grade 3", "short_name": "G3", "order": 5, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 105, "fields": {"school": null, "curriculum": 10, "name": "Grade 4", "short_name": "G4", "order": 6, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 106, "fields": {"school": null, "curriculum": 10, "name": "Grade 5", "short_name": "G5", "order": 7, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 107, "fields": {"school": null, "curriculum": 10, "name": "Grade 6", "short_name": "G6", "order": 8, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 108, "fields": {"school": null, "curriculum": 10, "name": "Grade 7", "short_name": "G7", "order": 9, "code": "", "education_level": "MIDDLE", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 109, "fields": {"school": null, "curriculum": 10, "name": "Grade 8", "short_name": "G8", "order": 10, "code": "", "education_level": "MIDDLE", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 110, "fields": {"school": null, "curriculum": 10, "name": "Grade 9", "short_name": "G9", "order": 11, "code": "", "education_level": "MIDDLE", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 111, "fields": {"school": null, "curriculum": 10, "name": "Grade 10", "short_name": "G10", "order": 12, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 112, "fields": {"school": null, "curriculum": 10, "name": "Grade 11", "short_name": "G11", "order": 13, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 113, "fields": {"school": null, "curriculum": 10, "name": "Grade 12", "short_name": "G12", "order": 14, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+
+
+  {"model": "academics.gradelevel", "pk": 150, "fields": {"school": null, "curriculum": 15, "name": "Cambridge Primary Year 1", "short_name": "CP1", "order": 1, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 151, "fields": {"school": null, "curriculum": 15, "name": "Cambridge Primary Year 6", "short_name": "CP6", "order": 6, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 152, "fields": {"school": null, "curriculum": 15, "name": "Cambridge Lower Secondary Year 7", "short_name": "CLS7", "order": 7, "code": "", "education_level": "MIDDLE", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 153, "fields": {"school": null, "curriculum": 15, "name": "Cambridge Lower Secondary Year 9", "short_name": "CLS9", "order": 9, "code": "", "education_level": "MIDDLE", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 154, "fields": {"school": null, "curriculum": 15, "name": "IGCSE Year 10", "short_name": "IG10", "order": 10, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 155, "fields": {"school": null, "curriculum": 15, "name": "IGCSE Year 11", "short_name": "IG11", "order": 11, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 156, "fields": {"school": null, "curriculum": 15, "name": "AS Level (Year 12)", "short_name": "AS", "order": 12, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 157, "fields": {"school": null, "curriculum": 15, "name": "A Level (Year 13)", "short_name": "A2", "order": 13, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+
+  
+  {"model": "academics.gradelevel", "pk": 160, "fields": {"school": null, "curriculum": 16, "name": "PYP Year 1", "short_name": "PYP1", "order": 1, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 165, "fields": {"school": null, "curriculum": 16, "name": "PYP Year 5", "short_name": "PYP5", "order": 5, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 166, "fields": {"school": null, "curriculum": 16, "name": "MYP Year 1", "short_name": "MYP1", "order": 6, "code": "", "education_level": "MIDDLE", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 170, "fields": {"school": null, "curriculum": 16, "name": "MYP Year 5", "short_name": "MYP5", "order": 10, "code": "", "education_level": "MIDDLE", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 171, "fields": {"school": null, "curriculum": 16, "name": "DP Year 1", "short_name": "DP1", "order": 11, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 172, "fields": {"school": null, "curriculum": 16, "name": "DP Year 2", "short_name": "DP2", "order": 12, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+
+  
+  {"model": "academics.department", "pk": 1000, "fields": {"school": null, "curriculum": null, "name": "Science", "short_name": "Sci", "code": "SCI"}},
+  {"model": "academics.department", "pk": 1001, "fields": {"school": null, "curriculum": null, "name": "Humanities", "short_name": "Hum", "code": "HUM"}},
+  {"model": "academics.department", "pk": 1002, "fields": {"school": null, "curriculum": null, "name": "Technical", "short_name": "Tech", "code": "TECH"}},
+  {"model": "academics.department", "pk": 1003, "fields": {"school": null, "curriculum": null, "name": "Commercial", "short_name": "Com", "code": "COM"}},
+  {"model": "academics.department", "pk": 1004, "fields": {"school": null, "curriculum": null, "name": "Languages", "short_name": "Lang", "code": "LANG"}},
+  {"model": "academics.department", "pk": 1005, "fields": {"school": null, "curriculum": null, "name": "Arts", "short_name": "Arts", "code": "ARTS"}},
+  {"model": "academics.department", "pk": 1006, "fields": {"school": null, "curriculum": null, "name": "Business Studies", "short_name": "Bus", "code": "BUS"}},
+  {"model": "academics.department", "pk": 1007, "fields": {"school": null, "curriculum": null, "name": "Vocational", "short_name": "Voc", "code": "VOC"}},
+  {"model": "academics.department", "pk": 1008, "fields": {"school": null, "curriculum": null, "name": "Mathematics", "short_name": "Math", "code": "MATH"}},
+  {"model": "academics.department", "pk": 1009, "fields": {"school": null, "curriculum": null, "name": "Social Studies", "short_name": "Soc", "code": "SOC"}},
+  {"model": "academics.department", "pk": 1010, "fields": {"school": null, "curriculum": null, "name": "Physical Education", "short_name": "PE", "code": "PE"}}
+]

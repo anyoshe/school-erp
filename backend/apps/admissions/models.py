@@ -1,11 +1,13 @@
 # apps/admissions/models.py
 import uuid
 from django.db import models
+from django.conf import settings
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
-from apps.academics.models import GradeLevel    # ← correct import
-from apps.students.models import Student       # For linking after onboarding
-from apps.school.models import School          # For multi-tenancy
+from apps.academics.models import GradeLevel
+from apps.students.models import Student
+from apps.school.models import School
 
 
 class Application(models.Model):
@@ -19,48 +21,77 @@ class Application(models.Model):
         REJECTED = "REJECTED", "Rejected"
         ENROLLED = "ENROLLED", "Enrolled"
 
+    class PlacementType(models.TextChoices):
+        SELF = "SELF", "Self / Parent Application"
+        PUBLIC = "PUBLIC", "Government / Public Authority Placement"
+        TRANSFER = "TRANSFER", "Transfer from Another School"
+        OTHER = "OTHER", "Other (e.g. scholarship, international)"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='admission_applications')
-    admission_number = models.CharField(max_length=50, unique=True, blank=True)
+    admission_number = models.CharField(max_length=50, unique=True, null=True, blank=True)
+
+    # Personal
     first_name = models.CharField(max_length=50)
     middle_name = models.CharField(max_length=50, blank=True)
     last_name = models.CharField(max_length=50)
     preferred_name = models.CharField(max_length=100, blank=True)
     gender = models.CharField(max_length=10, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
-    
+    nationality = models.CharField(max_length=100, blank=True)
+    passport_number = models.CharField(max_length=50, blank=True)
+
+    # Class / Level
     class_applied = models.ForeignKey(
         GradeLevel,
         on_delete=models.SET_NULL,
         null=True,
         related_name='applications'
     )
-    
-    # Parent/Guardian basics
+
+    # Guardian
     primary_guardian_name = models.CharField(max_length=100, blank=True)
     primary_guardian_phone = models.CharField(max_length=20, blank=True)
     primary_guardian_email = models.EmailField(blank=True, null=True)
     primary_guardian_relationship = models.CharField(max_length=50, blank=True)
-    
+    primary_guardian_id_number = models.CharField(max_length=50, blank=True)
+
+    # Address
     address = models.TextField(blank=True)
-    county = models.CharField(max_length=100, blank=True)
-    sub_county = models.CharField(max_length=100, blank=True)
-    
+    region = models.CharField(max_length=100, blank=True)          # generalized from county
+    district = models.CharField(max_length=100, blank=True)        # generalized from sub_county
+
+    # Academic / Entry
     previous_school = models.CharField(max_length=255, blank=True)
-    nationality = models.CharField(max_length=100, blank=True)
-    passport_number = models.CharField(max_length=50, blank=True)
-    religion = models.CharField(max_length=50, blank=True)
-    category = models.CharField(max_length=50, blank=True)  # e.g., General/SC/ST
-    
-    status = models.CharField(
+    learner_id = models.CharField(max_length=50, blank=True, verbose_name="Learner ID / Student Number")
+    entry_exam_id = models.CharField(max_length=50, blank=True, verbose_name="Entry / National Exam ID")
+    entry_exam_year = models.PositiveIntegerField(null=True, blank=True)
+    placement_type = models.CharField(
         max_length=20,
-        choices=Status.choices,
-        default=Status.DRAFT
+        choices=PlacementType.choices,
+        default=PlacementType.SELF
     )
+
+    # Health & Emergency
+    blood_group = models.CharField(max_length=5, blank=True)
+    allergies = models.TextField(blank=True)
+    chronic_conditions = models.TextField(blank=True)
+    disability = models.CharField(max_length=100, blank=True)
+    emergency_contact_name = models.CharField(max_length=100, blank=True)
+    emergency_contact_phone = models.CharField(max_length=20, blank=True)
+    emergency_relationship = models.CharField(max_length=50, blank=True)
+
+    # Documents / Media
+    photo = models.ImageField(upload_to='admission_photos/', null=True, blank=True)
+
+    # Misc
+    religion = models.CharField(max_length=50, blank=True)
+    category = models.CharField(max_length=50, blank=True)  # e.g. General, Bursary, International
+    notes = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     submitted_at = models.DateTimeField(null=True, blank=True)
     admission_date = models.DateField(null=True, blank=True)
-    notes = models.TextField(blank=True)
-    
+
     student = models.OneToOneField(
         Student,
         on_delete=models.SET_NULL,
@@ -68,45 +99,57 @@ class Application(models.Model):
         blank=True,
         related_name='admission_application'
     )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,          # ← correct way
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_applications'
+    )
+    updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
-        if not self.admission_number and self.school:
-            year = timezone.now().year
-            prefix = self.school.admission_prefix or ''
-            format_type = self.school.admission_number_format
-            
-            if format_type == 'CUSTOM':
-                # Leave blank for manual entry
-                pass
-            else:
-                last_num = Application.objects.filter(
-                    school=self.school,
-                    admission_number__startswith=f"{prefix}{year}-"
-                ).order_by('-admission_number').first()
-                
-                seq = 1
-                if last_num and last_num.admission_number:
-                    try:
-                        seq = int(last_num.admission_number.split('-')[-1]) + 1
-                    except:
-                        pass
-                
-                seq_str = f"{seq:0{self.school.admission_seq_padding}d}"
-                self.admission_number = f"{prefix}{year}-{seq_str}"
-        
+        # if not self.admission_number and self.school:
+        #     year = timezone.now().year
+        #     prefix = self.school.admission_prefix or ''
+        #     format_type = self.school.admission_number_format or 'YEAR-SEQ'
+
+        #     if format_type != 'CUSTOM':
+        #         last_num = Application.objects.filter(
+        #             school=self.school,
+        #             admission_number__startswith=f"{prefix}{year}-"
+        #         ).order_by('-admission_number').first()
+
+        #         seq = 1
+        #         if last_num and last_num.admission_number:
+        #             try:
+        #                 seq = int(last_num.admission_number.split('-')[-1]) + 1
+        #             except:
+        #                 pass
+
+        #         seq_str = f"{seq:0{self.school.admission_seq_padding or 4}d}"
+        #         self.admission_number = f"{prefix}{year}-{seq_str}"
+
         if self.status == self.Status.SUBMITTED and not self.submitted_at:
             self.submitted_at = timezone.now()
-        
+
         super().save(*args, **kwargs)
 
     def enroll_as_student(self, created_by_user):
-        """Called when status → ENROLLED"""
-        if self.status != self.Status.ACCEPTED:
-            raise ValueError("Only ACCEPTED applications can be enrolled")
-        
+        if not self.admission_number:
+             self.admission_number = generate_unique_admission_number(self.school)
+        if self.status not in [self.Status.ACCEPTED, self.Status.ENROLLED]:
+            raise ValidationError("Only ACCEPTED or ENROLLED applications can be enrolled")
+
         if self.student:
-            raise ValueError("Already enrolled")
-        
+            raise ValidationError("Already enrolled")
+
+        # Determine if primary/elementary level (no exam fields needed)
+        is_primary_level = (
+            self.class_applied and
+            self.class_applied.education_level in ['PRE_PRIMARY', 'ELEMENTARY']
+        )
+
         student = Student.objects.create(
             school=self.school,
             first_name=self.first_name,
@@ -115,20 +158,34 @@ class Application(models.Model):
             gender=self.gender,
             date_of_birth=self.date_of_birth,
             nationality=self.nationality,
-            county=self.county,
-            sub_county=self.sub_county,
+            region=self.region,                  # generalized
+            district=self.district,
             religion=self.religion,
             current_class=self.class_applied,
             admission_date=timezone.now().date(),
-            admission_number=self.admission_number,  # Reuse the same number
+            admission_number=self.admission_number,
             created_by=created_by_user,
-            # Add more field mappings as needed (e.g., middle_name if added, etc.)
+            learner_id=self.learner_id,
+            photo=self.photo,
+
+            # Only copy exam fields if NOT primary level
+            entry_exam_id=self.entry_exam_id if not is_primary_level else "",
+            entry_exam_year=self.entry_exam_year if not is_primary_level else None,
+
+            # Health & emergency
+            blood_group=self.blood_group,
+            allergies=self.allergies,
+            chronic_conditions=self.chronic_conditions,
+            disability=self.disability,
+            emergency_name=self.emergency_contact_name or self.primary_guardian_name,
+            emergency_phone=self.emergency_contact_phone or self.primary_guardian_phone,
+            emergency_relation=self.emergency_relationship or self.primary_guardian_relationship,
         )
-        
+
         self.student = student
         self.status = self.Status.ENROLLED
         self.save()
-        
+
         return student
 
     def __str__(self):
@@ -139,11 +196,7 @@ class Application(models.Model):
 
 
 class ApplicationDocument(models.Model):
-    application = models.ForeignKey(
-        Application,
-        on_delete=models.CASCADE,
-        related_name='documents'
-    )
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='documents')
     file = models.FileField(upload_to='admission_documents/')
     description = models.CharField(max_length=255, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
@@ -153,11 +206,7 @@ class ApplicationDocument(models.Model):
 
 
 class AdmissionFeePayment(models.Model):
-    application = models.ForeignKey(
-        Application,
-        on_delete=models.CASCADE,
-        related_name='fee_payments'
-    )
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='fee_payments')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     payment_date = models.DateField(auto_now_add=True)
     payment_method = models.CharField(max_length=50, blank=True)

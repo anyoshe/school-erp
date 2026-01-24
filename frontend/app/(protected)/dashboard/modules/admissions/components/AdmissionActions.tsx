@@ -5,12 +5,11 @@ import api from "@/utils/api";
 
 interface Props {
   applicationId: string;
-  status?: string;
   onUpdated?: () => void; // Called after status change or enroll to refresh parent
   onEnrolled?: (student: { id: string; admission_number?: string; full_name?: string }) => void;
 }
 
-export default function AdmissionActions({ applicationId, status, onUpdated, onEnrolled }: Props) {
+export default function AdmissionActions({ applicationId, onUpdated, onEnrolled }: Props) {
   const [loading, setLoading] = useState(false);
 
   const updateStatus = async (newStatus: string) => {

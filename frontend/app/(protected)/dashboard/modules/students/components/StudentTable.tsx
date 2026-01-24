@@ -28,17 +28,17 @@ export default function StudentTable({ students, onEdit, onDelete }: Props) {
       <tbody>
         {students.map((s) => (
           <tr key={s.id} className="border-t hover:bg-gray-50">
-            <td className="p-3">{s.admissionNo}</td>
+            <td className="p-3">{s.admission_number}</td>
 
             {/* <td className="p-3">
-              {s.firstName} {s.lastName}
+              {s.first_name} {s.last_name}
             </td> */}
             <td className="p-3">
               <Link
                 href={`/dashboard/modules/students/${s.id}`}
                 className="text-blue-600 hover:underline"
               >
-                {s.firstName} {s.lastName}
+                {s.first_name} {s.last_name}
               </Link>
 
             </td>
@@ -47,13 +47,13 @@ export default function StudentTable({ students, onEdit, onDelete }: Props) {
             <td className="p-3">{s.gender}</td>
 
             <td className="p-3">
-              {s.dateOfBirth
-                ? new Date(s.dateOfBirth).toLocaleDateString()
+              {s.date_of_birth
+                ? new Date(s.date_of_birth).toLocaleDateString()
                 : "-"}
             </td>
 
             <td className="p-3">
-              {s.className ?? "—"}
+              {s.current_class ?? "—"}
             </td>
 
             <td className="p-3">

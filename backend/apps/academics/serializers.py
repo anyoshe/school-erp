@@ -64,7 +64,7 @@ class GradeLevelSerializer(serializers.ModelSerializer):
 class GradeLevelCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = GradeLevel
-        fields = ['id', 'curriculum', 'name', 'short_name', 'order', 'code']
+        fields = ['id', 'curriculum', 'name', 'short_name', 'order', 'code', 'education_level', 'pathway']
 
 
 class DepartmentSerializer(serializers.ModelSerializer):
