@@ -237,30 +237,30 @@ export default function SchoolAcademicConfigPage() {
       // 2. Sync grade levels (diff-based)
       const currentIds = new Set(currentGradeLevels.map((g) => g.id));
       const originalIds = new Set(originalGradeLevels.map((g) => g.id));
-      
+
       const toDelete = [...originalIds].filter(
         (id) => !currentIds.has(id) && !String(id).startsWith("temp-")
       );
-      
+
       console.log("=== Grade Sync Debug ===");
       console.log("Original IDs:", [...originalIds]);
       console.log("Current IDs:", [...currentIds]);
       console.log("To Delete:", toDelete);
-      
+
       if (toDelete.length > 0) {
         const deleteResults = await Promise.all(
           toDelete.map((id) =>
             api.delete(`/academics/grade-levels/${id}/`, {
               headers: { "X-School-ID": currentSchool.id },
             })
-            .then(() => { 
-              console.log(`✓ Successfully deleted grade ${id}`);
-              return { id, success: true };
-            })
-            .catch((err) => {
-              console.error(`✗ Delete failed for ${id}:`, err.response?.data || err.message);
-              return { id, success: false, error: err };
-            })
+              .then(() => {
+                console.log(`✓ Successfully deleted grade ${id}`);
+                return { id, success: true };
+              })
+              .catch((err) => {
+                console.error(`✗ Delete failed for ${id}:`, err.response?.data || err.message);
+                return { id, success: false, error: err };
+              })
           )
         );
         console.log("Delete results:", deleteResults);
@@ -268,9 +268,9 @@ export default function SchoolAcademicConfigPage() {
 
       // Create new grades
       const toCreate = currentGradeLevels.filter((g) => g.id.startsWith("temp-"));
-      
+
       console.log("To Create:", toCreate.length, "new grades");
-      
+
       const createdPromises = toCreate.map(async (level) => {
         const res = await api.post(
           "/academics/grade-levels/",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useCurrentSchool } from '@/contexts/CurrentSchoolContext';
 import api from '@/utils/api';
@@ -9,16 +9,18 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, Plus, ChevronRight, Users, Clock, CalendarCheck, UserCheck, Loader } from 'lucide-react';
+import { 
+  Search, Plus, Users, Clock, 
+  CalendarCheck, UserCheck, Loader2, 
+  Filter, Sparkles, ChevronRight 
+} from 'lucide-react';
+import { cn } from "@/lib/utils";
 
 const AdmissionsPage = () => {
   const { currentSchool, loading: schoolLoading } = useCurrentSchool();
-
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('ALL');
 
-  // Fetch applications for the current school
   const { data: applications = [], isLoading } = useQuery({
     queryKey: ['applications', currentSchool?.id],
     queryFn: async () => {
@@ -31,179 +33,167 @@ const AdmissionsPage = () => {
     enabled: !!currentSchool?.id && !schoolLoading,
   });
 
-  // Calculate counts per status
-  const counts = applications.reduce(
-    (acc: Record<string, number>, app: { status?: string }) => {
-      const status = app.status || 'UNKNOWN';
-      acc[status] = (acc[status] || 0) + 1;
-      acc.ALL = (acc.ALL || 0) + 1;
-      return acc;
-    },
-    { ALL: 0 } as Record<string, number>
-  );
+  // Memoized stats to prevent re-calculation jumps
+  const { counts, readyToEnrollCount } = useMemo(() => {
+    const statusCounts = applications.reduce(
+      (acc: Record<string, number>, app: any) => {
+        const status = app.status || 'UNKNOWN';
+        acc[status] = (acc[status] || 0) + 1;
+        acc.ALL = (acc.ALL || 0) + 1;
+        return acc;
+      },
+      { ALL: 0 } as Record<string, number>
+    );
 
-  // Ready to enroll: ACCEPTED + has fee payment + not yet student
-  const readyToEnrollCount = applications.filter(
-    (app: { status?: string; fee_payments?: unknown[]; student?: unknown }) =>
-      app.status === 'ACCEPTED' &&
-      (app.fee_payments?.length ?? 0) > 0 &&
-      !app.student
-  ).length;
+    const ready = applications.filter(
+      (app: any) => app.status === 'ACCEPTED' && (app.fee_payments?.length ?? 0) > 0 && !app.student
+    ).length;
+
+    return { counts: statusCounts, readyToEnrollCount: ready };
+  }, [applications]);
 
   const statusTabs = [
-    { key: 'ALL', label: 'All', mobileLabel: 'All' },
-    { key: 'DRAFT', label: 'Drafts', mobileLabel: 'Drafts' },
-    { key: 'SUBMITTED', label: 'Submitted', mobileLabel: 'Pending' },
-    { key: 'UNDER_REVIEW', label: 'Review', mobileLabel: 'Review' },
-    { key: 'TEST_SCHEDULED', label: 'Test Scheduled', mobileLabel: 'Test' },
-    { key: 'OFFERED', label: 'Offered', mobileLabel: 'Offered' },
-    { key: 'ACCEPTED', label: 'Accepted', mobileLabel: 'Accepted' },
-    { key: 'ENROLLED', label: 'Enrolled', mobileLabel: 'Enrolled' },
-    { key: 'REJECTED', label: 'Rejected', mobileLabel: 'Rejected' },
+    { key: 'ALL', label: 'All', icon: Users },
+    { key: 'SUBMITTED', label: 'Pending', icon: Clock },
+    { key: 'ACCEPTED', label: 'Accepted', icon: CalendarCheck },
+    { key: 'ENROLLED', label: 'Enrolled', icon: UserCheck },
   ];
 
   if (schoolLoading) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <Loader className="animate-spin h-10 w-10" />
+      <div className="flex h-[80vh] w-full flex-col items-center justify-center gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+        <p className="text-sm font-bold uppercase tracking-widest text-slate-400">Loading Environment</p>
       </div>
     );
   }
 
   if (!currentSchool) {
     return (
-      <div className="p-6 text-center">
-        <h2 className="text-xl font-bold">No school selected</h2>
-        <p className="mt-2 text-gray-600">Please select a school first</p>
+      <div className="flex h-[70vh] items-center justify-center p-6 text-center">
+        <div className="max-w-md space-y-4">
+          <div className="mx-auto h-16 w-16 rounded-3xl bg-slate-100 flex items-center justify-center">
+            <Filter className="h-8 w-8 text-slate-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900">No School Selected</h2>
+          <p className="text-slate-500">Please select a school from the dashboard sidebar to manage admissions.</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50/50">
-      <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="py-6 lg:py-8">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col min-h-screen bg-[#F8FAFC]">
+      {/* --- HEADER SECTION --- */}
+      <div className="sticky top-0 z-30 w-full bg-white/80 backdrop-blur-md border-b border-slate-200">
+        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">
-                Admissions - {currentSchool.name}
+              <div className="flex items-center gap-2 mb-1">
+                <div className="bg-indigo-600 p-1 rounded-md">
+                  <Sparkles className="h-3 w-3 text-white" />
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">Admission Portal</span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 truncate">
+                {currentSchool.name}
               </h1>
-              <p className="mt-2 text-sm text-gray-600">
-                Manage drafts, submitted applications, reviews, and enrollment
-              </p>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3">
               {readyToEnrollCount > 0 && (
-                <Button variant="outline" className="border-green-600 text-green-700 hover:bg-green-50">
-                  <span className="flex items-center gap-2">
-                    {readyToEnrollCount} Ready to Enroll
-                    <ChevronRight className="h-4 w-4" />
-                  </span>
-                </Button>
+                <Badge className="hidden sm:flex bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 py-1.5 px-3 rounded-xl gap-2 transition-all cursor-default">
+                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  {readyToEnrollCount} Ready to Enroll
+                </Badge>
               )}
-
-              <Link href="/dashboard/modules/admissions/new">
-                <Button className="bg-blue-600 hover:bg-blue-700">
+              <Link href="/dashboard/modules/admissions/new" className="flex-1 sm:flex-none">
+                <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-100 py-5 sm:py-2">
                   <Plus className="mr-2 h-4 w-4" />
-                  New Application
+                  <span className="text-sm font-bold">New Application</span>
                 </Button>
               </Link>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:gap-6 mb-6 lg:mb-8">
-          <div className="rounded-xl border bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <Users className="h-5 w-5 text-blue-600" />
-              <span className="text-sm font-medium text-gray-600">Total</span>
+      <main className="flex-1 max-w-[1600px] mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
+        {/* --- STATS GRID --- */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
+          {[
+            { label: 'Total', value: counts.ALL, color: 'text-blue-600', icon: Users, bg: 'bg-blue-50' },
+            { label: 'Drafts', value: counts.DRAFT || 0, color: 'text-amber-600', icon: Clock, bg: 'bg-amber-50' },
+            { label: 'Pending', value: counts.SUBMITTED || 0, color: 'text-purple-600', icon: CalendarCheck, bg: 'bg-purple-50' },
+            { label: 'Enrolled', value: counts.ENROLLED || 0, color: 'text-emerald-600', icon: UserCheck, bg: 'bg-emerald-50' },
+          ].map((stat, i) => (
+            <div key={i} className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 transition-transform hover:scale-[1.02]">
+              <div className={cn("h-10 w-10 shrink-0 rounded-2xl flex items-center justify-center", stat.bg)}>
+                <stat.icon className={cn("h-5 w-5", stat.color)} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{stat.label}</p>
+                <p className="text-xl font-black text-slate-900 leading-none mt-1">{stat.value}</p>
+              </div>
             </div>
-            <p className="mt-2 text-2xl font-bold">{counts.ALL || 0}</p>
+          ))}
+        </div>
+
+        {/* --- CONTROLS SECTION --- */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+          {/* Scrollable Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-2 lg:pb-0 no-scrollbar">
+            {statusTabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all whitespace-nowrap border",
+                  activeTab === tab.key 
+                    ? "bg-slate-900 text-white border-slate-900 shadow-md" 
+                    : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
+                )}
+              >
+                <tab.icon className="h-3.5 w-3.5" />
+                {tab.label}
+                <span className={cn(
+                  "ml-1 px-1.5 py-0.5 rounded-md text-[10px]",
+                  activeTab === tab.key ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                )}>
+                  {counts[tab.key] || 0}
+                </span>
+              </button>
+            ))}
           </div>
 
-          <div className="rounded-xl border bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <Clock className="h-5 w-5 text-amber-600" />
-              <span className="text-sm font-medium text-gray-600">Drafts</span>
-            </div>
-            <p className="mt-2 text-2xl font-bold">{counts.DRAFT || 0}</p>
-          </div>
-
-          <div className="rounded-xl border bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <CalendarCheck className="h-5 w-5 text-purple-600" />
-              <span className="text-sm font-medium text-gray-600">Submitted</span>
-            </div>
-            <p className="mt-2 text-2xl font-bold">{counts.SUBMITTED || 0}</p>
-          </div>
-
-          <div className="rounded-xl border bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <UserCheck className="h-5 w-5 text-green-600" />
-              <span className="text-sm font-medium text-gray-600">Enrolled</span>
-            </div>
-            <p className="mt-2 text-2xl font-bold">{counts.ENROLLED || 0}</p>
+          {/* Search Box */}
+          <div className="relative group lg:w-80">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+            <Input
+              placeholder="Quick search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-11 rounded-2xl border-slate-200 bg-white h-11 focus-visible:ring-indigo-600 focus-visible:ring-offset-0 shadow-sm"
+            />
           </div>
         </div>
 
-        {/* Tabs & Search */}
-        <div className="mb-6 lg:mb-8">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="w-full overflow-x-auto lg:flex-1">
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="inline-flex bg-transparent border-b pb-1 gap-1.5">
-                  {statusTabs.map(({ key, label, mobileLabel }) => (
-                    <TabsTrigger
-                      key={key}
-                      value={key}
-                      className="px-3 py-1.5 text-sm data-[state=active]:bg-blue-600 data-[state=active]:text-white rounded-t-md whitespace-nowrap"
-                    >
-                      {label}
-                      {counts[key] > 0 && (
-                        <Badge variant="secondary" className="ml-1.5 text-xs">
-                          {counts[key]}
-                        </Badge>
-                      )}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-            </div>
-
-            <div className="relative w-full lg:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search name, admission #, email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Applications Table */}
-        <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
+        {/* --- DATA AREA --- */}
+        <div className="min-h-[400px]">
           {isLoading ? (
-            <div className="p-12 text-center text-gray-500">Loading applications...</div>
+            <div className="bg-white rounded-[2rem] border border-slate-200 p-12 flex flex-col items-center gap-4">
+              <Loader2 className="h-8 w-8 animate-spin text-slate-300" />
+              <p className="text-sm text-slate-400 font-medium">Synchronizing records...</p>
+            </div>
           ) : applications.length === 0 ? (
-            <div className="p-12 text-center">
-              <Users className="mx-auto h-12 w-12 text-gray-300 mb-4" />
-              <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                No applications yet
-              </h3>
-              <p className="text-gray-600 mb-6">
-                Start by adding a new application.
+            <div className="bg-white rounded-[2rem] border border-slate-200 p-12 text-center">
+              <div className="mx-auto h-16 w-16 rounded-full bg-slate-50 flex items-center justify-center mb-4">
+                <Users className="h-8 w-8 text-slate-200" />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900">No applications found</h3>
+              <p className="text-slate-500 text-sm max-w-xs mx-auto mt-2">
+                We couldn't find any applications for this school. Start by creating a new entry.
               </p>
-              <Link href="/dashboard/modules/admissions/new">
-                <Button className="bg-blue-600 hover:bg-blue-700">
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Application
-                </Button>
-              </Link>
             </div>
           ) : (
             <ApplicationTable
@@ -213,27 +203,17 @@ const AdmissionsPage = () => {
             />
           )}
         </div>
-      </div>
+      </main>
 
-      {/* Mobile bottom bar */}
-      <div className="sm:hidden fixed bottom-0 left-0 right-0 z-10 bg-white border-t shadow-lg">
-        <div className="mx-auto max-w-screen-xl px-4 py-3 flex items-center justify-between">
-          <div className="text-sm font-medium">
-            {applications.length} applications
-            {activeTab !== 'ALL' && (
-              <span className="ml-2 text-gray-500">
-                • {statusTabs.find(t => t.key === activeTab)?.mobileLabel}
-              </span>
-            )}
-          </div>
-          <div className="flex gap-3">
-            <Link href="/dashboard/modules/admissions/new">
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                <Plus className="h-4 w-4" />
-              </Button>
-            </Link>
-          </div>
-        </div>
+      {/* --- MOBILE FAB (Floating Action Button) --- */}
+      <div className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
+        {readyToEnrollCount > 0 && activeTab === 'ALL' && (
+           <div className="mb-4 text-center">
+              <Badge className="bg-emerald-600 text-white shadow-xl py-2 px-4 rounded-full border-none">
+                {readyToEnrollCount} Ready to Enroll
+              </Badge>
+           </div>
+        )}
       </div>
     </div>
   );

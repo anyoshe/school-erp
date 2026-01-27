@@ -2,6 +2,8 @@
 import uuid
 from django.db import models
 from django.conf import settings
+from django.utils.text import slugify 
+import re
 
 User = settings.AUTH_USER_MODEL
 
@@ -60,8 +62,16 @@ class School(models.Model):
     )
     
     # School-wide academic defaults (can be overridden per curriculum)
-    academic_year_start_month = models.CharField(max_length=20, default="January")
-    academic_year_end_month = models.CharField(max_length=20, default="December")
+    academic_year_start_month = models.CharField(
+        max_length=20, 
+        default="January",
+        help_text="Start month of academic year"
+    )
+    academic_year_end_month = models.CharField(
+        max_length=20, 
+        default="December",
+        help_text="End month of academic year"
+    )
     term_system = models.CharField(max_length=20, default="terms")  # terms / semesters
     number_of_terms = models.PositiveIntegerField(default=3)
     grading_system = models.CharField(max_length=20, default="percentage")
@@ -106,6 +116,34 @@ class School(models.Model):
     users = models.ManyToManyField(User, blank=True, related_name="schools")
 
     setup_complete = models.BooleanField(default=False)  # Wizard finished?
+
+    slug = models.SlugField(
+        max_length=100,
+        unique=True,
+        blank=True,          # allow blank so old records don't break
+        null=True,           # allow null for old records during migration
+        help_text="Auto-generated from name (used in public URLs)"
+    )
+
+    def save(self, *args, **kwargs):
+        if not self.slug and self.name:
+            # Clean name for better slug
+            name_clean = re.sub(r'\s*\([^)]*\)', '', self.name)     # remove (SMSS)
+            name_clean = re.sub(r'\.', '', name_clean)               # remove dots
+            name_clean = name_clean.strip().lower()
+            
+            base_slug = slugify(name_clean)
+            
+            # Avoid duplicates
+            slug = base_slug
+            counter = 1
+            while School.objects.filter(slug=slug).exclude(id=self.id).exists():
+                slug = f"{base_slug}-{counter}"
+                counter += 1
+            
+            self.slug = slug[:100]  # respect max_length
+
+        super().save(*args, **kwargs)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -109,27 +109,7 @@ class Application(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
-        # if not self.admission_number and self.school:
-        #     year = timezone.now().year
-        #     prefix = self.school.admission_prefix or ''
-        #     format_type = self.school.admission_number_format or 'YEAR-SEQ'
-
-        #     if format_type != 'CUSTOM':
-        #         last_num = Application.objects.filter(
-        #             school=self.school,
-        #             admission_number__startswith=f"{prefix}{year}-"
-        #         ).order_by('-admission_number').first()
-
-        #         seq = 1
-        #         if last_num and last_num.admission_number:
-        #             try:
-        #                 seq = int(last_num.admission_number.split('-')[-1]) + 1
-        #             except:
-        #                 pass
-
-        #         seq_str = f"{seq:0{self.school.admission_seq_padding or 4}d}"
-        #         self.admission_number = f"{prefix}{year}-{seq_str}"
-
+        
         if self.status == self.Status.SUBMITTED and not self.submitted_at:
             self.submitted_at = timezone.now()
 

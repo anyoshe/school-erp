@@ -10,7 +10,7 @@ import api from "@/utils/api";           // authenticated api (with token)
 import publicApi from "@/utils/publicApi"; // no auth
 import { toast } from "sonner";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
-import DocumentUpload from "../components/DocumentUpload";
+import DocumentUpload from "../../../../../components/DocumentUpload";
 import {
   Tabs,
   TabsList,
@@ -145,8 +145,6 @@ export default function NewApplicationPage() {
     enabled: !!currentSchool?.id && !schoolLoading,
   });
 
-
-  // Save mutation (POST for new, PATCH for existing draft)
   // Save mutation - both create and update via public endpoint
   const saveMutation = useMutation({
     mutationFn: async ({ fd, id }: { fd: FormData; id?: string }) => {
@@ -596,7 +594,7 @@ export default function NewApplicationPage() {
                   </p>
                   <DocumentUpload
                     onFilesChange={setDocuments}
-                    initialFiles={documents} // Pass the state here!
+                    initialFiles={documents} 
                   />
                 </div>
               </TabsContent>
@@ -606,10 +604,10 @@ export default function NewApplicationPage() {
               <div>
                 {currentStep > 0 && (
                   <Button
-                    type="button" // CRITICAL: Prevents form submission on "Back"
+                    type="button" 
                     variant="outline"
                     onClick={(e) => {
-                      e.preventDefault(); // Extra safety
+                      e.preventDefault(); 
                       setCurrentStep((prev) => prev - 1);
                     }}
                     disabled={saveMutation.isPending}
@@ -621,7 +619,7 @@ export default function NewApplicationPage() {
 
               <div className="flex gap-4">
                 <Button
-                  type="button" // CRITICAL: Ensures "Save Draft" only runs handleAction
+                  type="button" 
                   variant="outline"
                   onClick={() => handleAction("draft")}
                   disabled={isSubmitting || saveMutation.isPending}
@@ -638,7 +636,7 @@ export default function NewApplicationPage() {
 
                 {currentStep < steps.length - 1 ? (
                   <Button
-                    type="button" // CRITICAL: Prevents submission on "Next"
+                    type="button" 
                     onClick={(e) => {
                       e.preventDefault();
                       setCurrentStep((prev) => prev + 1);
@@ -648,7 +646,7 @@ export default function NewApplicationPage() {
                   </Button>
                 ) : (
                   <Button
-                    type="button" // Kept as button because we manually call handleAction
+                    type="button" 
                     onClick={() => handleAction("submit")}
                     disabled={!isValid || isSubmitting || saveMutation.isPending}
                     className={`min-w-[180px] ${!isValid ? "opacity-70 cursor-not-allowed" : ""}`}

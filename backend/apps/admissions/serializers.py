@@ -144,7 +144,7 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-        documents_data = validated_data.pop('documents', [])
+        documents_files = validated_data.pop('documents', [])
 
         # IMPORTANT: Do NOT set school here — frontend sends it
         # If 'school' is missing, DRF will raise validation error (because required=True)
@@ -152,48 +152,41 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
         application = Application.objects.create(**validated_data)
         print("Created application ID:", application.id)
 
-        for file in documents_data:
-            ApplicationDocument.objects.create(application=application, file=file)
+        # for file in documents_data:
+        #     ApplicationDocument.objects.create(application=application, file=file)
+        for file in documents_files:
+            ApplicationDocument.objects.create(
+                application=application,
+                file=file,
+                description=file.name  # or leave blank
+            )
 
         return application
-    # class Meta:
-    #     model = Application
-    #     fields = [
-    #         'id',
-    #         'first_name', 'middle_name', 'last_name', 'preferred_name',
-    #         'gender', 'date_of_birth', 'nationality', 'passport_number',
-    #         'class_applied',
-    #         'primary_guardian_name', 'primary_guardian_phone',
-    #         'primary_guardian_email', 'primary_guardian_relationship',
-    #         'primary_guardian_id_number',
-    #         'address', 'region', 'district',
-    #         'previous_school', 'religion', 'category', 'placement_type',
-    #         'blood_group', 'allergies', 'chronic_conditions', 'disability',
-    #         'emergency_contact_name', 'emergency_contact_phone', 'emergency_relationship',
-    #         'notes', 'status', 'admission_date',
-    #         'school',  # ← keep this so frontend can send it
-    #         'documents', 'photo',
-    #     ]
-    #     read_only_fields = ['id']
 
 
     def update(self, instance, validated_data):
-        documents_data = validated_data.pop('documents', [])
+        documents_files = validated_data.pop('documents', [])
 
-        # Again: no school override here
+        # Update main fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
         instance.save()
 
-        for file in documents_data:
-            ApplicationDocument.objects.create(application=instance, file=file)
+        # Append new documents (don't delete old ones unless you add delete logic)
+        for file in documents_files:
+            ApplicationDocument.objects.create(
+                application=instance,
+                file=file,
+                description=file.name
+            )
 
         return instance
 # Optional: Minimal serializer for list view (faster)
 class ApplicationListSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display')
+    class_applied = GradeLevelSerializer(read_only=True)
 
     class Meta:
         model = Application

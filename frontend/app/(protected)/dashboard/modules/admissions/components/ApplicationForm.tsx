@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Info, Loader, Upload } from "lucide-react";
-import DocumentUpload from "./DocumentUpload";
+import DocumentUpload from "../../../../../components/DocumentUpload";
 import { Application } from "@/types/admission";
 import { School } from "@/types/school";
 

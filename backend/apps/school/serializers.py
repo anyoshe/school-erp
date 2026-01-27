@@ -148,3 +148,9 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
 
         instance.save()
         return instance
+    
+    # apps/school/serializers.py
+class PublicSchoolSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = School
+        fields = ['id', 'name', 'slug', 'short_name']  # only what the frontend needs

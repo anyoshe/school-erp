@@ -7,6 +7,8 @@ from .views import (
     DepartmentViewSet,
     CurriculumTemplateViewSet,
     CopyCurriculumTemplateAPIView,
+    PublicGradeLevelsView,
+    SchoolAcademicStatusView,
 )
 
 router = DefaultRouter()
@@ -26,4 +28,10 @@ router.register(
 urlpatterns = [
     path('', include(router.urls)),
     path('copy-template/', CopyCurriculumTemplateAPIView.as_view(), name='copy-curriculum-template'),
+    path('public/schools/<str:school_id>/grade-levels/', 
+         PublicGradeLevelsView.as_view(), 
+         name='public-grade-levels'),
+    path('public/schools/<str:school_id>/status/', 
+         SchoolAcademicStatusView.as_view(), 
+         name='school-academic-status'),
 ]

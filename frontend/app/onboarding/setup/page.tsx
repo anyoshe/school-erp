@@ -198,6 +198,10 @@ export default function SetupWizardPage() {
           ...prev,
           selectedDepartmentIds: fetchedDepts.map((d: any) => d.id),
         }));
+
+        console.log("ACTUAL Fetched Grades:", fetchedGrades);
+    console.log("ACTUAL Fetched Departments:", fetchedDepts);
+    console.log("Departments count:", fetchedDepts?.length || 0);
       } catch (err) {
         toast.error("Failed to load grade levels or departments");
         console.error(err);
@@ -314,27 +318,42 @@ export default function SetupWizardPage() {
     try {
       let currentSchoolId: string;
 
+
       // ── SCHOOL CREATION / UPDATE ───────────────────────────────────
       const schoolForm = new FormData();
+
+      // Basic Info
       schoolForm.append("name", formData.schoolName || "My New School");
-      schoolForm.append("short_name", formData.shortName || "MNS");
+      schoolForm.append("short_name", formData.shortName || "");
+      schoolForm.append("email", formData.email || "");
+      schoolForm.append("phone", formData.phone || "");
       schoolForm.append("address", formData.address || "");
       schoolForm.append("city", formData.city || "");
       schoolForm.append("country", formData.country || "Kenya");
+      schoolForm.append("website", formData.website || "");
+      schoolForm.append("currency", formData.currency || "KES");
+
+      // Registration Details
       schoolForm.append("official_registration_number", formData.officialRegistrationNumber || "");
       schoolForm.append("registration_authority", formData.registrationAuthority || "");
       schoolForm.append("registration_date", formData.registrationDate || "");
-      schoolForm.append("phone", formData.phone || "");
-      schoolForm.append("email", formData.email || "");
-      schoolForm.append("website", formData.website || "");
-      schoolForm.append("currency", formData.currency || "KES");
-      schoolForm.append("academic_year_start_month", formData.academicYearStart || "January");
-      schoolForm.append("academic_year_end_month", formData.academicYearEnd || "December");
-      schoolForm.append("term_system", formData.termSystem || "terms");
-      schoolForm.append("number_of_terms", formData.numberOfTerms.toString() || "3");
-      schoolForm.append("grading_system", formData.gradingSystem || "percentage");
-      schoolForm.append("passing_mark", formData.passingMark.toString() || "50");
 
+      // Academic Settings - CONVERT month names to numbers
+      const monthToNumber = (monthName: string): string => {
+        const months = ["January", "February", "March", "April", "May", "June",
+          "July", "August", "September", "October", "November", "December"];
+        const index = months.indexOf(monthName);
+        return index !== -1 ? String(index + 1) : "1";
+      };
+
+      schoolForm.append("academic_year_start_month", monthToNumber(formData.academicYearStart));
+      schoolForm.append("academic_year_end_month", monthToNumber(formData.academicYearEnd));
+      schoolForm.append("term_system", formData.termSystem || "terms");
+      schoolForm.append("number_of_terms", String(formData.numberOfTerms || 3));
+      schoolForm.append("grading_system", formData.gradingSystem || "percentage");
+      schoolForm.append("passing_mark", String(formData.passingMark || 50));
+
+      // Logo
       if (formData.logo) {
         console.log("Uploading logo:", formData.logo.name, formData.logo.size);
         schoolForm.append("logo", formData.logo);
@@ -809,8 +828,8 @@ export default function SetupWizardPage() {
                       key={template.id}
                       onClick={() => updateForm("selectedCurriculumId", template.id)}
                       className={`p-6 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${formData.selectedCurriculumId === template.id
-                          ? "border-blue-600 bg-blue-50 shadow-md"
-                          : "border-gray-200 hover:border-blue-300"
+                        ? "border-blue-600 bg-blue-50 shadow-md"
+                        : "border-gray-200 hover:border-blue-300"
                         }`}
                     >
                       <h4 className="text-lg font-semibold">{template.name}</h4>

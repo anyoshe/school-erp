@@ -29,6 +29,13 @@ public_urls = [
     path('applications/<uuid:pk>/update/', PublicApplicationSubmissionViewSet.as_view({
         'patch': 'update_draft',
     }), name='public-application-update'),
+
+    # NEW: allow public users to GET their draft to resume editing
+    path(
+        'applications/<uuid:pk>/',
+        PublicApplicationSubmissionViewSet.as_view({'get': 'retrieve'}),
+        name='public-application-detail',
+    ),
 ]
 
 urlpatterns = [
