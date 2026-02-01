@@ -6,11 +6,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import api from "@/utils/api";           // authenticated api (with token)
-import publicApi from "@/utils/publicApi"; // no auth
+import api from "@/utils/api";
+import publicApi from "@/utils/publicApi";
 import { toast } from "sonner";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
-import DocumentUpload from "../../../../../components/DocumentUpload";
+import DocumentUpload from "../components/DocumentUpload";
 import {
   Tabs,
   TabsList,
@@ -207,6 +207,7 @@ export default function NewApplicationPage() {
 
   // Handle Save Draft or Submit
   const handleAction = async (action: "draft" | "submit") => {
+    if (saveMutation.isPending) return;
     if (action === "submit") {
       const isFormValid = await trigger();
       if (!isFormValid) {
@@ -381,18 +382,14 @@ export default function NewApplicationPage() {
                       name="class_applied"
                       control={control}
                       render={({ field }) => {
-                        // Ensure we are working with a string for the Select component's internal state
                         const safeValue = field.value ? String(field.value) : "";
 
                         return (
                           <Select
-                            // Key helps Radix UI reset the internal trigger state when value changes
                             key={safeValue}
                             value={safeValue}
                             onValueChange={(val) => {
-                              // Explicitly cast to string before updating React Hook Form
                               field.onChange(String(val));
-                              // Trigger validation to clear the "Invalid input" or "Required" error immediately
                               trigger("class_applied");
                             }}
                             disabled={gradesLoading}
@@ -593,8 +590,9 @@ export default function NewApplicationPage() {
                     Birth certificate, immunization records, previous reports, transfer letter, etc.
                   </p>
                   <DocumentUpload
-                    onFilesChange={setDocuments}
-                    initialFiles={documents} 
+                    files={documents} // This matches: const [documents, setDocuments] = useState<File[]>([])
+                    onFilesChange={(newFiles) => setDocuments(newFiles)}
+                    initialFiles={[]} // Pass previous docs from backend here if you fetch them later
                   />
                 </div>
               </TabsContent>
@@ -604,10 +602,10 @@ export default function NewApplicationPage() {
               <div>
                 {currentStep > 0 && (
                   <Button
-                    type="button" 
+                    type="button"
                     variant="outline"
                     onClick={(e) => {
-                      e.preventDefault(); 
+                      e.preventDefault();
                       setCurrentStep((prev) => prev - 1);
                     }}
                     disabled={saveMutation.isPending}
@@ -619,7 +617,7 @@ export default function NewApplicationPage() {
 
               <div className="flex gap-4">
                 <Button
-                  type="button" 
+                  type="button"
                   variant="outline"
                   onClick={() => handleAction("draft")}
                   disabled={isSubmitting || saveMutation.isPending}
@@ -636,7 +634,7 @@ export default function NewApplicationPage() {
 
                 {currentStep < steps.length - 1 ? (
                   <Button
-                    type="button" 
+                    type="button"
                     onClick={(e) => {
                       e.preventDefault();
                       setCurrentStep((prev) => prev + 1);
@@ -646,7 +644,7 @@ export default function NewApplicationPage() {
                   </Button>
                 ) : (
                   <Button
-                    type="button" 
+                    type="button"
                     onClick={() => handleAction("submit")}
                     disabled={!isValid || isSubmitting || saveMutation.isPending}
                     className={`min-w-[180px] ${!isValid ? "opacity-70 cursor-not-allowed" : ""}`}

@@ -1,8 +1,10 @@
 # admissions/serializers.py
+import hashlib
 from rest_framework import serializers
 from .models import Application, ApplicationDocument, AdmissionFeePayment
 from apps.academics.serializers import GradeLevelSerializer
 from apps.school.models import School
+
 
 
 class ApplicationDocumentSerializer(serializers.ModelSerializer):
@@ -26,6 +28,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
     class_applied = GradeLevelSerializer(read_only=True)
     documents = ApplicationDocumentSerializer(many=True, read_only=True)
     fee_payments = AdmissionFeePaymentSerializer(many=True, read_only=True)
+    photo = serializers.ImageField(read_only=True)
 
     # Computed read-only fields
     full_name = serializers.SerializerMethodField()
@@ -57,12 +60,21 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'primary_guardian_phone',
             'primary_guardian_email',
             'primary_guardian_relationship',
+            'primary_guardian_id_number',
             'guardian_contact',
+            'placement_type',              
+            'blood_group',                 
+            'allergies',                   
+            'chronic_conditions',          
+            'emergency_contact_name',     
+            'emergency_contact_phone',     
+            'emergency_relationship',     
             'status',
             'submitted_at',
             'admission_date',
             'notes',
             'documents',
+            'photo',
             'fee_payments',
             'student',
             'created_by',
@@ -70,7 +82,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'admission_number', 'submitted_at', 'student',
-            'created_at', 'updated_at', 'school'
+            'created_at', 'updated_at', 'school', 'photo',
         ]
 
     def get_full_name(self, obj):
@@ -143,56 +155,67 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(f"Required for submission: {', '.join(missing)}")
         return data
 
+    def compute_checksum(self, file): 
+        hasher = hashlib.sha256()
+        for chunk in file.chunks():
+            hasher.update(chunk)
+        return hasher.hexdigest()
+
     def create(self, validated_data):
         documents_files = validated_data.pop('documents', [])
-
-        # IMPORTANT: Do NOT set school here — frontend sends it
-        # If 'school' is missing, DRF will raise validation error (because required=True)
-
         application = Application.objects.create(**validated_data)
-        print("Created application ID:", application.id)
 
-        # for file in documents_data:
-        #     ApplicationDocument.objects.create(application=application, file=file)
         for file in documents_files:
-            ApplicationDocument.objects.create(
-                application=application,
-                file=file,
-                description=file.name  # or leave blank
-            )
+            # Change this line
+            checksum = self.compute_checksum(file) 
 
+            ApplicationDocument.objects.get_or_create(
+                application=application,
+                checksum=checksum,
+                defaults={
+                    "file": file,
+                    "description": file.name
+                }
+            )
         return application
+
 
 
     def update(self, instance, validated_data):
         documents_files = validated_data.pop('documents', [])
 
-        # Update main fields
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
         instance.save()
 
-        # Append new documents (don't delete old ones unless you add delete logic)
         for file in documents_files:
-            ApplicationDocument.objects.create(
+            # Change this line
+            checksum = self.compute_checksum(file)
+
+            ApplicationDocument.objects.get_or_create(
                 application=instance,
-                file=file,
-                description=file.name
+                checksum=checksum,
+                defaults={
+                    "file": file,
+                    "description": file.name
+                }
             )
 
         return instance
+
 # Optional: Minimal serializer for list view (faster)
 class ApplicationListSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display')
     class_applied = GradeLevelSerializer(read_only=True)
+    photo = serializers.ImageField(read_only=True)
 
     class Meta:
         model = Application
         fields = [
             'id', 'admission_number', 'full_name', 'status', 'status_display',
-            'class_applied', 'submitted_at', 'school'
+            'class_applied', 'submitted_at', 'school', 'photo',
         ]
 
     def get_full_name(self, obj):

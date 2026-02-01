@@ -4,7 +4,7 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-
+import hashlib
 from apps.academics.models import GradeLevel
 from apps.students.models import Student
 from apps.school.models import School
@@ -175,12 +175,37 @@ class Application(models.Model):
         ordering = ['-submitted_at', 'last_name']
 
 
+# class ApplicationDocument(models.Model):
+#     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='documents')
+#     file = models.FileField(upload_to='admission_documents/')
+#     description = models.CharField(max_length=255, blank=True)
+#     uploaded_at = models.DateTimeField(auto_now_add=True)
+
+#     def __str__(self):
+#         return f"{self.description or 'Document'} for {self.application}"
+
+
 class ApplicationDocument(models.Model):
     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='documents')
     file = models.FileField(upload_to='admission_documents/')
     description = models.CharField(max_length=255, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
+    checksum = models.CharField(
+    max_length=64,
+    editable=False,
+    unique=False,  # still unique per application via UniqueConstraint
+    null=False,    # explicitly non-nullable now
+)
+
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["application", "checksum"],
+                name="unique_document_per_application"
+            )
+        ]
     def __str__(self):
         return f"{self.description or 'Document'} for {self.application}"
 
