@@ -9,17 +9,32 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+
 import { 
   Search, Plus, Users, Clock, 
   CalendarCheck, UserCheck, Loader2, 
+  Shield,   
+  ShieldOff,      
+  ShieldCheck,     
+  ShieldAlert,
   Filter, Sparkles, ChevronRight 
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
 const AdmissionsPage = () => {
+  const { user, loading: userLoading } = useCurrentUser();
   const { currentSchool, loading: schoolLoading } = useCurrentSchool();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('ALL');
+  // Define who is allowed
+  const allowedRoles = [
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+    "PRINCIPAL",
+    "DEPUTY_PRINCIPAL",
+    "ADMISSIONS_OFFICER",
+  ];
 
   const { data: applications = [], isLoading } = useQuery({
     queryKey: ['applications', currentSchool?.id],
@@ -59,6 +74,62 @@ const AdmissionsPage = () => {
     { key: 'ENROLLED', label: 'Enrolled', icon: UserCheck },
   ];
 
+   // Show loading while we check user & school
+  if (userLoading || schoolLoading) {
+    return (
+      <div className="flex h-[80vh] w-full flex-col items-center justify-center gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+        <p className="text-sm font-bold uppercase tracking-widest text-slate-400">
+          Verifying access...
+        </p>
+      </div>
+    );
+  }
+
+  // Not logged in or no role → redirect or show denied
+  if (!user) {
+    return (
+      <div className="flex h-[70vh] items-center justify-center p-6 text-center">
+        <div className="max-w-md space-y-4">
+          <div className="mx-auto h-16 w-16 rounded-3xl bg-red-50 flex items-center justify-center">
+            <Shield className="h-8 w-8 text-red-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900">Please log in</h2>
+          <p className="text-slate-500">You need to be signed in to access admissions.</p>
+          <Link href="/login">
+            <Button>Go to Login</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Role check – the most important part
+  const hasAccess = allowedRoles.includes(user.role);
+
+  if (!hasAccess) {
+    return (
+      <div className="flex h-[70vh] items-center justify-center p-6 text-center">
+        <div className="max-w-md space-y-6">
+          <div className="mx-auto h-20 w-20 rounded-full bg-red-50 flex items-center justify-center">
+            <ShieldOff className="h-10 w-10 text-red-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900">Access Denied</h2>
+          <p className="text-slate-600">
+            Your role ({user.role_display || user.role}) does not have permission to manage admissions.
+          </p>
+          <p className="text-sm text-slate-500">
+            Contact your school administrator if you believe this is an error.
+          </p>
+          <Link href="/dashboard">
+            <Button variant="outline">Back to Dashboard</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+
   if (schoolLoading) {
     return (
       <div className="flex h-[80vh] w-full flex-col items-center justify-center gap-4">
@@ -81,7 +152,7 @@ const AdmissionsPage = () => {
       </div>
     );
   }
-
+ 
   return (
     <div className="flex flex-col min-h-screen bg-[#F8FAFC]">
       {/* --- HEADER SECTION --- */}

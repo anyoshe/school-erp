@@ -20,7 +20,24 @@ interface MenuItem {
   href?: string;
   children?: MenuItem[];
 }
-
+const DESIRED_ORDER: string[] = [
+  "admissions",
+  "finance",
+  "students",
+  "academics",
+  "attendance",
+  "library",
+  "staff",
+  "events",
+  "health",
+  "parent_portal",
+  "alumni",
+  "transport",
+  "elearning",
+  "inventory",
+  "procurement",
+  // reports intentionally missing → will be forced last
+];
 // Map backend module codes to friendly names, icons, and URLs
 const MODULE_CONFIG: Record<string, MenuItem> = {
   admissions: { label: "Admissions Management", icon: GraduationCap, href: "/dashboard/modules/admissions" },
@@ -60,12 +77,56 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
 
   if (loading) return <div className="p-6 text-gray-400">Loading modules...</div>;
 
-  // Only show modules enabled for this school
   const enabledModules = currentSchool?.modules || [];
-  const dynamicItems: MenuItem[] = enabledModules
-    .map((module) => module.code ? MODULE_CONFIG[module.code] : undefined)
-    .filter((item): item is MenuItem => !!item);
+// Build unique items by code first (already deduplicated)
+const uniqueModuleItems = new Map<string, MenuItem>();
 
+for (const m of enabledModules) {
+  if (!m.code) continue;
+  const item = MODULE_CONFIG[m.code];
+  if (item) {
+    uniqueModuleItems.set(m.code, item);
+  }
+}
+
+// Now build the final ordered list
+const dynamicItems: MenuItem[] = [];
+
+// 1. Desired order (skip if not enabled)
+for (const code of DESIRED_ORDER) {
+  const item = uniqueModuleItems.get(code);
+  if (item) {
+    dynamicItems.push(item);
+    uniqueModuleItems.delete(code); // prevent appearing again
+  }
+}
+
+// 2. Reports last (if enabled)
+const reportsItem = uniqueModuleItems.get("reports");
+if (reportsItem) {
+  dynamicItems.push(reportsItem);
+  uniqueModuleItems.delete("reports");
+}
+
+// 3. Any remaining modules (in backend-provided order)
+for (const item of uniqueModuleItems.values()) {
+  dynamicItems.push(item);
+}
+
+// ── Debug: Check for duplicate hrefs ────────────────────────────────
+const hrefCount = new Map<string, number>();
+dynamicItems.forEach(item => {
+  if (item.href) {
+    hrefCount.set(item.href, (hrefCount.get(item.href) || 0) + 1);
+  }
+});
+
+const duplicates = Array.from(hrefCount.entries()).filter(([_, count]) => count > 1);
+
+if (duplicates.length > 0) {
+  console.warn("Duplicate hrefs detected in sidebar:", duplicates);
+  console.log("Full dynamicItems:", dynamicItems.map(i => ({label: i.label, href: i.href})));
+}
   return (
     <div className="flex flex-col h-full bg-white shadow-lg">
       {/* Header */}
@@ -116,7 +177,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
 
           {/* Dynamic Modules */}
           {dynamicItems.map((item) => (
-            <li key={item.label}>
+            <li key={item.href}>
               <a
                 href={item.href}
                 className={clsx(

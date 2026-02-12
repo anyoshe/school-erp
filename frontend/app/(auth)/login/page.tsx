@@ -1,143 +1,3 @@
-// "use client";
-
-// import { useState } from "react";
-// import { useRouter } from "next/navigation";
-// import { loginUser, signupUser } from "@/services/auth.service";
-// import { saveToken } from "@/utils/auth";
-// import { motion, AnimatePresence } from "framer-motion";
-// import { getCurrentUser } from "@/utils/api";
-// import {
-//   ArrowRight,
-//   Shield,
-//   Eye,
-//   EyeOff,
-//   Mail,
-//   UserPlus,
-//   Lock,
-//   BookOpen,
-//   ChevronRight,
-//   Axe as AxeIcon,
-//   Users,
-//   Zap,
-//   CheckCircle,
-// } from "lucide-react";
-// import Link from "next/link";
-
-// const colors = {
-//   primary: "#4F46E5",
-//   primaryHover: "#4338CA",
-//   accent: "#A3E635",
-//   accentHover: "#84CC16",
-//   darkBg: "#111827",
-//   textMain: "#ffffff",
-//   textSubtle: "#d1d5db",
-//   textMuted: "#9ca3af",
-//   lightBg: "#F9FAFB",
-//   surface: "#FFFFFF",
-//   borderLight: "#E5E7EB",
-//   success: "#10B981",
-//   error: "#EF4444",
-// };
-
-// export default function Welcome() {
-//   const router = useRouter();
-
-//   const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
-//   const [email, setEmail] = useState("");
-//   const [password, setPassword] = useState("");
-//   const [confirmPassword, setConfirmPassword] = useState("");
-//   const [firstName, setFirstName] = useState("");
-//   const [lastName, setLastName] = useState("");
-//   const [showPassword, setShowPassword] = useState(false);
-//   const [error, setError] = useState("");
-//   const [loading, setLoading] = useState(false);
-
-
-// const handleAuth = async (e: React.FormEvent) => {
-//   e.preventDefault();
-//   setError("");
-//   setLoading(true);
-
-//   try {
-//     let tokenData;
-
-//     // ── SIGNUP FLOW ────────────────────────────────────────────────
-//     if (activeTab === "signup") {
-//       if (password !== confirmPassword) {
-//         throw new Error("Passwords do not match");
-//       }
-
-//       if (!firstName.trim() || !lastName.trim()) {
-//         throw new Error("Please provide both first and last name");
-//       }
-
-//       // Create user
-//       await signupUser({
-//         first_name: firstName.trim(),
-//         last_name: lastName.trim(),
-//         email: email.trim(),
-//         password,
-//       });
-
-//       // Auto-login after signup
-//       tokenData = await loginUser(email.trim(), password);
-//     } 
-//     // ── LOGIN FLOW ─────────────────────────────────────────────────
-//     else {
-//       tokenData = await loginUser(email.trim(), password);
-//     }
-
-//     // Save tokens
-//     saveToken(tokenData.access);
-//     if (tokenData.refresh) {
-//       localStorage.setItem("refreshToken", tokenData.refresh);
-//     }
-
-//     // ── POST-AUTH REDIRECTION LOGIC ───────────────────────────────
-//     try {
-//       // Force fresh user data (cache bust)
-//       const user = await getCurrentUser(true);
-
-//       if (!user.schools?.length) {
-//         router.replace("/onboarding/setup");
-//         return;
-//       }
-
-//       const activeSchool = user.active_school || user.schools[0];
-
-//       if (!activeSchool.setup_complete) {
-//         router.replace("/onboarding/setup");
-//         return;
-//       }
-
-//       if (!activeSchool.modules?.length) {
-//         router.replace("/onboarding/select-modules");
-//         return;
-//       }
-
-//       // Everything is complete → go to dashboard
-//       router.replace("/dashboard");
-//     } catch (redirectError) {
-//       console.warn("Failed to check user state after login:", redirectError);
-//       // Fallback: go to resolve page if quick check fails
-//       router.replace("/resolve");
-//     }
-//   } catch (err: any) {
-//     console.error("Authentication error:", err);
-
-//     const errorMessage =
-//       err?.response?.data?.detail ||
-//       err?.response?.data?.email?.[0] ||
-//       err?.response?.data?.password?.[0] ||
-//       err?.message ||
-//       "Authentication failed. Please try again.";
-
-//     setError(errorMessage);
-//   } finally {
-//     setLoading(false);
-//   }
-// };
-
 "use client";
 
 import { useState } from "react";
@@ -419,9 +279,8 @@ export default function Welcome() {
                       <div className="flex mb-6 rounded-xl p-1" style={{ backgroundColor: colors.lightBg }}>
                         <button
                           onClick={() => setActiveTab("login")}
-                          className={`flex-1 text-center py-3 font-semibold rounded-lg transition-all duration-300 text-sm sm:text-base ${
-                            activeTab === "login" ? "text-white shadow-sm" : "hover:bg-white/50"
-                          }`}
+                          className={`flex-1 text-center py-3 font-semibold rounded-lg transition-all duration-300 text-sm sm:text-base ${activeTab === "login" ? "text-white shadow-sm" : "hover:bg-white/50"
+                            }`}
                           style={{
                             backgroundColor: activeTab === "login" ? colors.primary : "transparent",
                             color: activeTab === "login" ? colors.textMain : colors.textMuted,
@@ -432,9 +291,8 @@ export default function Welcome() {
                         </button>
                         <button
                           onClick={() => setActiveTab("signup")}
-                          className={`flex-1 text-center py-3 font-semibold rounded-lg transition-all duration-300 text-sm sm:text-base ${
-                            activeTab === "signup" ? "text-white shadow-sm" : "hover:bg-white/50"
-                          }`}
+                          className={`flex-1 text-center py-3 font-semibold rounded-lg transition-all duration-300 text-sm sm:text-base ${activeTab === "signup" ? "text-white shadow-sm" : "hover:bg-white/50"
+                            }`}
                           style={{
                             backgroundColor: activeTab === "signup" ? colors.primary : "transparent",
                             color: activeTab === "signup" ? colors.textMain : colors.textMuted,
@@ -455,11 +313,10 @@ export default function Welcome() {
                         >
                           {/* Error Alert */}
                           {error && (
-                           <div
-                      className={`mb-4 p-3 rounded-lg flex items-start gap-2 text-sm ${
-                        error.includes("successfully") ? "bg-green-100 text-green-800 border-green-200" : "bg-red-100 text-red-800 border-red-200"
-                      }`}
-                    >
+                            <div
+                              className={`mb-4 p-3 rounded-lg flex items-start gap-2 text-sm ${error.includes("successfully") ? "bg-green-100 text-green-800 border-green-200" : "bg-red-100 text-red-800 border-red-200"
+                                }`}
+                            >
                               <Shield className="w-4 h-4 flex-shrink-0 mt-0.5" />
                               <span className="font-medium">{error}</span>
                             </div>
@@ -467,6 +324,19 @@ export default function Welcome() {
 
                           <form onSubmit={handleAuth} className="space-y-4">
                             {/* First & Last Name - Only on Signup */}
+
+
+                            {activeTab === "signup" && (
+                              <div className="mb-6 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <BookOpen className="h-5 w-5 text-indigo-600" />
+                                  <h3 className="font-semibold text-indigo-800">Create Your School Account</h3>
+                                </div>
+                                <p className="text-sm text-indigo-700">
+                                  Sign up to set up your school on AxeEDU. You'll become the administrator and can invite teachers, staff and parents later.
+                                </p>
+                              </div>
+                            )}
                             {activeTab === "signup" && (
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>

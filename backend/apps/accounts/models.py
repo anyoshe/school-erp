@@ -1,5 +1,3 @@
-
-# accounts/models.py
 import uuid
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
@@ -24,20 +22,29 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     class Role(models.TextChoices):
-        SUPER_ADMIN = "SUPER_ADMIN"
-        SCHOOL_ADMIN = "SCHOOL_ADMIN"
-        PRINCIPAL = "PRINCIPAL"
-        ACCOUNTANT = "ACCOUNTANT"
-        TEACHER = "TEACHER"
-        LIBRARIAN = "LIBRARIAN"
-        PARENT = "PARENT"
-        STUDENT = "STUDENT"
+        SUPER_ADMIN        = "SUPER_ADMIN",        "Super Admin / Owner"
+        SCHOOL_ADMIN       = "SCHOOL_ADMIN",       "School Administrator"
+        PRINCIPAL          = "PRINCIPAL",          "Principal / Head Teacher"
+        DEPUTY_PRINCIPAL   = "DEPUTY_PRINCIPAL",   "Deputy Principal / Vice Principal"
+        ADMISSIONS_OFFICER = "ADMISSIONS_OFFICER", "Admissions Officer / Registrar"
+        ACCOUNTANT         = "ACCOUNTANT",         "Accountant / Bursar"
+        ACADEMIC_COORDINATOR = "ACADEMIC_COORDINATOR", "Academic Coordinator / Head of Section"
+        TEACHER            = "TEACHER",            "Teacher"
+        LIBRARIAN          = "LIBRARIAN",          "Librarian"
+        PARENT             = "PARENT",             "Parent"
+        STUDENT            = "STUDENT",            "Student"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
     email = models.EmailField(unique=True)
-    role = models.CharField(max_length=20, choices=Role.choices)
+    role = models.CharField(
+        max_length=30,
+        choices=Role.choices,
+        default=Role.SUPER_ADMIN,
+    )
+    password_changed_at = models.DateTimeField(null=True, blank=True)
+    force_change_password = models.BooleanField(default=False, help_text="User must change password on next login")
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -88,3 +95,25 @@ class UserPermission(models.Model):
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}".strip() or self.email
+
+
+# ───────────────────────────────────────────────
+# Dynamic Role model for Roles & Permissions tab
+# ───────────────────────────────────────────────
+class Role(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=150)
+    description = models.TextField(blank=True)
+
+    # ── This is the key line ──
+    modules = models.ManyToManyField('school.Module', related_name='roles', blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.code})"

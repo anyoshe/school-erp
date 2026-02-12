@@ -44,7 +44,7 @@ const formSchema = z.object({
   class_applied: z.string().min(1, "Class/Grade is required"),
   primary_guardian_name: z.string().min(1, "Guardian name is required"),
   primary_guardian_phone: z.string().min(9, "Valid phone number required"),
-  primary_guardian_email: z.string().email("Invalid email").optional(),
+  primary_guardian_email: z.string().email("Invalid email").min(1, "Guardian email is required for saving progress and recovery"),
   primary_guardian_relationship: z.string().min(1, "Relationship is required"),
   primary_guardian_id_number: z.string().optional(),
   address: z.string().optional(),
@@ -361,6 +361,13 @@ export default function PublicNewApplicationPage() {
                     <Controller name="nationality" control={control} render={({ field }) => <Input {...field} />} />
                     {errors.nationality && <p className="text-red-500 text-sm mt-1">{errors.nationality.message}</p>}
                   </div>
+                  <div>
+                    <Label>Primary Guardian Email *</Label>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      We'll use this to send a link so you can resume your application later.
+                    </p>
+                    <Controller name="primary_guardian_email" control={control} render={({ field }) => <Input type="email" {...field} />} />
+                  </div>
                   <div className="md:col-span-2">
                     <Label>Class / Grade Applied *</Label>
                     <Controller
@@ -451,10 +458,6 @@ export default function PublicNewApplicationPage() {
                     <Label>Phone Number *</Label>
                     <Controller name="primary_guardian_phone" control={control} render={({ field }) => <Input type="tel" {...field} />} />
                     {errors.primary_guardian_phone && <p className="text-red-500 text-sm mt-1">{errors.primary_guardian_phone.message}</p>}
-                  </div>
-                  <div>
-                    <Label>Email</Label>
-                    <Controller name="primary_guardian_email" control={control} render={({ field }) => <Input type="email" {...field} />} />
                   </div>
                   <div>
                     <Label>ID / Passport Number</Label>

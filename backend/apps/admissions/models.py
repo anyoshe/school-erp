@@ -175,15 +175,6 @@ class Application(models.Model):
         ordering = ['-submitted_at', 'last_name']
 
 
-# class ApplicationDocument(models.Model):
-#     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='documents')
-#     file = models.FileField(upload_to='admission_documents/')
-#     description = models.CharField(max_length=255, blank=True)
-#     uploaded_at = models.DateTimeField(auto_now_add=True)
-
-#     def __str__(self):
-#         return f"{self.description or 'Document'} for {self.application}"
-
 
 class ApplicationDocument(models.Model):
     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='documents')

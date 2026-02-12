@@ -183,3 +183,15 @@ CORS_ALLOW_HEADERS = [
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+
+# Namecheap Private Email (recommended for custom domain like hello@getaxe.tech)
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'mail.privateemail.com'           # ← this is the correct SMTP server
+EMAIL_PORT = 587                               # Preferred (STARTTLS)
+EMAIL_USE_TLS = True                           # Must be True for port 587
+# EMAIL_PORT = 465                             # Alternative (SSL) — use this OR 587, not both
+# EMAIL_USE_SSL = True                         # Use this INSTEAD of EMAIL_USE_TLS if port 465
+EMAIL_HOST_USER = 'hello@getaxe.tech'          # Your full email address
+EMAIL_HOST_PASSWORD = 'your-private-email-password'  # The password you set for this mailbox
+DEFAULT_FROM_EMAIL = 'Admissions <hello@getaxe.tech>'  # Or whatever display name you want
