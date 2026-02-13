@@ -149,16 +149,23 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                     {typeof application.class_applied === 'object' ? application.class_applied.name : application.class_applied}
                   </Badge>
                   <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-none font-mono py-1 px-3 rounded-lg">
-                    {application.admission_number || "REF-"+application.id.slice(0, 6)}
+                    {application.admission_number || "REF-" + application.id.slice(0, 6)}
                   </Badge>
                 </div>
               </div>
             </div>
 
             <div className="flex justify-center md:block print:hidden bg-slate-50/50 p-4 rounded-3xl border border-slate-100 backdrop-blur-sm">
+              {/* <AdmissionActions
+                applicationId={id}
+                currentStatus={application.status}
+                onUpdated={fetchApplication}
+                onEnrolled={(student) => router.push(`/dashboard/modules/students/${student.id}`)}
+              /> */}
               <AdmissionActions
                 applicationId={id}
                 currentStatus={application.status}
+                applicationData={application}
                 onUpdated={fetchApplication}
                 onEnrolled={(student) => router.push(`/dashboard/modules/students/${student.id}`)}
               />
@@ -297,7 +304,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                       <div className="h-10 w-10 bg-indigo-50 group-hover:bg-indigo-500 rounded-xl flex items-center justify-center text-indigo-500 group-hover:text-white transition-colors">
                         <FileText className="h-5 w-5" />
                       </div>
-                      <p className="text-xs font-black text-slate-700 truncate w-32">{doc.file_name || "Attachment " + (i+1)}</p>
+                      <p className="text-xs font-black text-slate-700 truncate w-32">{doc.file_name || "Attachment " + (i + 1)}</p>
                     </div>
                     <a href={doc.file} target="_blank" className="p-2 text-slate-400 hover:text-indigo-600"><Eye className="h-4 w-4" /></a>
                   </div>

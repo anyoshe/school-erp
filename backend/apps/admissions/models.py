@@ -20,6 +20,7 @@ class Application(models.Model):
         ACCEPTED = "ACCEPTED", "Accepted"
         REJECTED = "REJECTED", "Rejected"
         ENROLLED = "ENROLLED", "Enrolled"
+        INTERVIEW_COMPLETED = "INTERVIEW_COMPLETED", "Interview Completed"
 
     class PlacementType(models.TextChoices):
         SELF = "SELF", "Self / Parent Application"
@@ -80,6 +81,31 @@ class Application(models.Model):
     emergency_contact_name = models.CharField(max_length=100, blank=True)
     emergency_contact_phone = models.CharField(max_length=20, blank=True)
     emergency_relationship = models.CharField(max_length=50, blank=True)
+
+    # ── NEW: Interview Scheduling Fields ──
+    interview_date = models.DateField(null=True, blank=True)
+    interview_time = models.TimeField(null=True, blank=True)
+    interview_venue = models.CharField(max_length=200, blank=True)
+    interview_contact_person = models.CharField(max_length=100, blank=True)
+    interview_instructions = models.TextField(blank=True)
+
+
+    # Add fields
+    interview_outcome = models.CharField(
+        max_length=20,
+        choices=[
+            ("PASS", "Pass"),
+            ("FAIL", "Fail"),
+            ("WAITLIST", "Waitlist"),
+            ("OTHER", "Other"),
+        ],
+        blank=True,
+        null=True,
+    )
+    interview_comments = models.TextField(blank=True)
+    interview_completed_at = models.DateTimeField(null=True, blank=True)
+    interview_score = models.IntegerField(null=True, blank=True)
+    interviewer_name = models.CharField(max_length=100, blank=True)
 
     # Documents / Media
     photo = models.ImageField(upload_to='admission_photos/', null=True, blank=True)

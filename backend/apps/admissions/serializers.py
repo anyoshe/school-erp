@@ -4,7 +4,7 @@ from rest_framework import serializers
 from .models import Application, ApplicationDocument, AdmissionFeePayment
 from apps.academics.serializers import GradeLevelSerializer
 from apps.school.models import School
-
+from apps.school.serializers import SchoolSerializer
 
 
 class ApplicationDocumentSerializer(serializers.ModelSerializer):
@@ -29,6 +29,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
     documents = ApplicationDocumentSerializer(many=True, read_only=True)
     fee_payments = AdmissionFeePaymentSerializer(many=True, read_only=True)
     photo = serializers.ImageField(read_only=True)
+    school = SchoolSerializer(read_only=True)
 
     # Computed read-only fields
     full_name = serializers.SerializerMethodField()
@@ -79,6 +80,16 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'student',
             'created_by',
             'updated_at',
+            'interview_date',
+            'interview_time',
+            'interview_venue',
+            'interview_contact_person',
+            'interview_instructions',
+            'interview_completed_at',
+            'interview_outcome',
+            'interview_score',
+            'interview_comments',
+            'interviewer_name',
         ]
         read_only_fields = [
             'id', 'admission_number', 'submitted_at', 'student',
@@ -103,6 +114,7 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
         allow_empty=True
     )
     photo = serializers.ImageField(required=False, allow_null=True)
+    
 
     class Meta:
         model = Application
@@ -121,6 +133,16 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
             'notes', 'status', 'admission_date',
             'school',  # ← keep this so frontend can send it
             'documents', 'photo',
+            'interview_date',
+            'interview_time',
+            'interview_venue',
+            'interview_contact_person',
+            'interview_instructions',
+            'interview_completed_at',
+            'interview_outcome',
+            'interview_score',
+            'interview_comments',
+            'interviewer_name',
         ]
         read_only_fields = ['id']
 
