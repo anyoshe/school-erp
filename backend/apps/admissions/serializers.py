@@ -90,10 +90,17 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'interview_score',
             'interview_comments',
             'interviewer_name',
+            'accepted_at',
+            'acceptance_notes',
+            'accepted_at',
+            'acceptance_notes',
         ]
         read_only_fields = [
             'id', 'admission_number', 'submitted_at', 'student',
-            'created_at', 'updated_at', 'school', 'photo',
+            'created_at', 'updated_at', 'school', 'photo','accepted_at',
+            'acceptance_notes',
+            'accepted_at',
+            'acceptance_notes',
         ]
 
     def get_full_name(self, obj):
@@ -143,6 +150,10 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
             'interview_score',
             'interview_comments',
             'interviewer_name',
+            'accepted_at',
+            'acceptance_notes',
+            'accepted_at',
+            'acceptance_notes',
         ]
         read_only_fields = ['id']
 

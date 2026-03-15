@@ -15,6 +15,7 @@ if (typeof window !== "undefined") {
   api.interceptors.request.use((config) => {
     const token = getToken();
     const schoolId = getActiveSchoolId(); // store in localStorage or cookie
+    
 
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;

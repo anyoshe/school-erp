@@ -2,6 +2,7 @@ from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from .models import School, Module
 from uuid import UUID
+from apps.academics.serializers import GradeLevelSerializer
 
 
 
@@ -21,7 +22,7 @@ class SchoolMiniSerializer(serializers.ModelSerializer):
             'short_name',           
             'setup_complete',      
             'logo',                 
-            'currency',            
+            'currency', 'currency_symbol', 'currency_display',            
             'modules'             
         ]
 
@@ -33,6 +34,7 @@ class ModuleSerializer(serializers.ModelSerializer):
 
 class SchoolSerializer(serializers.ModelSerializer):
     modules = ModuleSerializer(many=True, read_only=True)
+    grade_levels = GradeLevelSerializer(many=True, read_only=True) 
     owner = serializers.UUIDField(source="owner.id", read_only=True)
     class Meta:
         model = School
@@ -43,14 +45,17 @@ class SchoolSerializer(serializers.ModelSerializer):
             'alternative_phone',                       
             'emergency_phone',                          
             'postal_address',                   
-            'currency',
+            'currency', 'currency_symbol', 'currency_display',
             'academic_year_start_month',                  
             'academic_year_end_month',
             'term_system', 'number_of_terms',
             'grading_system', 'passing_mark',
             'official_registration_number',
             'registration_authority', 'registration_date',
-            'modules', 'logo',
+            'modules', 'grade_levels', 'logo',
+            # Add these new fields:
+            'bank_name', 'branch_name', 'bank_account_name', 
+            'bank_account_number', 'paybill_number', 'payment_instructions',
             'created_at', 'updated_at'
         ]
 
@@ -74,6 +79,8 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
             'term_system', 'number_of_terms', 'grading_system', 'passing_mark',
             'logo', 'official_registration_number',
             'registration_authority', 'registration_date',
+            'bank_name', 'branch_name', 'bank_account_name', 
+            'bank_account_number', 'paybill_number', 'payment_instructions',
             'alternative_phone',          
             'emergency_phone',
             'postal_address',

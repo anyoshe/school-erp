@@ -65,12 +65,12 @@ interface FormData {
   selectedCurriculumId?: number;
   selectedGradeLevelIds: number[];
   selectedDepartmentIds: number[];
-  hasUniformFee: boolean;
-  uniformFee: number;
-  hasAdmissionFee: boolean;
-  admissionFee: number;
-  hasTuitionPerTerm: boolean;
-  tuitionPerTerm: number;
+  bankName: string;
+  branchName: string;
+  bankAccountName: string;
+  bankAccountNumber: string;
+  paybillNumber: string;
+  paymentInstructions: string;
 }
 
 const steps = [
@@ -78,7 +78,7 @@ const steps = [
   { id: 2, name: "Academic Structure", icon: Calendar },
   { id: 3, name: "Curriculum Setup", icon: GraduationCap },
   { id: 4, name: "Departments & Grades", icon: GraduationCap },
-  { id: 5, name: "Fee Setup", icon: DollarSign },
+  { id: 5, name: "Payment Details", icon: DollarSign },
   { id: 6, name: "Complete", icon: CheckCircle },
 ] as const;
 
@@ -120,12 +120,12 @@ export default function SetupWizardPage() {
     selectedCurriculumId: undefined,
     selectedGradeLevelIds: [],
     selectedDepartmentIds: [],
-    hasUniformFee: true,
-    uniformFee: 5000,
-    hasAdmissionFee: true,
-    admissionFee: 10000,
-    hasTuitionPerTerm: true,
-    tuitionPerTerm: 25000,
+    bankName: "",
+    branchName: "",
+    bankAccountName: "",
+    bankAccountNumber: "",
+    paybillNumber: "",
+    paymentInstructions: "Please include the student name and application ID as the payment reference.",
   });
 
   // Fetch curriculum templates on mount
@@ -200,8 +200,8 @@ export default function SetupWizardPage() {
         }));
 
         console.log("ACTUAL Fetched Grades:", fetchedGrades);
-    console.log("ACTUAL Fetched Departments:", fetchedDepts);
-    console.log("Departments count:", fetchedDepts?.length || 0);
+        console.log("ACTUAL Fetched Departments:", fetchedDepts);
+        console.log("Departments count:", fetchedDepts?.length || 0);
       } catch (err) {
         toast.error("Failed to load grade levels or departments");
         console.error(err);
@@ -397,86 +397,15 @@ export default function SetupWizardPage() {
         console.log("→ Curriculum template copied successfully");
       }
 
-      // ── FEE SETUP ──────────────────────────────────────────────────
-      if (formData.hasTuitionPerTerm || formData.hasAdmissionFee || formData.hasUniformFee) {
-        console.log("Setting up fees...");
+      // ── BANKING & PAYMENT SETUP ────────────────────────────────────────
+      // Since these are on the School model, we add them to the schoolForm
+      schoolForm.append("bank_name", formData.bankName.trim());
+      schoolForm.append("branch_name", formData.branchName.trim());
+      schoolForm.append("bank_account_name", formData.bankAccountName.trim());
+      schoolForm.append("bank_account_number", formData.bankAccountNumber.trim());
+      schoolForm.append("paybill_number", formData.paybillNumber.trim());
+      schoolForm.append("payment_instructions", formData.paymentInstructions.trim());
 
-        try {
-          const categoryRes = await api.post(
-            "/finance/fee-categories/",
-            {
-              name: "Basic Fees",
-              is_mandatory: true,
-              school: currentSchoolId,
-            },
-            {
-              headers: { "X-School-ID": currentSchoolId },
-            }
-          );
-          const categoryId = categoryRes.data.id;
-          console.log("→ Fee category created:", categoryId);
-
-          if (formData.hasTuitionPerTerm && formData.tuitionPerTerm > 0) {
-            await api.post(
-              "/finance/fee-items/",
-              {
-                category: categoryId,
-                name: "Tuition per Term",
-                amount: formData.tuitionPerTerm,
-                frequency: "per_term",
-                currency: formData.currency,
-              },
-              {
-                headers: { "X-School-ID": currentSchoolId },
-              }
-            );
-            console.log("→ Tuition fee item created");
-          }
-
-          if (formData.hasAdmissionFee && formData.admissionFee > 0) {
-            await api.post(
-              "/finance/fee-items/",
-              {
-                category: categoryId,
-                name: "Admission Fee",
-                amount: formData.admissionFee,
-                frequency: "once",
-                currency: formData.currency,
-              },
-              {
-                headers: { "X-School-ID": currentSchoolId },
-              }
-            );
-            console.log("→ Admission fee item created");
-          }
-
-          if (formData.hasUniformFee && formData.uniformFee > 0) {
-            await api.post(
-              "/finance/fee-items/",
-              {
-                category: categoryId,
-                name: "Uniform Fee",
-                amount: formData.uniformFee,
-                frequency: "once",
-                currency: formData.currency,
-              },
-              {
-                headers: { "X-School-ID": currentSchoolId },
-              }
-            );
-            console.log("→ Uniform fee item created");
-          }
-
-          console.log("→ Fees created successfully");
-        } catch (feeErr: any) {
-          console.warn("Fee setup failed (non-blocking):", {
-            status: feeErr.response?.status,
-            data: feeErr.response?.data,
-          });
-          // Don't throw - fees are optional, continue with setup
-          toast.warning("Fees could not be set up automatically. You can add them later in the Finance module.");
-        }
-      }
 
       // ── MARK SETUP COMPLETE ────────────────────────────────────────
       console.log("Marking setup_complete = true on school:", currentSchoolId);
@@ -931,57 +860,73 @@ export default function SetupWizardPage() {
                 )}
               </div>
             )}
-            {/* Step 5: Fee Setup */}
+
+            {/* Step 5: Banking & Payment Setup */}
             {currentStep === 4 && (
-              <div className="space-y-8">
+              <div className="space-y-6">
                 <div className="text-center mb-8">
-                  <h3 className="text-xl font-semibold">Quick Fee Setup (Optional)</h3>
-                  <p className="text-gray-600 mt-2">You can configure detailed fees later in Finance module</p>
+                  <h3 className="text-xl font-semibold">Payment Details</h3>
+                  <p className="text-gray-600 mt-2">These details will be displayed on admission offer letters</p>
                 </div>
 
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between p-6 bg-gray-50 rounded-xl">
-                    <div>
-                      <h4 className="font-semibold">Tuition Fee per Term</h4>
-                      <p className="text-sm text-gray-600">Standard fee for all students</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <input
-                        type="number"
-                        value={formData.tuitionPerTerm}
-                        onChange={(e) => updateForm("tuitionPerTerm", Number(e.target.value))}
-                        className="w-32 px-4 py-2 border rounded-lg text-right"
-                        placeholder="25000"
-                      />
-                      <span className="text-gray-700 font-medium">{formData.currency}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-6 bg-gray-50 rounded-xl">
-                    <div>
-                      <h4 className="font-semibold">Admission / Registration Fee</h4>
-                      <p className="text-sm text-gray-600">One-time fee for new students</p>
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Bank Name</label>
                     <input
-                      type="number"
-                      value={formData.admissionFee}
-                      onChange={(e) => updateForm("admissionFee", Number(e.target.value))}
-                      className="w-32 px-4 py-2 border rounded-lg text-right"
-                      placeholder="10000"
+                      type="text"
+                      value={formData.bankName}
+                      onChange={(e) => updateForm("bankName", e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg"
+                      placeholder="e.g. KCB Bank"
                     />
                   </div>
-
-                  <div className="flex items-center justify-between p-6 bg-gray-50 rounded-xl">
-                    <div>
-                      <h4 className="font-semibold">Uniform Fee</h4>
-                      <p className="text-sm text-gray-600">Optional uniform cost</p>
-                    </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Branch Name</label>
                     <input
-                      type="number"
-                      value={formData.uniformFee}
-                      onChange={(e) => updateForm("uniformFee", Number(e.target.value))}
-                      className="w-32 px-4 py-2 border rounded-lg text-right"
-                      placeholder="5000"
+                      type="text"
+                      value={formData.branchName}
+                      onChange={(e) => updateForm("branchName", e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg"
+                      placeholder="e.g. Malindi"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Account Name</label>
+                    <input
+                      type="text"
+                      value={formData.bankAccountName}
+                      onChange={(e) => updateForm("bankAccountName", e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg"
+                      placeholder="e.g. Destiny Scholars School"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Account Number</label>
+                    <input
+                      type="text"
+                      value={formData.bankAccountNumber}
+                      onChange={(e) => updateForm("bankAccountNumber", e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg"
+                      placeholder="011XXXXXXXX"
+                    />
+                  </div>
+                  <div className="md:col-span-2 space-y-2">
+                    <label className="text-sm font-medium">M-Pesa Paybill / Till Number</label>
+                    <input
+                      type="text"
+                      value={formData.paybillNumber}
+                      onChange={(e) => updateForm("paybillNumber", e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg"
+                      placeholder="e.g. 400222"
+                    />
+                  </div>
+                  <div className="md:col-span-2 space-y-2">
+                    <label className="text-sm font-medium">Payment Instructions</label>
+                    <textarea
+                      value={formData.paymentInstructions}
+                      onChange={(e) => updateForm("paymentInstructions", e.target.value)}
+                      className="w-full px-4 py-2 border rounded-lg min-h-[80px]"
+                      placeholder="e.g. Please use student name as reference..."
                     />
                   </div>
                 </div>
@@ -1006,7 +951,10 @@ export default function SetupWizardPage() {
                     <p><span className="font-medium">Currency:</span> {formData.currency}</p>
                     <p><span className="font-medium">Academic Year:</span> {formData.academicYearStart} – {formData.academicYearEnd}</p>
                     <p><span className="font-medium">Grading:</span> {formData.gradingSystem} (Pass: {formData.passingMark}%)</p>
-                    <p><span className="font-medium">Tuition per term:</span> {formData.currency} {formData.tuitionPerTerm.toLocaleString()}</p>
+                    {/* NEW Banking Summary Lines */}
+                    <p><span className="font-medium">Primary Bank:</span> {formData.bankName || "Not provided"}</p>
+                    <p><span className="font-medium">Account No:</span> {formData.bankAccountNumber || "N/A"}</p>
+                    <p><span className="font-medium">M-Pesa Paybill:</span> {formData.paybillNumber || "N/A"}</p>
                   </div>
                 </div>
 

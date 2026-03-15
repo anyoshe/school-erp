@@ -19,7 +19,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { School } from "@/types/school";
 
 // Sweet modern color palette
 const colors = {
@@ -44,7 +44,11 @@ const getMonthName = (num?: number) => (num ? monthNames[num - 1] : "January");
 const getMonthNumber = (name: string) => monthNames.indexOf(name) + 1 || 1;
 
 export default function EditSchoolBasicInfoPage() {
-  const { currentSchool, refreshSchools } = useCurrentSchool();
+  // const { currentSchool, refreshSchools } = useCurrentSchool();
+  const { currentSchool, refreshSchools } = useCurrentSchool() as { 
+    currentSchool: School | null; 
+    refreshSchools: () => Promise<void>; 
+  };
 
   const [formData, setFormData] = useState({
     schoolName: "",
@@ -65,6 +69,12 @@ export default function EditSchoolBasicInfoPage() {
     officialRegistrationNumber: "",
     registrationAuthority: "",
     registrationDate: "",
+    bankName: "",
+    branchName: "",
+    bankAccountName: "",
+    bankAccountNumber: "",
+    paybillNumber: "",
+    paymentInstructions: "",
     logo: null as File | null,
   });
 
@@ -72,41 +82,47 @@ export default function EditSchoolBasicInfoPage() {
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-  if (currentSchool) {
-    console.log("Raw currentSchool from API:", currentSchool); // ← you already have this
+    if (currentSchool) {
+      console.log("Raw currentSchool from API:", currentSchool); // ← you already have this
 
-    setFormData({
-      schoolName: currentSchool.name || "",
-      shortName: currentSchool.short_name || "",                    // ← fix: snake_case
-      email: currentSchool.email || "",
-      phone: currentSchool.phone || "",
-      address: currentSchool.address || "",
-      city: currentSchool.city || "",
-      country: currentSchool.country || "Kenya",
-      website: currentSchool.website || "",
-      currency: currentSchool.currency || "KES",
+      setFormData({
+        schoolName: currentSchool.name || "",
+        shortName: currentSchool.short_name || "",                    // ← fix: snake_case
+        email: currentSchool.email || "",
+        phone: currentSchool.phone || "",
+        address: currentSchool.address || "",
+        city: currentSchool.city || "",
+        country: currentSchool.country || "Kenya",
+        website: currentSchool.website || "",
+        currency: currentSchool.currency || "KES",
 
-      // Month fields – these are almost certainly snake_case too
-      academicYearStart: getMonthName(currentSchool.academic_year_start_month),
-      academicYearEnd: getMonthName(currentSchool.academic_year_end_month),
+        // Month fields – these are almost certainly snake_case too
+        academicYearStart: getMonthName(currentSchool.academic_year_start_month),
+        academicYearEnd: getMonthName(currentSchool.academic_year_end_month),
 
-      termSystem: currentSchool.term_system || "terms",
-      numberOfTerms: currentSchool.number_of_terms || 3,
-      gradingSystem: currentSchool.grading_system || "percentage",
-      passingMark: currentSchool.passing_mark || 50,
+        termSystem: currentSchool.term_system || "terms",
+        numberOfTerms: currentSchool.number_of_terms || 3,
+        gradingSystem: currentSchool.grading_system || "percentage",
+        passingMark: currentSchool.passing_mark || 50,
 
-      officialRegistrationNumber: currentSchool.official_registration_number || "",
-      registrationAuthority: currentSchool.registration_authority || "",
-      registrationDate: currentSchool.registration_date || "",
+        officialRegistrationNumber: currentSchool.official_registration_number || "",
+        registrationAuthority: currentSchool.registration_authority || "",
+        registrationDate: currentSchool.registration_date || "",
+        bankName: currentSchool.bank_name || "",
+        branchName: currentSchool.branch_name || "",
+        bankAccountName: currentSchool.bank_account_name || "",
+        bankAccountNumber: currentSchool.bank_account_number || "",
+        paybillNumber: currentSchool.paybill_number || "",
+        paymentInstructions: currentSchool.payment_instructions || "",
 
-      logo: null, // file input stays null until user selects new one
-    });
+        logo: null, // file input stays null until user selects new one
+      });
 
-    // Optional: extra debug to confirm values
-    console.log("Prefill values → short_name:", currentSchool.short_name);
-    console.log("Prefill values → website:", currentSchool.website);
-  }
-}, [currentSchool]);
+      // Optional: extra debug to confirm values
+      console.log("Prefill values → short_name:", currentSchool.short_name);
+      console.log("Prefill values → website:", currentSchool.website);
+    }
+  }, [currentSchool]);
 
   const updateForm = <K extends keyof typeof formData>(key: K, value: typeof formData[K]) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -143,6 +159,12 @@ export default function EditSchoolBasicInfoPage() {
       if (formData.registrationDate) {
         payload.append("registration_date", formData.registrationDate);
       }
+      payload.append("bank_name", formData.bankName.trim());
+      payload.append("branch_name", formData.branchName.trim());
+      payload.append("bank_account_name", formData.bankAccountName.trim());
+      payload.append("bank_account_number", formData.bankAccountNumber.trim());
+      payload.append("paybill_number", formData.paybillNumber.trim());
+      payload.append("payment_instructions", formData.paymentInstructions.trim());
 
       if (formData.logo) {
         payload.append("logo", formData.logo);
@@ -274,10 +296,6 @@ export default function EditSchoolBasicInfoPage() {
                 </div>
               </div>
 
-              {/* More fields... */}
-              {/* Add City, Country, Website, Currency, Academic Year, Registration fields similarly */}
-              {/* ... */}
-
               {/* Logo Section */}
               <div className="lg:col-span-2 space-y-3">
                 <Label className="text-base font-medium text-slate-700">School Logo</Label>
@@ -322,7 +340,83 @@ export default function EditSchoolBasicInfoPage() {
                   )}
                 </div>
               </div>
+              {/* Financial & Banking Section */}
+              <div className="lg:col-span-2 pt-6 border-t border-slate-200">
+                <h3 className="text-xl font-semibold text-slate-800 mb-6 flex items-center gap-2">
+                  <Building2 className="h-5 w-5 text-[var(--primary)]" />
+                  Financial & Banking Details
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Bank Name */}
+                  <div className="space-y-2">
+                    <Label>Bank Name</Label>
+                    <Input
+                      value={formData.bankName}
+                      onChange={(e) => updateForm("bankName", e.target.value)}
+                      placeholder="e.g. KCB Bank"
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+
+                  {/* Account Name */}
+                  <div className="space-y-2">
+                    <Label>Bank Account Name</Label>
+                    <Input
+                      value={formData.bankAccountName}
+                      onChange={(e) => updateForm("bankAccountName", e.target.value)}
+                      placeholder="e.g. Destiny Scholars School"
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+
+                  {/* Account Number */}
+                  <div className="space-y-2">
+                    <Label>Account Number</Label>
+                    <Input
+                      value={formData.bankAccountNumber}
+                      onChange={(e) => updateForm("bankAccountNumber", e.target.value)}
+                      placeholder="011XXXXXXXXXX"
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+
+                  {/* Branch */}
+                  <div className="space-y-2">
+                    <Label>Branch Name</Label>
+                    <Input
+                      value={formData.branchName}
+                      onChange={(e) => updateForm("branchName", e.target.value)}
+                      placeholder="e.g. Westlands"
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+
+                  {/* M-Pesa Paybill */}
+                  <div className="space-y-2">
+                    <Label>M-Pesa Paybill / Till</Label>
+                    <Input
+                      value={formData.paybillNumber}
+                      onChange={(e) => updateForm("paybillNumber", e.target.value)}
+                      placeholder="e.g. 400222"
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+
+                  {/* Payment Instructions */}
+                  <div className="md:col-span-2 lg:col-span-3 space-y-2">
+                    <Label>Payment Instructions (for PDF)</Label>
+                    <Input
+                      value={formData.paymentInstructions}
+                      onChange={(e) => updateForm("paymentInstructions", e.target.value)}
+                      placeholder="e.g. Please use student name and application ID as reference."
+                      className="h-11 rounded-xl"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
+
 
             {/* Save Button */}
             <div className="flex justify-end pt-8">

@@ -1,6 +1,10 @@
 # schools/models.py
 import uuid
 from django.db import models
+from datetime import datetime
+from django.db.models import Max
+from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.conf import settings
 from django.utils.text import slugify 
 import re
@@ -36,8 +40,36 @@ class School(models.Model):
     country = models.CharField(max_length=100, default="Kenya")
     website = models.URLField(blank=True)
     logo = models.ImageField(upload_to="school_logos/", blank=True, null=True)
-    currency = models.CharField(max_length=10, default="KES")
-    
+    CURRENCY_CHOICES = [
+        ("KES", "Kenyan Shilling"),
+        ("USD", "US Dollar"),
+        ("EUR", "Euro"),
+        ("GBP", "British Pound"),
+        ("UGX", "Ugandan Shilling"),
+        ("TZS", "Tanzanian Shilling"),
+        ("RWF", "Rwandan Franc"),
+        ("NGN", "Nigerian Naira"),
+        # Add more as your platform grows
+    ]
+
+    currency = models.CharField(
+        max_length=10,
+        choices=CURRENCY_CHOICES,
+        default="KES",
+        help_text="Primary currency for fees, invoices, payments"
+    )
+
+    currency_symbol = models.CharField(
+        max_length=8,
+        blank=True,
+        default="KSh",
+        help_text="Display symbol (e.g. KSh, $, €, £, UGX). Leave blank to use code."
+    )
+
+    # Helper property for display
+    @property
+    def currency_display(self):
+        return self.currency_symbol.strip() or self.currency
     # Official registration details
     official_registration_number = models.CharField(
         max_length=100,
@@ -144,7 +176,36 @@ class School(models.Model):
             self.slug = slug[:100]  # respect max_length
 
         super().save(*args, **kwargs)
-
+    # ── NEW: Financial & Banking Details ───────────────────────────────
+    bank_name = models.CharField(
+        max_length=100, 
+        blank=True, 
+        help_text="e.g. KCB, Equity, Co-operative Bank"
+    )
+    branch_name = models.CharField(
+        max_length=100, 
+        blank=True, 
+        help_text="e.g. Westlands Branch"
+    )
+    bank_account_name = models.CharField(
+        max_length=255, 
+        blank=True, 
+        help_text="Official name as it appears in the bank"
+    )
+    bank_account_number = models.CharField(
+        max_length=50, 
+        blank=True
+    )
+    paybill_number = models.CharField(
+        max_length=50, 
+        blank=True, 
+        verbose_name="M-Pesa Paybill / Till Number"
+    )
+    payment_instructions = models.TextField(
+        blank=True, 
+        help_text="Additional notes like: 'Please use student name as reference'"
+    )
+    # ──────────────────────────────────────────────────────────────────
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -153,3 +214,69 @@ class School(models.Model):
 
     def __str__(self):
         return self.short_name or self.name
+    
+
+
+def generate_unique_admission_number(school):
+    """
+    Generates a unique admission number using the school's configured format.
+    
+    Uses existing School fields:
+    - admission_number_format (YEAR_SEQ, PREFIX_YEAR_SEQ, CUSTOM)
+    - admission_prefix (optional)
+    - admission_seq_padding (number of digits, default 4)
+    
+    Returns a string like:
+    - YEAR_SEQ:        "2026-0001"
+    - PREFIX_YEAR_SEQ: "SFPS-2026-0001"
+    - CUSTOM:          raises ValidationError (admin must enter manually)
+    """
+    if not school.admission_number_format:
+        raise ValidationError("School has no admission number format configured.")
+
+    current_year = datetime.now().year
+    prefix = (school.admission_prefix or "").strip()
+    padding = school.admission_seq_padding or 4
+
+    format_type = school.admission_number_format
+
+    with transaction.atomic():  # Prevent race conditions in concurrent requests
+        # Get highest sequence for this school + year
+        # We filter by admission_date__year to separate per-year sequences
+        last_admission = Student.objects.filter(
+            school=school,
+            admission_date__year=current_year
+        ).order_by('-admission_number').first()
+
+        if last_admission and last_admission.admission_number:
+            try:
+                # Extract the numeric sequence part (last segment after '-')
+                last_seq_str = last_admission.admission_number.split('-')[-1]
+                last_seq = int(last_seq_str)
+                new_seq = last_seq + 1
+            except (ValueError, IndexError):
+                new_seq = 1
+        else:
+            new_seq = 1
+
+        seq_str = f"{new_seq:0{padding}d}"  # e.g. "0001", "00123"
+
+        if format_type == 'YEAR_SEQ':
+            return f"{current_year}-{seq_str}"
+
+        elif format_type == 'PREFIX_YEAR_SEQ':
+            if not prefix:
+                raise ValidationError(
+                    "Prefix is required for PREFIX_YEAR_SEQ format. "
+                    "Please set admission_prefix on the school."
+                )
+            return f"{prefix}-{current_year}-{seq_str}"
+
+        elif format_type == 'CUSTOM':
+            raise ValidationError(
+                "School uses CUSTOM admission number format. "
+                "Admission number must be entered manually by an admin."
+            )
+
+        else:
+            raise ValidationError(f"Unknown admission number format: {format_type}")

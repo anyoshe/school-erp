@@ -29,6 +29,8 @@ export interface School {
   country?: string;
   website?: string;
   currency?: string;
+  currency_symbol?: string;
+  currency_display?: string;
   academic_year_start_month?: number;
   academic_year_end_month?: number;
   term_system?: string;
@@ -84,13 +86,14 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
       }
 
       // 2. Decide which one to select as current
-      const savedId = localStorage.getItem("currentSchoolId");
+      // const savedId = localStorage.getItem("currentSchoolId");
+      const savedId = localStorage.getItem("active_school_id");
       let selected = savedId ? fetchedSchools.find((s) => s.id === savedId) : null;
 
       // Fallback: newest or first school
       if (!selected) {
-        selected = fetchedSchools.sort((a, b) => 
-          new Date(b.updated_at || b.created_at || 0).getTime() - 
+        selected = fetchedSchools.sort((a, b) =>
+          new Date(b.updated_at || b.created_at || 0).getTime() -
           new Date(a.updated_at || a.created_at || 0).getTime()
         )[0];
       }
@@ -101,7 +104,8 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
         const fullSchool = detailRes.data as School;
 
         setCurrentSchoolState(fullSchool);
-        localStorage.setItem("currentSchoolId", selected.id);
+        // localStorage.setItem("currentSchoolId", selected.id);
+        localStorage.setItem("active_school_id", selected.id);
         console.log("[Context] Current school loaded:", fullSchool.id, fullSchool.name);
       }
     } catch (err: any) {
@@ -127,12 +131,21 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
   };
 
   // Custom setter with persistence
+  // const setCurrentSchool = (school: School | null) => {
+  //   setCurrentSchoolState(school);
+  //   if (school) {
+  //     localStorage.setItem("currentSchoolId", school.id);
+  //   } else {
+  //     localStorage.removeItem("currentSchoolId");
+  //   }
+  // };
+  // Inside CurrentSchoolContext.tsx
   const setCurrentSchool = (school: School | null) => {
     setCurrentSchoolState(school);
     if (school) {
-      localStorage.setItem("currentSchoolId", school.id);
+      localStorage.setItem("active_school_id", school.id); // Updated key name
     } else {
-      localStorage.removeItem("currentSchoolId");
+      localStorage.removeItem("active_school_id");
     }
   };
 

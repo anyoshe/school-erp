@@ -8,6 +8,9 @@ import hashlib
 from apps.academics.models import GradeLevel
 from apps.students.models import Student
 from apps.school.models import School
+# At the very top of admissions/models.py, after other imports
+from apps.students.models import Student, Guardian, StudentGuardian, MedicalRecord, MedicalDocument
+from apps.school.models import generate_unique_admission_number
 
 
 class Application(models.Model):
@@ -106,6 +109,11 @@ class Application(models.Model):
     interview_completed_at = models.DateTimeField(null=True, blank=True)
     interview_score = models.IntegerField(null=True, blank=True)
     interviewer_name = models.CharField(max_length=100, blank=True)
+    # Add after accepted_at / acceptance_notes
+    offer_issued_at = models.DateTimeField(null=True, blank=True)
+    offer_method = models.CharField(max_length=20, blank=True)  # 'email', 'whatsapp', 'download', etc.
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    acceptance_notes = models.TextField(blank=True)
 
     # Documents / Media
     photo = models.ImageField(upload_to='admission_photos/', null=True, blank=True)
@@ -135,57 +143,114 @@ class Application(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
-        
         if self.status == self.Status.SUBMITTED and not self.submitted_at:
             self.submitted_at = timezone.now()
 
-        super().save(*args, **kwargs)
+        # Check if record actually exists in DB
+        old = Application.objects.filter(pk=self.pk).first()
+        
+        if old:
+            if self.status == self.Status.OFFERED and old.status != self.Status.OFFERED:
+                if not self.offer_issued_at:
+                    self.offer_issued_at = timezone.now()
+            
+            if self.status == self.Status.ACCEPTED and old.status != self.Status.ACCEPTED:
+                if not self.accepted_at:
+                    self.accepted_at = timezone.now()
 
-    def enroll_as_student(self, created_by_user):
-        if not self.admission_number:
-             self.admission_number = generate_unique_admission_number(self.school)
+        super().save(*args, **kwargs) 
+
+
+    def enroll_as_student(self, created_by_user, wizard_data=None):
         if self.status not in [self.Status.ACCEPTED, self.Status.ENROLLED]:
-            raise ValidationError("Only ACCEPTED or ENROLLED applications can be enrolled")
+            raise ValidationError("Only ACCEPTED applications can be enrolled")
 
         if self.student:
             raise ValidationError("Already enrolled")
 
-        # Determine if primary/elementary level (no exam fields needed)
-        is_primary_level = (
-            self.class_applied and
-            self.class_applied.education_level in ['PRE_PRIMARY', 'ELEMENTARY']
-        )
+        wd = wizard_data or {}
+
+        # Auto-generate admission number if missing
+        if not self.admission_number:
+            self.admission_number = generate_unique_admission_number(self.school)
+            self.save(update_fields=['admission_number'])
 
         student = Student.objects.create(
             school=self.school,
+            admission_number=self.admission_number,
+            learner_id=self.learner_id,                     # ← direct copy, no rename
+            entry_exam_id=self.entry_exam_id,
+            entry_exam_year=self.entry_exam_year,
             first_name=self.first_name,
             middle_name=self.middle_name,
             last_name=self.last_name,
+            preferred_name=self.preferred_name,
             gender=self.gender,
             date_of_birth=self.date_of_birth,
             nationality=self.nationality,
-            region=self.region,                  # generalized
-            district=self.district,
             religion=self.religion,
-            current_class=self.class_applied,
-            admission_date=timezone.now().date(),
-            admission_number=self.admission_number,
-            created_by=created_by_user,
-            learner_id=self.learner_id,
             photo=self.photo,
-
-            # Only copy exam fields if NOT primary level
-            entry_exam_id=self.entry_exam_id if not is_primary_level else "",
-            entry_exam_year=self.entry_exam_year if not is_primary_level else None,
-
-            # Health & emergency
+            address=self.address,
+            region=self.region,                             # ← direct copy
+            district=self.district,                         # ← direct copy
             blood_group=self.blood_group,
             allergies=self.allergies,
             chronic_conditions=self.chronic_conditions,
             disability=self.disability,
-            emergency_name=self.emergency_contact_name or self.primary_guardian_name,
-            emergency_phone=self.emergency_contact_phone or self.primary_guardian_phone,
-            emergency_relation=self.emergency_relationship or self.primary_guardian_relationship,
+            emergency_name=self.emergency_contact_name or wd.get('emergency_name'),
+            emergency_phone=self.emergency_contact_phone or wd.get('emergency_phone'),
+            emergency_relation=self.emergency_relationship or wd.get('emergency_relation'),
+            current_class=self.class_applied,
+            boarding_status=wd.get('boarding_status', 'DAY'),
+            special_needs=wd.get('special_needs', ''),
+            notes=wd.get('notes', ''),
+            created_by=created_by_user,
+            # Admin-added / completed fields from wizard
+            birth_certificate_number=wd.get("birth_certificate_number", ""),
+            passport_number=wd.get("passport_number", ""),
+            previous_school=wd.get("previous_school", ""),
+            previous_grade=wd.get("previous_grade", ""),
+            disability_type=wd.get("disability_type", ""),
+            special_needs_category=wd.get("special_needs_category", ""),
+            transport_mode=wd.get("transport_mode", "walking"),
+            transport_route=wd.get("transport_route", ""),
+            sponsor_name=wd.get("sponsor_name", ""),
+            section=wd.get('section', ''),
+            stream=wd.get('stream', ''),
+            house=wd.get('house', ''),
+            dorm_room=wd.get('dorm_room', ''),
+            vaccination_status=wd.get('vaccination_status', 'UNKNOWN'),
+            fee_structure=wd.get('fee_structure'),          # Link to finance app
+        )
+
+        # Medical record auto-created / updated
+        MedicalRecord.objects.update_or_create(
+            student=student,
+            defaults={
+                'school': self.school,
+                'blood_group': student.blood_group,
+                'allergies': student.allergies,
+                'chronic_conditions': student.chronic_conditions,
+                'vaccination_status': student.vaccination_status,
+                'recorded_by': created_by_user,
+            }
+        )
+
+        # Primary guardian link
+        primary_guardian, _ = Guardian.objects.get_or_create(
+            school=self.school,
+            phone=self.primary_guardian_phone,
+            defaults={
+                'full_name': self.primary_guardian_name,
+                'email': self.primary_guardian_email,
+                'relationship': self.primary_guardian_relationship,
+                'id_number': self.primary_guardian_id_number,
+            }
+        )
+        StudentGuardian.objects.get_or_create(
+            student=student,
+            guardian=primary_guardian,
+            defaults={'is_primary': True}
         )
 
         self.student = student
@@ -193,13 +258,11 @@ class Application(models.Model):
         self.save()
 
         return student
-
     def __str__(self):
         return f"{self.first_name} {self.last_name} - {self.admission_number or 'Draft'}"
 
     class Meta:
         ordering = ['-submitted_at', 'last_name']
-
 
 
 class ApplicationDocument(models.Model):

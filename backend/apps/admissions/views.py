@@ -15,6 +15,7 @@ from .serializers import (
 )
 from apps.students.models import Student
 from apps.school.models import School
+from django.utils import timezone
 
 
 class ApplicationViewSet(viewsets.ModelViewSet):
@@ -93,6 +94,23 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         self.perform_create(serializer)
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
+    def perform_update(self, serializer):
+        instance = serializer.instance
+        new_status = serializer.validated_data.get('status')
+
+        if new_status:
+            # Only set timestamp if status is actually changing to this value
+            if new_status == Application.Status.OFFERED and instance.status != Application.Status.OFFERED:
+                serializer.validated_data['offer_issued_at'] = timezone.now()
+                # Optional: if frontend sends offer_method
+                if 'offer_method' in serializer.validated_data:
+                    serializer.validated_data['offer_method'] = serializer.validated_data['offer_method']
+
+            if new_status == Application.Status.ACCEPTED and instance.status != Application.Status.ACCEPTED:
+                serializer.validated_data['accepted_at'] = timezone.now()
+
+        serializer.save()
 
     @action(detail=True, methods=['post'], url_path='enroll')
     def enroll(self, request, pk=None):

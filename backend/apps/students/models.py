@@ -3,8 +3,10 @@ import uuid
 from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.utils import timezone
 from apps.accounts.models import User  # Assuming custom User
 from apps.school.models import School  # Multi-tenancy
+from apps.academics.models import GradeLevel  # For current_class
 
 User = settings.AUTH_USER_MODEL
 
@@ -22,71 +24,99 @@ class Student(models.Model):
         OTHER = "OTHER", "Other"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
+
     # Multi-tenancy
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='students')
-    
-    # Identification
+
+    # Identification (mirrors Application)
     admission_number = models.CharField(max_length=50, unique=True)
-    upi_number = models.CharField(max_length=50, blank=True, unique=True)  # Kenyan NEMIS UPI
-    nemis_id = models.CharField(max_length=50, blank=True)  # For NEMIS integration
-    
-    # Personal Info
+    learner_id = models.CharField(max_length=50, blank=True, verbose_name="Learner ID / National Student ID")
+    entry_exam_id = models.CharField(max_length=50, blank=True, verbose_name="Entry / National Exam ID")
+    entry_exam_year = models.PositiveIntegerField(null=True, blank=True)
+
+    # Personal Info (mirrors Application)
     first_name = models.CharField(max_length=100)
     middle_name = models.CharField(max_length=100, blank=True)
     last_name = models.CharField(max_length=100)
-    gender = models.CharField(max_length=10, choices=Gender.choices)
-    date_of_birth = models.DateField()
-    nationality = models.CharField(max_length=50, default="Kenyan")
-    county = models.CharField(max_length=100, blank=True)  # Kenyan-specific
-    sub_county = models.CharField(max_length=100, blank=True)
+    preferred_name = models.CharField(max_length=100, blank=True)
+    gender = models.CharField(max_length=10, choices=Gender.choices, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    nationality = models.CharField(max_length=100, blank=True)
     religion = models.CharField(max_length=50, blank=True)
-    photo = models.ImageField(upload_to='student_photos/', blank=True, null=True)
+    photo = models.ImageField(upload_to='student_photos/', null=True, blank=True)
 
-    kcpe_index = models.CharField(max_length=20, blank=True)  # Renamed for consistency
-    kcpe_year = models.PositiveIntegerField(null=True, blank=True)
-    # upi_number already exists
+    # Additional Personal Info
+    birth_certificate_number = models.CharField(max_length=50, blank=True, verbose_name="Birth Certificate Number")
+    passport_number = models.CharField(max_length=50, blank=True, verbose_name="Passport Number (non-Kenyan)")
+    previous_school = models.CharField(max_length=255, blank=True, verbose_name="Previous School Name & Address")
+    previous_grade = models.CharField(max_length=50, blank=True, verbose_name="Previous Grade/Class")
+    disability_type = models.CharField(max_length=100, blank=True, verbose_name="Disability Type")
+    special_needs_category = models.CharField(max_length=100, blank=True, verbose_name="Special Needs Category")
+    transport_mode = models.CharField(
+        max_length=50,
+        choices=[("walking", "Walking"), ("private", "Private/Parent"), ("school_bus", "School Bus"), ("public", "Public Transport")],
+        default="walking"
+    )
+    transport_route = models.CharField(max_length=100, blank=True, verbose_name="Bus Route/Stop")
+    sponsor_name = models.CharField(max_length=150, blank=True, verbose_name="Sponsor / Bursary Organization")
+
+    # Address (mirrors Application)
+    address = models.TextField(blank=True)
+    region = models.CharField(max_length=100, blank=True)
+    district = models.CharField(max_length=100, blank=True)
+
+    # Academic Info (partly mirrored, partly operational)
+    current_class = models.ForeignKey(
+        GradeLevel,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='students'
+    )
+    section = models.CharField(max_length=10, blank=True)               # A, B, C...
+    stream = models.CharField(max_length=50, blank=True)                # Science, Arts...
+    house = models.CharField(max_length=50, blank=True)                 # Red House, etc.
+    boarding_status = models.CharField(
+        max_length=20,
+        choices=[('DAY', 'Day'), ('BOARDING', 'Boarding'), ('MIXED', 'Mixed')],
+        default='DAY'
+    )
+    dorm_room = models.CharField(max_length=20, blank=True)
+
+    # Health & Emergency (mirrors Application + extras)
     blood_group = models.CharField(max_length=5, blank=True)
-    allergies = models.TextField(blank=True, help_text="e.g. peanuts, bee stings, penicillin")
+    allergies = models.TextField(blank=True)
     chronic_conditions = models.TextField(blank=True)
     disability = models.CharField(max_length=100, blank=True)
+    vaccination_status = models.CharField(
+        max_length=20,
+        choices=[
+            ("UP_TO_DATE", "Up to date"),
+            ("PARTIAL", "Partial"),
+            ("NOT_IMMUNIZED", "Not immunized"),
+            ("UNKNOWN", "Unknown"),
+        ],
+        default="UNKNOWN"
+    )
     emergency_name = models.CharField(max_length=100, blank=True)
     emergency_phone = models.CharField(max_length=20, blank=True)
     emergency_relation = models.CharField(max_length=50, blank=True)
-    
-    # Academic Info
-    current_class = models.ForeignKey(
-         'academics.GradeLevel', 
+
+    # Operational / Management Fields (admin fills or confirms)
+    special_needs = models.TextField(blank=True, verbose_name="Special Educational Needs")
+    admission_date = models.DateField(default=timezone.now)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    notes = models.TextField(blank=True)
+
+    # Finance Link (no stored balance — dynamic from finance app)
+    fee_structure = models.ForeignKey(
+        'finance.FeeStructure', 
         on_delete=models.SET_NULL, 
         null=True, 
         blank=True,
         related_name='students'
-    )  # Assuming academics app has Class model
-    stream = models.CharField(max_length=50, blank=True)  # e.g. "Red", "Blue" for Kenyan schools
-    boarding_status = models.CharField(
-        max_length=20, 
-        choices=[('DAY', 'Day'), ('BOARDING', 'Boarding'), ('MIXED', 'Mixed')],
-        default='DAY'
     )
-    special_needs = models.TextField(blank=True)  # For inclusive education in Kenya
-    admission_date = models.DateField(auto_now_add=True)
-    graduation_date = models.DateField(null=True, blank=True)
-    
-    # Financial Info
-    fee_balance = models.DecimalField(
-        max_digits=12, 
-        decimal_places=2, 
-        default=0,
-        validators=[MinValueValidator(0)]
-    )
-    scholarship = models.BooleanField(default=False)
-    bursary_amount = models.DecimalField(
-        max_digits=12, 
-        decimal_places=2, 
-        default=0,
-        blank=True
-    )
-    
+
     # Other Links
     transport_assignment = models.ForeignKey(
         'transport.StudentAssignment', 
@@ -102,14 +132,8 @@ class Student(models.Model):
         blank=True,
         related_name='student_profile'
     )
-    
-    # Status & Admin
-    status = models.CharField(
-        max_length=20, 
-        choices=Status.choices, 
-        default=Status.ACTIVE
-    )
-    notes = models.TextField(blank=True)
+
+    # Status & Audit
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(
@@ -132,7 +156,15 @@ class Student(models.Model):
 
     @property
     def full_name(self):
-        return f"{self.first_name} {self.middle_name} {self.last_name}".strip()
+        return f"{self.first_name} {self.middle_name or ''} {self.last_name}".strip()
+
+    def get_outstanding_balance(self):
+        """Dynamic calculation from finance app — no stored balance"""
+        from apps.finance.models import Invoice, Payment
+        invoices = Invoice.objects.filter(student=self)
+        total_due = invoices.aggregate(models.Sum('amount_due'))['amount_due__sum'] or 0
+        total_paid = Payment.objects.filter(invoice__in=invoices).aggregate(models.Sum('amount'))['amount__sum'] or 0
+        return total_due - total_paid
 
 
 class Guardian(models.Model):
