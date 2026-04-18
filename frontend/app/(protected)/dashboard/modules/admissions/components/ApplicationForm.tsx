@@ -284,8 +284,8 @@ export default function ApplicationForm({
   // Options (global / neutral)
   const genderOptions = ["MALE", "FEMALE", "OTHER"];
   const relationshipOptions = ["PARENT", "GUARDIAN", "RELATIVE", "OTHER"];
-  // const religionOptions = ["CHRISTIAN", "MUSLIM", "HINDU", "BUDDHIST", "JEWISH", "NONE", "OTHER"];
-  // const categoryOptions = ["GENERAL", "SCHOLARSHIP", "BURSARY", "SPECIAL_NEEDS", "INTERNATIONAL", "OTHER"];
+  const religionOptions = ["CHRISTIAN", "MUSLIM", "HINDU", "BUDDHIST", "JEWISH", "NONE", "OTHER"];
+  const categoryOptions = ["GENERAL", "SCHOLARSHIP", "BURSARY", "SPECIAL_NEEDS", "INTERNATIONAL", "OTHER"];
   const bloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "UNKNOWN"];
   const placementOptions = ["SELF", "PUBLIC", "TRANSFER", "OTHER"];
 

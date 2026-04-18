@@ -1,15 +1,14 @@
 # apps/admissions/models.py
 import uuid
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from decimal import Decimal
 import hashlib
 from apps.academics.models import GradeLevel
-from apps.students.models import Student
 from apps.school.models import School
-# At the very top of admissions/models.py, after other imports
-from apps.students.models import Student, Guardian, StudentGuardian, MedicalRecord, MedicalDocument
+from apps.students.models import Student, Guardian, StudentGuardian, MedicalRecord
 from apps.school.models import generate_unique_admission_number
 
 
@@ -127,7 +126,7 @@ class Application(models.Model):
     admission_date = models.DateField(null=True, blank=True)
 
     student = models.OneToOneField(
-        Student,
+        "students.Student", 
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -160,7 +159,7 @@ class Application(models.Model):
 
         super().save(*args, **kwargs) 
 
-
+    @transaction.atomic
     def enroll_as_student(self, created_by_user, wizard_data=None):
         if self.status not in [self.Status.ACCEPTED, self.Status.ENROLLED]:
             raise ValidationError("Only ACCEPTED applications can be enrolled")
@@ -170,22 +169,69 @@ class Application(models.Model):
 
         wd = wizard_data or {}
 
-        # Auto-generate admission number if missing
+            # === SAFE SINGLE INITIAL DEPOSIT CREATION ===
+        try:
+            initial_amount = Decimal(str(wd.get('initial_payment_amount', 0) or 0))
+            reference = str(wd.get('initial_payment_reference', '')).strip()
+            print(f"[ENROLL PAYMENT DEBUG] Application={self.id} | Amount={initial_amount} | Ref='{reference}'")
+        except Exception as e:
+            print(f"[ENROLL PAYMENT DEBUG] Error parsing payment data: {e}")
+            initial_amount = Decimal('0')
+            reference = ''
+
+        if initial_amount > 0:
+            # Strong guard: check by application + amount + reference
+            if not AdmissionFeePayment.objects.filter(
+                application=self,
+                amount=initial_amount,
+                receipt_number=reference
+            ).exists():
+                payment = AdmissionFeePayment.objects.create(
+                    application=self,
+                    amount=initial_amount,
+                    payment_method=reference or "Initial Enrollment Payment",
+                    receipt_number=reference,
+                )
+                print(f"[ENROLL PAYMENT DEBUG] ✅ CREATED NEW PAYMENT | ID={payment.id} | Amount={initial_amount}")
+            else:
+                print(f"[ENROLL PAYMENT DEBUG] ⚠️ SKIPPED - Payment already exists for this combo")
+        else:
+            print("[ENROLL PAYMENT DEBUG] No initial payment provided")
+        
+         # Auto-generate admission number if missing
         if not self.admission_number:
-            self.admission_number = generate_unique_admission_number(self.school)
-            self.save(update_fields=['admission_number'])
+            try:
+                self.admission_number = generate_unique_admission_number(self.school)
+                print(f"[ENROLL DEBUG] Generated admission number: {self.admission_number}")
+            except Exception as e:
+                print(f"[ENROLL DEBUG] Error generating admission number: {e}")
+                raise
+
+        # Save safely
+        self.save(update_fields=['admission_number'])
+
+        fee_structure_obj = None
+        if wd.get('fee_structure'):
+            try:
+                from apps.finance.models import FeeStructure
+                fee_structure_obj = FeeStructure.objects.get(pk=wd.get('fee_structure'))
+            except (FeeStructure.DoesNotExist, ValueError, TypeError):
+                fee_structure_obj = None
+
+        cleaned_gender = str(self.gender or '').strip()[:10]
+        cleaned_section = str(wd.get('section', '') or '').strip()[:50]
 
         student = Student.objects.create(
             school=self.school,
             admission_number=self.admission_number,
-            learner_id=self.learner_id,                     # ← direct copy, no rename
+            learner_id=wd.get('learner_id') or self.learner_id,                    # ← direct copy, no rename
             entry_exam_id=self.entry_exam_id,
             entry_exam_year=self.entry_exam_year,
             first_name=self.first_name,
             middle_name=self.middle_name,
             last_name=self.last_name,
             preferred_name=self.preferred_name,
-            gender=self.gender,
+            gender=cleaned_gender,
             date_of_birth=self.date_of_birth,
             nationality=self.nationality,
             religion=self.religion,
@@ -215,13 +261,65 @@ class Application(models.Model):
             transport_mode=wd.get("transport_mode", "walking"),
             transport_route=wd.get("transport_route", ""),
             sponsor_name=wd.get("sponsor_name", ""),
-            section=wd.get('section', ''),
+            section=cleaned_section,
             stream=wd.get('stream', ''),
             house=wd.get('house', ''),
             dorm_room=wd.get('dorm_room', ''),
             vaccination_status=wd.get('vaccination_status', 'UNKNOWN'),
-            fee_structure=wd.get('fee_structure'),          # Link to finance app
+            fee_structure=fee_structure_obj,
         )
+
+        # Create fee assignment if fee structure is provided
+        if fee_structure_obj:
+            from apps.finance.models import StudentFeeAssignment
+            # assignment = StudentFeeAssignment.objects.create(
+            #     student=student,
+            #     fee_structure=fee_structure_obj,
+            #     payment_plan_id=wd.get('payment_plan'),
+            #     waiver_amount=Decimal(str(wd.get('waiver_amount', 0))),
+            #     waiver_reason=wd.get('waiver_reason', ''),
+            #     is_waived=wd.get('is_waived', False),
+            #     assigned_by=created_by_user,
+            # )
+            # selected_optional_items = wd.get('selected_optional_items', []) or []
+            # if selected_optional_items:
+            #     assignment.selected_optional_items.set(selected_optional_items)
+
+            custom_due_date = None
+            remaining_payment_due_date = wd.get('remaining_payment_due_date') or wd.get('balance_due_date')
+            if remaining_payment_due_date:
+                try:
+                    from datetime import date
+                    custom_due_date = date.fromisoformat(str(remaining_payment_due_date))
+                except ValueError:
+                    custom_due_date = None
+
+            item_amounts = wd.get('item_amounts', {}) or {}
+            if not isinstance(item_amounts, dict):
+                item_amounts = {}
+
+            assignment = StudentFeeAssignment.objects.create(
+                student=student,
+                fee_structure=fee_structure_obj,
+                payment_plan_id=wd.get('payment_plan'),           # ← This was missing
+                custom_due_date=custom_due_date,
+                waiver_amount=Decimal(str(wd.get('waiver_amount', 0))),
+                waiver_reason=wd.get('waiver_reason', ''),
+                is_waived=bool(wd.get('is_waived', False)),
+                item_amounts=item_amounts,
+                assigned_by=created_by_user,
+            )
+
+            # Handle selected optional items
+            selected_optional_items = wd.get('selected_optional_items', []) or []
+            if selected_optional_items:
+                assignment.selected_optional_items.set(selected_optional_items)
+
+            try:
+                from apps.finance.signals import regenerate_invoices_for_assignment
+                regenerate_invoices_for_assignment(assignment)
+            except Exception as e:
+                print(f"[ENROLL DEBUG] Failed to regenerate invoices for assignment {assignment.id}: {e}")
 
         # Medical record auto-created / updated
         MedicalRecord.objects.update_or_create(
@@ -231,7 +329,7 @@ class Application(models.Model):
                 'blood_group': student.blood_group,
                 'allergies': student.allergies,
                 'chronic_conditions': student.chronic_conditions,
-                'vaccination_status': student.vaccination_status,
+                'immunization_status': student.vaccination_status,
                 'recorded_by': created_by_user,
             }
         )
@@ -296,6 +394,13 @@ class AdmissionFeePayment(models.Model):
     payment_date = models.DateField(auto_now_add=True)
     payment_method = models.CharField(max_length=50, blank=True)
     receipt_number = models.CharField(max_length=50, blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self.receipt_number:
+            school_prefix = getattr(self.application.school, 'admission_prefix', 'SCH')
+            timestamp = timezone.now().strftime('%Y%m%d%H%M%S')
+            self.receipt_number = f"ADM-{school_prefix}-{timestamp}-{str(self.application.id)[:8]}"
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Payment {self.receipt_number or ''} - {self.amount}"

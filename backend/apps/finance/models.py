@@ -1,4 +1,5 @@
 # finance/models.py
+from decimal import Decimal
 import uuid
 from django.db.models import Sum
 from django.db.models import F
@@ -115,12 +116,10 @@ class FeeStructure(models.Model):
 
     @property
     def total_amount(self):
-        return (
-            self.structure_items.aggregate(
-                total=models.Sum("amount")
-            )["total"]
-            or 0
-        )
+        """Total of ALL items in the structure (mandatory + all optional)"""
+        return self.structure_items.aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal('0')
 
 
 class FeeStructureItem(models.Model):
@@ -167,6 +166,24 @@ class PaymentPlan(models.Model):
     # How many days between each payment? (7 for weekly, 30 for monthly)
     days_interval = models.IntegerField(default=30) 
     is_active = models.BooleanField(default=True)
+    # Add these fields to your existing PaymentPlan model
+
+    description = models.TextField(blank=True, 
+        help_text="Shown to parents in the enrollment wizard")
+    
+    is_recommended = models.BooleanField(default=False, 
+        help_text="Highlight this plan in the frontend dropdown")
+    
+    # Optional: Allow different first installment (e.g. 40% down, then equal rest)
+    first_installment_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, 
+        default=0, 
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="0 = equal installments. Example: 30 means first payment is 30% of balance"
+    )
+
+    # Future-proof field
+    notes = models.TextField(blank=True)
 
     def __str__(self):
         return f"{self.name} ({self.plan_type})"
@@ -196,6 +213,8 @@ class PaymentPlanInstallment(models.Model):
         total = others.aggregate(total=models.Sum("percentage"))["total"] or 0
         if total + self.percentage > 100:
             raise ValidationError(f"Total percentage would be {total + self.percentage}%, which exceeds 100%.")
+        
+
 class StudentFeeAssignment(models.Model):
     """
     Personalized fee assignment to a student (links structure + overrides/waivers)
@@ -211,6 +230,11 @@ class StudentFeeAssignment(models.Model):
         null=True,
         blank=True
     )
+    custom_due_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Due date for the remaining balance when using a custom/partial payment plan"
+    )
     assigned_at = models.DateField(auto_now_add=True)
     assigned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="fee_assignments")
     selected_optional_items = models.ManyToManyField(
@@ -219,24 +243,100 @@ class StudentFeeAssignment(models.Model):
         related_name="assigned_students"
     )
 
+    item_amounts = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Deposit allocation amounts for each fee item within this assignment. Keys are FeeItem IDs."
+    )
+
     class Meta:
         ordering = ["-assigned_at"]
 
     def __str__(self):
         return f"{self.student.full_name} - {self.fee_structure.name if self.fee_structure else 'Custom'}"
 
+    def get_assignment_items(self):
+        """Return the line items that make up this fee assignment, including deposit allocations."""
+        if not self.fee_structure:
+            return []
+
+        structure_items = self.fee_structure.structure_items.select_related('item__category').all()
+        optional_item_ids = set(self.fee_structure.available_optional_items.values_list('id', flat=True))
+
+        admission_item_ids = {
+            si.item_id for si in structure_items
+            if 'admission' in (getattr(si.item.category, 'name', '') or '').strip().lower()
+        }
+
+        selected_optional_ids = set(self.selected_optional_items.values_list('id', flat=True))
+        deposit_allocations = {str(k): Decimal(str(v)) for k, v in (self.item_amounts or {}).items()}
+
+        # Apply waiver proportionally across admission items, then allocate deposits
+        admission_items = [si for si in structure_items if si.item_id in admission_item_ids]
+        admission_total = sum(si.amount for si in admission_items)
+        waiver_remaining = Decimal(str(self.waiver_amount or 0)) if self.is_waived else Decimal('0')
+
+        admission_net_by_item = {}
+        for si in admission_items:
+            if admission_total > 0 and waiver_remaining > 0:
+                share = si.amount / admission_total
+                item_waiver = (waiver_remaining * share).quantize(Decimal('0.01'))
+            else:
+                item_waiver = Decimal('0')
+            admission_net_by_item[si.item_id] = max(Decimal('0'), si.amount - item_waiver)
+
+        items = []
+        for si in structure_items:
+            item = si.item
+            item_id = item.id
+            is_optional = item_id in optional_item_ids and item_id not in admission_item_ids
+            include_item = not is_optional or item_id in selected_optional_ids
+            if not include_item:
+                continue
+
+            cost = admission_net_by_item.get(item_id, si.amount)
+            allocated = min(deposit_allocations.get(str(item_id), Decimal('0')), cost)
+            remaining = max(Decimal('0'), cost - allocated)
+
+            items.append({
+                'item': item,
+                'item_id': item_id,
+                'description': item.name,
+                'category': item.category.name,
+                'cost': cost,
+                'deposit_allocated': allocated,
+                'remaining_amount': remaining,
+                'is_optional': is_optional,
+                'is_admission': item_id in admission_item_ids,
+            })
+
+        def sort_key(entry):
+            desc = entry['description'].lower()
+            if 'tuition' in desc:
+                return (1, entry['category'], entry['description'])
+            return (0, entry['category'], entry['description'])
+
+        return sorted(items, key=sort_key)
+
+    @property
+    def assigned_total(self):
+        if not self.fee_structure:
+            return Decimal('0')
+
+        total = sum(entry['cost'] for entry in self.get_assignment_items())
+        return max(Decimal('0'), total)
+
+    @property
+    def remaining_total(self):
+        if not self.fee_structure:
+            return Decimal('0')
+
+        total = sum(entry['remaining_amount'] for entry in self.get_assignment_items())
+        return max(Decimal('0'), total)
+
     @property
     def effective_total(self):
-        base_total = self.fee_structure.total_amount if self.fee_structure else 0
-        # Add the cost of optional items
-        optional_total = sum(
-            FeeStructureItem.objects.filter(
-                structure=self.fee_structure, 
-                item=item
-            ).first().amount or 0 
-            for item in self.selected_optional_items.all()
-        )
-        return max(0, base_total + optional_total - self.waiver_amount)
+        return self.assigned_total
 
 
 class Invoice(models.Model):
@@ -272,10 +372,6 @@ class Invoice(models.Model):
         # amount_due + any penalties
         return self.amount_due + self.late_fee_applied
 
-    def save(self, *args, **kwargs):
-        # Update balance based on current total
-        self.balance = (self.amount_due + self.late_fee_applied) - self.amount_paid
-
     class Meta:
         ordering = ["-generated_at"]
         # unique_together = ["student", "term", "academic_year"]
@@ -287,8 +383,8 @@ class Invoice(models.Model):
     def save(self, *args, **kwargs):
         if not self.invoice_number:
             self.invoice_number = self.generate_invoice_number()
-        self.balance = self.amount_due - self.amount_paid
-        self.is_paid = self.balance <= 0
+        self.balance = max(Decimal('0'), self.current_total_due - self.amount_paid)
+        self.is_paid = self.amount_paid >= self.current_total_due
         if self.is_paid and not self.paid_at:
             self.paid_at = timezone.now()
         super().save(*args, **kwargs)
@@ -356,15 +452,17 @@ class Payment(models.Model):
     def save(self, *args, **kwargs):
         if self.amount < 0:
             raise ValidationError("Payment amount cannot be negative.")
+
+        is_new = self._state.adding
         super().save(*args, **kwargs)
 
-        # Update invoice
-        # self.invoice.amount_paid += self.amount
-        # self.invoice.save()
-
-        Invoice.objects.filter(id=self.invoice.id).update(
-        amount_paid=F('amount_paid') + self.amount
-        )
+        if is_new:
+            # Apply this payment to the linked invoice and refresh balance/status
+            Invoice.objects.filter(id=self.invoice_id).update(
+                amount_paid=F('amount_paid') + self.amount
+            )
+            self.invoice.refresh_from_db(fields=['amount_paid', 'amount_due', 'late_fee_applied'])
+            self.invoice.save(update_fields=['balance', 'is_paid', 'paid_at'])
 class LateFeeRule(models.Model):
 
     school = models.ForeignKey(School, on_delete=models.CASCADE)

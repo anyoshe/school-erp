@@ -217,66 +217,138 @@ class School(models.Model):
     
 
 
+# def generate_unique_admission_number(school):
+#     """
+#     Generates a unique admission number using the school's configured format.
+    
+#     Uses existing School fields:
+#     - admission_number_format (YEAR_SEQ, PREFIX_YEAR_SEQ, CUSTOM)
+#     - admission_prefix (optional)
+#     - admission_seq_padding (number of digits, default 4)
+    
+#     Returns a string like:
+#     - YEAR_SEQ:        "2026-0001"
+#     - PREFIX_YEAR_SEQ: "SFPS-2026-0001"
+#     - CUSTOM:          raises ValidationError (admin must enter manually)
+#     """
+#     if not school.admission_number_format:
+#         raise ValidationError("School has no admission number format configured.")
+
+#     from apps.students.models import Student
+
+#     current_year = datetime.now().year
+#     prefix = (school.admission_prefix or "").strip()
+#     padding = school.admission_seq_padding or 4
+
+#     format_type = school.admission_number_format
+
+#     with transaction.atomic():  # Prevent race conditions in concurrent requests
+#         # Lock the school row to ensure sequential numbering even under concurrent requests
+#         School.objects.select_for_update().filter(pk=school.pk).first()
+
+#         # Start from the latest existing student admission number in this school+year
+#         last_admission = Student.objects.filter(
+#             school=school,
+#             admission_date__year=current_year
+#         ).order_by('-admission_number').first()
+
+#         if last_admission and last_admission.admission_number:
+#             try:
+#                 last_seq_str = last_admission.admission_number.split('-')[-1]
+#                 current_seq = int(last_seq_str)
+#             except (ValueError, IndexError):
+#                 current_seq = 0
+#         else:
+#             current_seq = 0
+
+#         # Resolve collisions by incrementing until unused number is found
+#         while True:
+#             current_seq += 1
+#             seq_str = f"{current_seq:0{padding}d}"
+
+#             if format_type == 'YEAR_SEQ':
+#                 candidate = f"{current_year}-{seq_str}"
+#             elif format_type == 'PREFIX_YEAR_SEQ':
+#                 if not prefix:
+#                     raise ValidationError(
+#                         "Prefix is required for PREFIX_YEAR_SEQ format. "
+#                         "Please set admission_prefix on the school."
+#                     )
+#                 candidate = f"{prefix}-{current_year}-{seq_str}"
+#             else:
+#                 raise ValidationError(f"Unknown admission number format: {format_type}")
+
+#             if not Student.objects.filter(school=school, admission_number=candidate).exists():
+#                 return candidate
+#             # if candidate exists (possibly from another concurrent transaction), continue loop
 def generate_unique_admission_number(school):
     """
-    Generates a unique admission number using the school's configured format.
-    
-    Uses existing School fields:
-    - admission_number_format (YEAR_SEQ, PREFIX_YEAR_SEQ, CUSTOM)
-    - admission_prefix (optional)
-    - admission_seq_padding (number of digits, default 4)
-    
-    Returns a string like:
-    - YEAR_SEQ:        "2026-0001"
-    - PREFIX_YEAR_SEQ: "SFPS-2026-0001"
-    - CUSTOM:          raises ValidationError (admin must enter manually)
+    Generates a truly unique admission number using school's configuration.
+    Safely handles deleted records and race conditions.
     """
     if not school.admission_number_format:
         raise ValidationError("School has no admission number format configured.")
 
-    current_year = datetime.now().year
+    from apps.admissions.models import Application
+    from apps.students.models import Student
+    from django.utils import timezone
+
+    current_year = timezone.now().year
     prefix = (school.admission_prefix or "").strip()
     padding = school.admission_seq_padding or 4
-
     format_type = school.admission_number_format
 
-    with transaction.atomic():  # Prevent race conditions in concurrent requests
-        # Get highest sequence for this school + year
-        # We filter by admission_date__year to separate per-year sequences
-        last_admission = Student.objects.filter(
+    with transaction.atomic():
+        # Lock the school to prevent concurrent generation issues
+        School.objects.select_for_update().filter(pk=school.pk).first()
+
+        # Check BOTH Application and Student tables for existing numbers in this year
+        existing_numbers = set()
+
+        # From Applications
+        apps = Application.objects.filter(
             school=school,
-            admission_date__year=current_year
-        ).order_by('-admission_number').first()
+            admission_number__startswith=str(current_year)
+        ).values_list('admission_number', flat=True)
+        existing_numbers.update(apps)
 
-        if last_admission and last_admission.admission_number:
+        # From Students (in case some are already enrolled)
+        students = Student.objects.filter(
+            school=school,
+            admission_number__startswith=str(current_year)
+        ).values_list('admission_number', flat=True)
+        existing_numbers.update(students)
+
+        # Find the highest sequence number used this year
+        max_seq = 0
+        for num in existing_numbers:
             try:
-                # Extract the numeric sequence part (last segment after '-')
-                last_seq_str = last_admission.admission_number.split('-')[-1]
-                last_seq = int(last_seq_str)
-                new_seq = last_seq + 1
+                # Extract the last part after the last '-'
+                seq_part = num.split('-')[-1]
+                seq = int(seq_part)
+                if seq > max_seq:
+                    max_seq = seq
             except (ValueError, IndexError):
-                new_seq = 1
-        else:
-            new_seq = 1
+                continue
 
-        seq_str = f"{new_seq:0{padding}d}"  # e.g. "0001", "00123"
+        # Generate next number, incrementing until we find a free one
+        while True:
+            next_seq = max_seq + 1
+            seq_str = f"{next_seq:0{padding}d}"
 
-        if format_type == 'YEAR_SEQ':
-            return f"{current_year}-{seq_str}"
+            if format_type == 'YEAR_SEQ':
+                candidate = f"{current_year}-{seq_str}"
+            elif format_type == 'PREFIX_YEAR_SEQ':
+                if not prefix:
+                    raise ValidationError("Prefix is required for PREFIX_YEAR_SEQ format.")
+                candidate = f"{prefix}-{current_year}-{seq_str}"
+            else:
+                raise ValidationError(f"Unknown admission number format: {format_type}")
 
-        elif format_type == 'PREFIX_YEAR_SEQ':
-            if not prefix:
-                raise ValidationError(
-                    "Prefix is required for PREFIX_YEAR_SEQ format. "
-                    "Please set admission_prefix on the school."
-                )
-            return f"{prefix}-{current_year}-{seq_str}"
+            # Final safety check
+            if (not Application.objects.filter(school=school, admission_number=candidate).exists() and
+                not Student.objects.filter(school=school, admission_number=candidate).exists()):
+                print(f"[ADMISSION NUMBER] Generated: {candidate}")
+                return candidate
 
-        elif format_type == 'CUSTOM':
-            raise ValidationError(
-                "School uses CUSTOM admission number format. "
-                "Admission number must be entered manually by an admin."
-            )
-
-        else:
-            raise ValidationError(f"Unknown admission number format: {format_type}")
+            max_seq = next_seq  # continue incrementing if somehow taken

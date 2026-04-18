@@ -19,6 +19,7 @@ export default function StudentTable({ students, onEdit, onDelete }: Props) {
           <th className="p-3">Name</th>
           <th className="p-3">Gender</th>
           <th className="p-3">Date of Birth</th>
+          <th className="p-3">Admission Date</th>
           <th className="p-3">Class</th>
           <th className="p-3">Status</th>
           <th className="p-3"></th>
@@ -53,7 +54,13 @@ export default function StudentTable({ students, onEdit, onDelete }: Props) {
             </td>
 
             <td className="p-3">
-              {s.current_class ?? "—"}
+              {s.admission_date
+                ? new Date(s.admission_date).toLocaleDateString()
+                : "-"}
+            </td>
+
+            <td className="p-3">
+              {s.current_class ? s.current_class.name || s.current_class.short_name || "—" : "—"}
             </td>
 
             <td className="p-3">

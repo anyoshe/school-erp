@@ -14,11 +14,24 @@ export interface Student {
   gender?: "MALE" | "FEMALE" | "OTHER";
   date_of_birth?: string;
   nationality?: string;
+  address?: string;
+  region?: string;
+  district?: string;
   county?: string;
   sub_county?: string;
   religion?: string;
   photo?: string;
-  current_class?: string; // UUID of GradeLevel
+  current_class?: {
+    id: string;
+    name: string;
+    short_name?: string;
+    code?: string;
+    order?: number;
+    education_level?: string;
+    pathway?: string;
+    curriculum?: string;
+    school?: string;
+  } | null;
   stream?: string;
   boarding_status?: "DAY" | "BOARDING" | "MIXED";
   special_needs?: string;

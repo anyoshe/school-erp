@@ -16,6 +16,9 @@ if (typeof window !== "undefined") {
     const token = getToken();
     const schoolId = getActiveSchoolId(); // store in localStorage or cookie
     
+    console.log("[API] Making request to:", config.url);
+    console.log("[API] Token present:", !!token);
+    console.log("[API] School ID:", schoolId);
 
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -23,6 +26,7 @@ if (typeof window !== "undefined") {
 
     if (schoolId && config.headers) {
       config.headers["X-School-ID"] = schoolId;
+      console.log("[API] Added X-School-ID header:", schoolId);
     }
 
     // Handle FormData properly

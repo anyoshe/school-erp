@@ -14,7 +14,9 @@ export function useStudents() {
     setIsError(false);
 
     try {
+      console.log("[useStudents] Fetching students...");
       const data = await studentService.getAll();
+      console.log("[useStudents] API response:", data);
 
       // Normalize response - handle both array and paginated response
       const list = Array.isArray(data)
@@ -22,6 +24,8 @@ export function useStudents() {
         : Array.isArray((data as any)?.results)
           ? (data as any).results
           : [];
+
+      console.log("[useStudents] Normalized list:", list);
 
       // Map to Student interface (already in correct format from API)
       const mapped: Student[] = list.map((s: any) => ({
@@ -56,6 +60,7 @@ export function useStudents() {
         _offline: s._offline ?? false,
       }));
 
+      console.log("[useStudents] Mapped students:", mapped);
       setStudents(mapped);
     } catch (err) {
       console.error("Failed to load students", err);

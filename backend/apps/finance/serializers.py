@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from rest_framework import serializers
 from django.db import transaction
 from django.utils import timezone
@@ -90,10 +91,11 @@ class FeeItemCreateUpdateSerializer(serializers.ModelSerializer):
 class FeeStructureItemSerializer(serializers.ModelSerializer):
     item = serializers.PrimaryKeyRelatedField(queryset=FeeItem.objects.all())
     item_details = FeeItemSerializer(source='item', read_only=True)
+    category_name = serializers.CharField(source='item.category.name', read_only=True)
 
     class Meta:
         model = FeeStructureItem
-        fields = ['id', 'item', 'item_details', 'amount']
+        fields = ['id', 'item', 'item_details', 'category_name', 'amount']
 
     def validate_item(self, value):
         # Ensure item belongs to the same school as the parent structure
@@ -236,7 +238,8 @@ class PaymentPlanSerializer(serializers.ModelSerializer):
         model = PaymentPlan
         fields = [
             'id', 'name', 'plan_type', 'number_of_installments', 
-            'days_interval', 'is_active'
+            'days_interval', 'is_active', 'is_recommended',
+            'first_installment_percentage', "description"
         ]
 
     def validate(self, data):
@@ -255,20 +258,41 @@ class StudentFeeAssignmentSerializer(serializers.ModelSerializer):
     fee_structure_details = FeeStructureSerializer(source='fee_structure', read_only=True)
     optional_items_details = FeeItemSerializer(source='selected_optional_items', many=True, read_only=True)
     effective_total = serializers.ReadOnlyField()
+    remaining_total = serializers.ReadOnlyField()
+    item_amounts = serializers.JSONField(read_only=True)
+    assignment_items = serializers.SerializerMethodField()
 
     class Meta:
         model = StudentFeeAssignment
         fields = [
-            'id', 'student', 'fee_structure', 'fee_structure_details', 'optional_items_details', 'payment_plan', 'waiver_amount', 'waiver_reason',
-            'is_waived', 'assigned_at', 'assigned_by', 'effective_total'
+            'id', 'student', 'fee_structure', 'fee_structure_details', 'optional_items_details', 'assignment_items',
+            'item_amounts', 'payment_plan', 'waiver_amount', 'waiver_reason',
+            'is_waived', 'assigned_at', 'assigned_by', 'custom_due_date', 'effective_total', 'remaining_total'
+        ]
+
+    def get_assignment_items(self, obj):
+        return [
+            {
+                'item_id': entry['item_id'],
+                'name': entry['description'],
+                'category': entry['category'],
+                'cost': float(entry['cost']),
+                'deposit_allocated': float(entry['deposit_allocated']),
+                'remaining_amount': float(entry['remaining_amount']),
+                'is_optional': entry['is_optional'],
+                'is_admission': entry['is_admission'],
+            }
+            for entry in obj.get_assignment_items()
         ]
 
 
 class StudentFeeAssignmentCreateUpdateSerializer(serializers.ModelSerializer):
+    item_amounts = serializers.JSONField(required=False)
+
     class Meta:
         model = StudentFeeAssignment
         fields = [
-            'id', 'student', 'fee_structure', 'waiver_amount', 'waiver_reason', 'is_waived', 'payment_plan', 'selected_optional_items'
+            'id', 'student', 'fee_structure', 'waiver_amount', 'waiver_reason', 'is_waived', 'payment_plan', 'custom_due_date', 'selected_optional_items', 'item_amounts'
         ]
 
     def create(self, validated_data):
@@ -277,9 +301,20 @@ class StudentFeeAssignmentCreateUpdateSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 class InvoiceLineSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='item.category.name', read_only=True)
+
     class Meta:
         model = InvoiceLine
-        fields = ['id', 'item', 'description', 'amount']
+        fields = ['id', 'item', 'description', 'amount', 'category_name']
+
+class InvoicePaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = [
+            'id', 'amount', 'payment_method', 'reference_number',
+            'paid_at', 'paid_by', 'notes'
+        ]
+
 
 class InvoiceSerializer(serializers.ModelSerializer):
     student = StudentSerializer(read_only=True)
@@ -288,17 +323,22 @@ class InvoiceSerializer(serializers.ModelSerializer):
     lines = InvoiceLineSerializer(many=True, read_only=True)
     student_name = serializers.CharField(source='student.full_name', read_only=True)
     current_total_due = serializers.ReadOnlyField()
+    balance = serializers.SerializerMethodField()
 
     class Meta:
         model = Invoice
         fields = [
-            'id', 'student', 'fee_assignment', 'term', 'academic_year',
+            'id', 'student', 'student_name', 'fee_assignment', 'term', 'academic_year',
             'invoice_number', 'amount_due', 'amount_paid', 'balance',
             'due_date', 'generated_at', 'generated_by', 'is_paid', 'paid_at', 'payments', 'lines', 'current_total_due', 'late_fee_applied'
         ]
 
+    def get_balance(self, obj):
+        balance = obj.current_total_due - obj.amount_paid
+        return float(max(Decimal('0'), balance))
+
     def get_payments(self, obj):
-        return PaymentSerializer(obj.payments.all(), many=True).data
+        return InvoicePaymentSerializer(obj.payments.all(), many=True).data
 
 
 class InvoiceCreateUpdateSerializer(serializers.ModelSerializer):
@@ -337,8 +377,17 @@ class PaymentCreateUpdateSerializer(serializers.ModelSerializer):
     def validate(self, data):
         if data['amount'] <= 0:
             raise serializers.ValidationError("Payment amount must be greater than zero.")
+
+        invoice = data.get('invoice')
+        amount = data.get('amount')
+        if invoice and amount is not None:
+            outstanding = invoice.current_total_due - invoice.amount_paid
+            if amount > outstanding:
+                raise serializers.ValidationError(
+                    "Payment amount cannot exceed the invoice outstanding balance."
+                )
+
         return data
     
     def create(self, validated_data):
         return Payment.objects.create(**validated_data)
-    

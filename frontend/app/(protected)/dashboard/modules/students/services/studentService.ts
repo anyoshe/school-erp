@@ -35,11 +35,14 @@ export const studentService = {
   /* ---------- GET ALL ---------- */
   async getAll() {
     try {
+      console.log("[studentService] Making API call to /students/");
       const { data } = await api.get("/students/");
+      console.log("[studentService] API response received:", data);
       const list = normalizeList(data);
       writeJSON(LOCAL_KEY, list);
       return list;
-    } catch {
+    } catch (error) {
+      console.error("[studentService] API call failed:", error);
       console.warn("Offline mode: using local cache");
       const cached = readJSON(LOCAL_KEY);
       const pending = readJSON(PENDING_CREATE);
@@ -48,8 +51,19 @@ export const studentService = {
   },
 
    getById: async (id: string) => {
-  const { data } = await api.get(`/students/${id}/`);
-  return data;
+  if (!id || id === "undefined" || id === "null") {
+    throw new Error("Invalid student ID");
+  }
+
+  try {
+    const { data } = await api.get(`/students/${id}/`);
+    return data;
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      return null;
+    }
+    throw err;
+  }
 },
 
   /* ---------- CREATE ---------- */

@@ -4,6 +4,7 @@ from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
+from decimal import Decimal
 from apps.accounts.models import User  # Assuming custom User
 from apps.school.models import School  # Multi-tenancy
 from apps.academics.models import GradeLevel  # For current_class
@@ -73,7 +74,7 @@ class Student(models.Model):
         blank=True,
         related_name='students'
     )
-    section = models.CharField(max_length=10, blank=True)               # A, B, C...
+    section = models.CharField(max_length=50, blank=True)               # A, B, C... or longer section names
     stream = models.CharField(max_length=50, blank=True)                # Science, Arts...
     house = models.CharField(max_length=50, blank=True)                 # Red House, etc.
     boarding_status = models.CharField(
@@ -159,12 +160,33 @@ class Student(models.Model):
         return f"{self.first_name} {self.middle_name or ''} {self.last_name}".strip()
 
     def get_outstanding_balance(self):
-        """Dynamic calculation from finance app — no stored balance"""
-        from apps.finance.models import Invoice, Payment
-        invoices = Invoice.objects.filter(student=self)
-        total_due = invoices.aggregate(models.Sum('amount_due'))['amount_due__sum'] or 0
-        total_paid = Payment.objects.filter(invoice__in=invoices).aggregate(models.Sum('amount'))['amount__sum'] or 0
-        return total_due - total_paid
+        """Calculate outstanding balance considering fee assignment, admission payments, and invoice payments"""
+        from apps.finance.models import Invoice, Payment, StudentFeeAssignment
+        from apps.admissions.models import AdmissionFeePayment
+
+        try:
+            invoices = Invoice.objects.filter(student=self)
+            if invoices.exists():
+                total_balance = Decimal('0')
+                for invoice in invoices:
+                    invoice_balance = invoice.current_total_due - invoice.amount_paid
+                    total_balance += max(Decimal('0'), invoice_balance)
+                return max(Decimal('0'), total_balance)
+
+            # Fallback to fee assignment or enrolled fee structure if no invoices exist
+            fee_assignment = getattr(self, 'fee_assignment', None)
+            if fee_assignment:
+                return max(Decimal('0'), Decimal(str(fee_assignment.remaining_total)))
+            elif self.fee_structure:
+                return max(Decimal('0'), Decimal(str(self.fee_structure.total_amount or 0)))
+            return Decimal('0')
+
+        except Exception as e:
+            # Fallback to old method if something goes wrong
+            invoices = Invoice.objects.filter(student=self)
+            total_due = invoices.aggregate(models.Sum('amount_due'))['amount_due__sum'] or 0
+            total_paid = Payment.objects.filter(invoice__in=invoices).aggregate(models.Sum('amount'))['amount__sum'] or 0
+            return total_due - total_paid
 
 
 class Guardian(models.Model):

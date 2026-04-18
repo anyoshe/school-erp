@@ -8,11 +8,11 @@ from .views import (
 )
 
 router = DefaultRouter()
-router.register(r'', StudentViewSet, basename='student')  # /api/students/
 router.register(r'guardians', GuardianViewSet, basename='guardian')
-router.register(r'student-guardians', StudentGuardianViewSet, basename='student-guardian')
-router.register(r'medical-records', MedicalRecordViewSet, basename='medical-record')
+router.register(r'', StudentViewSet, basename='student')  # /api/students/
 
 urlpatterns = [
+    path('student-guardians/', StudentGuardianViewSet.as_view({'get': 'list'}), name='student-guardian-list'),
+    path('medical-records/', MedicalRecordViewSet.as_view({'get': 'list'}), name='medical-record-list'),
     path('', include(router.urls)),
 ]

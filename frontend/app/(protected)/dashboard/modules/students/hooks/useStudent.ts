@@ -9,11 +9,20 @@ export function useStudent(studentId: string) {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchStudent = useCallback(async () => {
-    if (!studentId) return;
+    if (!studentId || studentId === "undefined" || studentId === "null") {
+      setStudent(null);
+      setIsLoading(false);
+      return;
+    }
 
     setIsLoading(true);
     try {
       const s = await studentService.getById(studentId);
+
+      if (!s) {
+        setStudent(null);
+        return;
+      }
 
       setStudent({
         id: s.id,
@@ -27,6 +36,9 @@ export function useStudent(studentId: string) {
         gender: s.gender,
         date_of_birth: s.date_of_birth,
         nationality: s.nationality,
+        address: s.address,
+        region: s.region,
+        district: s.district,
         county: s.county,
         sub_county: s.sub_county,
         religion: s.religion,

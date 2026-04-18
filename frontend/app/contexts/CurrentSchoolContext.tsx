@@ -107,6 +107,7 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
         // localStorage.setItem("currentSchoolId", selected.id);
         localStorage.setItem("active_school_id", selected.id);
         console.log("[Context] Current school loaded:", fullSchool.id, fullSchool.name);
+        console.log("[Context] Current school loaded:", fullSchool.id, fullSchool.name);
       }
     } catch (err: any) {
       console.error("[Context] Failed to load schools:", err);

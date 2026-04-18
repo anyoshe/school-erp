@@ -22,7 +22,7 @@ class StudentSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
     school = SchoolSerializer(read_only=True)
     current_class = GradeLevelSerializer(read_only=True)
-    medical_record = serializers.PrimaryKeyRelatedField(read_only=True)
+    medical_record = serializers.PrimaryKeyRelatedField(source='student_medical_record', read_only=True)
 
     class Meta:
         model = Student
@@ -110,7 +110,7 @@ class MedicalRecordCreateUpdateSerializer(serializers.ModelSerializer):
 class StudentCreateUpdateSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
     guardians = StudentGuardianSerializer(many=True, required=False)
-    medical_record = MedicalRecordSerializer(required=False)
+    medical_record = MedicalRecordSerializer(source='student_medical_record', required=False)
 
     class Meta:
         model = Student

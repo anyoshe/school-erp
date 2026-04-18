@@ -5,6 +5,7 @@ from .models import Application, ApplicationDocument, AdmissionFeePayment
 from apps.academics.serializers import GradeLevelSerializer
 from apps.school.models import School
 from apps.school.serializers import SchoolSerializer
+from apps.students.models import Student
 
 
 class ApplicationDocumentSerializer(serializers.ModelSerializer):
@@ -41,6 +42,10 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'id',
             'school',               # Now included
             'admission_number',
+            'learner_id',
+            'disability',
+            'entry_exam_id',
+            'entry_exam_year',
             'first_name',
             'middle_name',
             'last_name',

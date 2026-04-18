@@ -1,10 +1,12 @@
 # admissions/views.py
 from rest_framework import viewsets, status
+from decimal import Decimal
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from django.db import transaction
 from .models import Application, ApplicationDocument, AdmissionFeePayment
 from .serializers import (
     ApplicationSerializer,
@@ -13,7 +15,6 @@ from .serializers import (
     AdmissionFeePaymentSerializer,
     ApplicationListSerializer
 )
-from apps.students.models import Student
 from apps.school.models import School
 from django.utils import timezone
 
@@ -112,58 +113,161 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
         serializer.save()
 
+        
     @action(detail=True, methods=['post'], url_path='enroll')
+    @transaction.atomic
     def enroll(self, request, pk=None):
         """
-        Custom action: Enroll accepted application as a Student
-        Uses the model's enroll_as_student method
+        Enroll an accepted application as a Student with smart admission fee handling
         """
         application = self.get_object()
 
-        # Validation
-        # Resolve user's school similarly to get_queryset
-        user_school = getattr(request.user, "school", None)
-        if not user_school:
-            try:
-                schools_qs = getattr(request.user, "schools", None)
-                if schools_qs is not None:
-                    user_school = schools_qs.first()
-            except Exception:
-                user_school = None
-
-        if user_school is None or application.school != user_school:
+        # School permission check
+        user_school = getattr(request.user, "school", None) or getattr(request.user, "schools", None).first()
+        if not user_school or application.school != user_school:
             return Response({"detail": "You can only enroll applications from your own school."},
                             status=status.HTTP_403_FORBIDDEN)
 
         if application.status not in [Application.Status.ACCEPTED, Application.Status.ENROLLED]:
-            return Response({"detail": "Only ACCEPTED or ENROLLED can be enrolled."}, status=400)
-
-        # Optional: stricter check - require at least one fee payment
-        if not application.fee_payments.exists():
-            return Response({"detail": "Admission fee payment required before enrollment."}, 
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Only ACCEPTED applications can be enrolled."}, status=400)
 
         if application.student:
+            return Response({"detail": "Already enrolled."}, status=400)
+
+        # Build wizard_data from request.data while preserving repeated form fields
+        # such as selected_optional_items submitted via multipart/form-data.
+        wizard_data = {}
+
+        # Safe boolean conversion helper
+        def to_bool(val):
+            if isinstance(val, bool):
+                return val
+            if isinstance(val, str):
+                return val.lower() in ('true', '1', 'yes', 'on')
+            if isinstance(val, (int, float)):
+                return bool(val)
+            return False
+
+        if hasattr(request.data, 'lists'):
+            for key, values in request.data.lists():
+                if len(values) == 1:
+                    wizard_data[key] = values[0]
+                else:
+                    wizard_data[key] = values
+        else:
+            wizard_data = {k: v for k, v in request.data.items()}
+
+        # Convert common booleans
+        for bool_field in ['is_waived', 'terms_accepted', 'summary_confirmed', 'auto_generate_admission']:
+            if bool_field in wizard_data:
+                wizard_data[bool_field] = to_bool(wizard_data[bool_field])
+
+        # Ensure selected optional items are always a list of IDs
+        if 'selected_optional_items' in wizard_data:
+            values = wizard_data['selected_optional_items']
+            if isinstance(values, str):
+                try:
+                    wizard_data['selected_optional_items'] = [int(x) for x in values.split(',') if x.strip()]
+                except Exception:
+                    wizard_data['selected_optional_items'] = []
+            elif isinstance(values, list):
+                wizard_data['selected_optional_items'] = [int(x) for x in values if str(x).strip()]
+            else:
+                wizard_data['selected_optional_items'] = []
+
+        # Parse item-level deposit allocations from form data
+        if 'item_amounts' in wizard_data:
+            values = wizard_data['item_amounts']
+            if isinstance(values, str):
+                try:
+                    import json
+                    values = json.loads(values)
+                except Exception:
+                    values = {}
+            if isinstance(values, dict):
+                parsed = {}
+                for key, value in values.items():
+                    try:
+                        parsed[str(key)] = str(value)
+                    except Exception:
+                        parsed[str(key)] = "0"
+                wizard_data['item_amounts'] = parsed
+            else:
+                wizard_data['item_amounts'] = {}
+
+        # Smart admission fee validation
+        try:
+            initial_payment = Decimal(str(wizard_data.get('initial_payment_amount', 0)))
+            is_waived = wizard_data.get('is_waived', False)
+            waiver_amount = Decimal(str(wizard_data.get('waiver_amount', 0)))
+        except:
+            initial_payment = Decimal('0')
+            is_waived = False
+            waiver_amount = Decimal('0')
+
+        # Calculate net admission due based on fee structure
+        admission_due = Decimal('3500')  # Default fallback
+        if wizard_data.get('fee_structure'):
+            try:
+                from apps.finance.models import FeeStructure
+                fee_structure = FeeStructure.objects.get(pk=wizard_data.get('fee_structure'))
+                admission_due = Decimal(str(fee_structure.total_amount))
+            except (FeeStructure.DoesNotExist, ValueError, TypeError):
+                pass
+
+        net_admission_due = max(Decimal('0'), admission_due - waiver_amount)
+
+        # Smart logic:
+        # - If waived → allow even with 0 initial payment
+        # - If not waived → require some payment
+        if net_admission_due > 0 and initial_payment <= 0 and not is_waived:
             return Response({
-                "detail": "Already enrolled.",
-                "student_id": str(application.student.id)
+                "detail": "Payment towards admission/registration fee is required before enrollment.",
+                "admission_due": float(net_admission_due)
             }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Use the model's method (cleaner than duplicating logic)
-            student = application.enroll_as_student(created_by_user=request.user)
-            
+            payment_status = "NO"
+            payment_amount = Decimal('0')
+
+            # Record the initial payment if any
+            # if initial_payment > 0:
+            #     payment_amount = initial_payment
+            #     payment_status = "PARTIAL"
+            #     if initial_payment >= net_admission_due:
+            #         payment_status = "FULL"
+
+            #     AdmissionFeePayment.objects.create(
+            #         application=application,
+            #         amount=initial_payment,
+            #         payment_method="Initial Enrollment Payment",
+            #         receipt_number=wizard_data.get('initial_payment_reference', '')
+            #     )
+
+            # Enroll the student
+            student = application.enroll_as_student(
+                created_by_user=request.user,
+                wizard_data=wizard_data
+            )
+
             return Response({
                 "detail": "Student enrolled successfully",
                 "student_id": str(student.id),
+                "id": str(student.id),
                 "admission_number": student.admission_number,
-                "student_name": student.full_name
+                "student_name": student.full_name,
+                "full_name": student.full_name,
+                "payment_status": payment_status,
+                "payment_amount": float(payment_amount),
+                "amount_due": float(net_admission_due),
             }, status=status.HTTP_201_CREATED)
 
         except ValueError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response({"detail": f"Enrollment failed: {str(e)}"}, 
+            import traceback
+            traceback.print_exc()
+            return Response({"detail": f"Enrollment failed: {str(e)}"},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
@@ -242,13 +346,33 @@ class ApplicationDocumentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return self.queryset.filter(application__school=self.request.user.school)
+        return self.queryset.filter(application__school__in=self.request.user.schools.all())
 
 
 class AdmissionFeePaymentViewSet(viewsets.ModelViewSet):
     queryset = AdmissionFeePayment.objects.all()
     serializer_class = AdmissionFeePaymentSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['application', 'application__student', 'payment_method', 'receipt_number']
 
     def get_queryset(self):
-        return self.queryset.filter(application__school=self.request.user.school)
+        return self.queryset.filter(application__school__in=self.request.user.schools.all())
+
+    @action(detail=True, methods=['get'], url_path='receipt')
+    def receipt(self, request, pk=None):
+        payment = self.get_object()
+        application = payment.application
+        applicant_name = f"{application.first_name} {application.middle_name or ''} {application.last_name or ''}".strip()
+        student_name = application.student.full_name if getattr(application, 'student', None) else None
+        return Response({
+            'payment_id': str(payment.id),
+            'receipt_number': payment.receipt_number,
+            'amount': float(payment.amount),
+            'payment_method': payment.payment_method,
+            'payment_date': payment.payment_date,
+            'application_id': str(application.id),
+            'applicant_name': applicant_name,
+            'student_name': student_name,
+            'admission_number': application.admission_number,
+        })

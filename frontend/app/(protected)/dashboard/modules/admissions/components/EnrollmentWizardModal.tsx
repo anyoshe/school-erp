@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { format } from "date-fns";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -28,6 +29,7 @@ import { toast } from "sonner";
 import api from "@/utils/api";
 import { cn } from "@/lib/utils";
 import { Application } from "@/types/admission";
+import { fa } from "zod/v4/locales";
 
 interface Props {
   open: boolean;
@@ -36,6 +38,133 @@ interface Props {
   applicationData: Application;
   onEnrolled?: (student: { id: string; full_name: string; admission_number: string }) => void;
 }
+
+interface ClassLogisticsStepProps {
+  formData: Record<string, any>;
+  applicationData: Application;
+  updateForm: (field: string, value: any) => void;
+}
+
+const ClassLogisticsStep = ({ formData, applicationData, updateForm }: ClassLogisticsStepProps) => (
+  <div className="space-y-6">
+    <h3 className="text-lg font-semibold">Class & Daily Logistics</h3>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <Label>Class *</Label>
+        <Input value={applicationData.class_applied?.name ?? ""} disabled />
+      </div>
+
+      <div>
+        <Label>Section *</Label>
+        <Input
+          value={formData.section ?? ""}
+          onChange={(e) => updateForm("section", e.target.value)}
+          placeholder="A, B, C, Red, Blue..."
+          inputMode="text"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          Usually a letter or color name
+        </p>
+      </div>
+
+      <div>
+        <Label>Stream (optional)</Label>
+        <Input
+          value={formData.stream ?? ""}
+          onChange={(e) => updateForm("stream", e.target.value)}
+          placeholder="e.g. Science, Arts, Technical, Boys..."
+          inputMode="text"
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <p className="text-xs text-muted-foreground mt-1">
+          Used in secondary for subject grouping
+        </p>
+      </div>
+      <div>
+        <Label>Boarding Status *</Label>
+        <Select
+          value={formData.boarding_status}
+          onValueChange={(val) => {
+            updateForm("boarding_status", val);
+            // Optional: clear dorm/house when switching away from BOARDING
+            if (val !== "BOARDING") {
+              updateForm("dorm_room", "");
+              updateForm("house", "");
+            }
+          }}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="DAY">Day Scholar</SelectItem>
+            <SelectItem value="BOARDING">Boarding</SelectItem>
+            <SelectItem value="MIXED">Mixed (Boarding/Day)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {formData.boarding_status === "BOARDING" && (
+        <div>
+          <Label>House *</Label>
+
+          <Input
+            value={formData.house ?? ""}
+            onChange={(e) => updateForm("house", e.target.value)}
+            placeholder="e.g. Lions, Eagles, Unity House"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Boarding house assignment
+          </p>
+        </div>
+      )}
+
+      {formData.boarding_status === "BOARDING" && (
+        <div>
+          <Label>Dorm Room *</Label>
+          <Input
+            value={formData.dorm_room ?? ""}
+            onChange={(e) => updateForm("dorm_room", e.target.value)}
+            onBlur={(e) => updateForm("dorm_room", e.target.value.trim())}
+            placeholder="e.g. Dorm A – Room 101"
+          />
+        </div>
+      )}
+
+      <div>
+        <Label>Transport Mode</Label>
+        <Select
+          value={formData.transport_mode}
+          onValueChange={(val) => updateForm("transport_mode", val)}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select mode" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="walking">Walking</SelectItem>
+            <SelectItem value="private">Private / Parent</SelectItem>
+            <SelectItem value="school_bus">School Bus</SelectItem>
+            <SelectItem value="public">Public Transport</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {formData.transport_mode === "school_bus" && (
+        <div>
+          <Label>Bus Route / Stop</Label>
+          <Input
+            value={String(formData.transport_route)}
+            onChange={(e) => updateForm("transport_route", e.target.value)}
+            placeholder="e.g. Route 3 - Westlands Stop"
+          />
+        </div>
+      )}
+    </div>
+  </div>
+);
 
 export default function EnrollmentWizardModal({
 
@@ -49,6 +178,7 @@ export default function EnrollmentWizardModal({
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 6;
 
+  const today = format(new Date(), "yyyy-MM-dd");
   const [formData, setFormData] = useState<Record<string, any>>(() => ({
     first_name: applicationData.first_name || "",
     middle_name: applicationData.middle_name || "",
@@ -59,7 +189,12 @@ export default function EnrollmentWizardModal({
     nationality: applicationData.nationality || "Kenyan",
     religion: applicationData.religion || "",
     learner_id: applicationData.learner_id || "",
+
     birth_certificate_number: "",
+    admission_number: "",
+    auto_generate_admission: true,               // default: let backend generate
+    profile_photo: null as File | null,
+    birth_certificate_file: null as File | null,
     passport_number: "",
 
     previous_school: applicationData.previous_school || "",
@@ -87,7 +222,7 @@ export default function EnrollmentWizardModal({
     guardian_name: applicationData.primary_guardian_name || "",
     guardian_phone: applicationData.primary_guardian_phone || "",
     guardian_email: applicationData.primary_guardian_email || "",
-    guardian_national_id: "",
+    guardian_national_id: applicationData.primary_guardian_id_number || "",
     guardian_relation: applicationData.primary_guardian_relationship || "Parent",
     secondary_guardian_name: "",
     secondary_guardian_phone: "",
@@ -101,14 +236,23 @@ export default function EnrollmentWizardModal({
       applicationData.emergency_relationship || applicationData.primary_guardian_relationship || "",
 
     fee_structure_id: "",
+    initial_payment_amount: 0,
     is_waived: false,
     waiver_amount: 0,
     waiver_reason: "",
     selected_optional_items: [],
+    item_amounts: {} as Record<string, number>,
     sponsor_name: "",
-    initial_payment_proof: null,
+    initial_payment_proof: null as File | null,
+    initial_payment_reference: "",
     payment_plan: "",
+    remaining_payment_due_date: today,
     notes: "",
+
+    // ── New final fields ───────────────────────────────
+    admission_date: today,
+    terms_accepted: false,
+    summary_confirmed: false,
   }));
 
   const [feeStructures, setFeeStructures] = useState<any[]>([]);
@@ -118,7 +262,192 @@ export default function EnrollmentWizardModal({
   const [optionalItems, setOptionalItems] = useState<any[]>([]);
   const [paymentPlans, setPaymentPlans] = useState<any[]>([]);
   const { currentSchool } = useCurrentSchool();
+
+  const [paymentBreakdown, setPaymentBreakdown] = useState<{
+    initialPayment: number;
+    balance: number;
+    total: number;
+    dueDates: string[];
+    installments: Array<{ amount: number; dueDate: string }>;
+  }>({
+    initialPayment: 0,
+    balance: 0,
+    total: 0,
+    dueDates: [],
+    installments: [],
+  });
+
+  useEffect(() => {
+    console.log("APPLICATION DATA received in wizard:", applicationData);
+  }, [applicationData]);
   const currencySymbol = currentSchool?.currency_symbol || "Ksh";
+
+  const calculatePayments = () => {
+    const structure = feeStructures.find(
+      (fs) => String(fs.id) === String(formData.fee_structure_id)
+    );
+
+    if (!structure) {
+      setPaymentBreakdown({ initialPayment: 0, balance: 0, total: 0, dueDates: [], installments: [] });
+      return;
+    }
+
+    // === 1. Build Total Due correctly every time ===
+    let totalDue = 0;
+
+    const allItems = structure.structure_items || [];
+    const admissionItemIds = new Set(
+      allItems
+        .filter((si: any) => {
+          const category = (si.category_name || si.item_details?.category_name || "").trim();
+          return category === "Admission & Registration";
+        })
+        .map((si: any) => String(si.item?.id || si.item))
+    );
+
+    const optionalItemIdsSet = new Set(
+      (structure.available_optional_items || [])
+        .map((id: any) => String(id))
+        .filter((id: string) => !admissionItemIds.has(id))
+    );
+
+    // Add MANDATORY items only; admission items are always mandatory during enrollment
+    allItems.forEach((si: any) => {
+      const itemId = String(si.item?.id || si.item);
+      if (!optionalItemIdsSet.has(itemId) || admissionItemIds.has(itemId)) {
+        totalDue += Number(si.amount || 0);
+      }
+    });
+
+    // Add SELECTED optional items (exclude admission items even if they were listed as optional)
+    formData.selected_optional_items.forEach((id: string) => {
+      const itemId = String(id);
+      if (admissionItemIds.has(itemId)) {
+        return;
+      }
+
+      const matching = allItems.find((si: any) =>
+        String(si.item?.id || si.item) === itemId
+      );
+
+      if (matching) {
+        totalDue += Number(matching.amount || 0);
+      }
+    });
+
+    // Apply waiver
+    if (formData.is_waived) {
+      totalDue = Math.max(0, totalDue - Number(formData.waiver_amount || 0));
+    }
+
+    const depositAllocated = getItemAmountTotal(formData.item_amounts || {});
+    const initialPaid = depositAllocated > 0
+      ? depositAllocated
+      : Number(formData.initial_payment_amount || 0);
+    const balance = Math.max(0, totalDue - initialPaid);
+
+    // Get plan
+    const selectedPlan = paymentPlans.find(
+      (p) => String(p.id) === String(formData.payment_plan)
+    );
+
+    console.log("[CALC] Total Due (Mandatory + Selected Optional):", totalDue);
+    console.log("[CALC] Balance after initial payment:", balance);
+    console.log("[CALC] Selected Plan:", selectedPlan?.name);
+
+    let installments: Array<{ amount: number; dueDate: string }> = [];
+    const startDate = new Date();
+
+    if (balance > 0) {
+      if (!selectedPlan || selectedPlan.number_of_installments <= 1 || selectedPlan.plan_type === "custom") {
+        const dueDate = formData.remaining_payment_due_date || format(new Date(startDate.getTime() + (30 * 24 * 60 * 60 * 1000)), "yyyy-MM-dd");
+        installments.push({
+          amount: Number(balance.toFixed(2)),
+          dueDate,
+        });
+      } else {
+        const numInstallments = selectedPlan.number_of_installments;
+        let daysInterval = Number(selectedPlan.days_interval) || 30;
+
+        // Force correct interval for weekly plans
+        if (selectedPlan.name?.toLowerCase().includes("weekly")) {
+          daysInterval = 7;
+        }
+
+        let baseAmount = Math.floor(balance / numInstallments);
+        let remaining = balance;
+
+        for (let i = 1; i <= numInstallments; i++) {
+          const amount = (i === numInstallments) ? remaining : baseAmount;
+
+          const due = new Date(startDate);
+          due.setDate(due.getDate() + i * daysInterval);
+
+          installments.push({
+            amount: Number(amount.toFixed(2)),
+            dueDate: format(due, "yyyy-MM-dd"),
+          });
+
+          remaining -= amount;
+        }
+      }
+    }
+
+    setPaymentBreakdown({
+      initialPayment: initialPaid,
+      balance: Number(balance.toFixed(2)),
+      total: Number(totalDue.toFixed(2)),
+      dueDates: installments.map(i => i.dueDate),
+      installments,
+    });
+  };
+
+  useEffect(() => {
+    if (formData.fee_structure_id) {
+      calculatePayments();
+    }
+  }, [
+    formData.fee_structure_id,
+    formData.payment_plan,
+    formData.selected_optional_items,
+    formData.is_waived,
+    formData.waiver_amount,
+    formData.initial_payment_amount,
+    formData.item_amounts,
+    formData.remaining_payment_due_date,
+  ]);
+
+  useEffect(() => {
+    const structure = feeStructures.find(
+      (fs) => String(fs.id) === String(formData.fee_structure_id)
+    );
+    if (!structure) return;
+
+    const depositTarget = Number(formData.initial_payment_amount || 0);
+    if (depositTarget <= 0) return;
+
+    const currentTotal = getItemAmountTotal(formData.item_amounts || {});
+    const currentIds = new Set(Object.keys(formData.item_amounts || {}));
+    const relevantItems = getSelectedFeeItems(structure);
+    const relevantIds = new Set(relevantItems.map((si: any) => String(si.item?.id || si.item)));
+
+    const missingItem = relevantItems.some((si: any) => !currentIds.has(String(si.item?.id || si.item)));
+    const hasExtraKeys = Array.from(currentIds).some((id) => !relevantIds.has(id));
+
+    if (currentTotal === 0 || missingItem || hasExtraKeys) {
+      const defaultAllocations = getDefaultDepositAllocations(structure, depositTarget);
+      updateForm("item_amounts", defaultAllocations);
+    }
+  }, [
+    feeStructures,
+    formData.fee_structure_id,
+    formData.selected_optional_items,
+    formData.is_waived,
+    formData.waiver_amount,
+    formData.initial_payment_amount,
+  ]);
+
+
   useEffect(() => {
     // Use optional chaining to prevent crash if class_applied is null
     const classId = applicationData?.class_applied?.id;
@@ -151,6 +480,118 @@ export default function EnrollmentWizardModal({
 
     loadFinanceData();
   }, [open, applicationData.class_applied?.id]);
+  const getAdmissionCategoryName = () => "Admission & Registration";
+
+  const getSelectedFeeItems = (structure: any) => {
+    if (!structure) return [];
+
+    const allItems = structure.structure_items || [];
+    const admissionCategory = getAdmissionCategoryName();
+    const admissionItemIds = new Set(
+      allItems
+        .filter((si: any) => {
+          const cat = (si.category_name || si.item_details?.category_name || "").trim();
+          return cat === admissionCategory;
+        })
+        .map((si: any) => String(si.item?.id || si.item))
+    );
+
+    const optionalItemIds = new Set(
+      (structure.available_optional_items || [])
+        .map((id: any) => String(id))
+        .filter((id: string) => !admissionItemIds.has(id))
+    );
+
+    const selectedOptionalIds = new Set(
+      (formData.selected_optional_items || []).map((id: any) => String(id))
+    );
+
+    return allItems.filter((si: any) => {
+      const itemId = String(si.item?.id || si.item);
+      const isOptional = optionalItemIds.has(itemId);
+      return !isOptional || selectedOptionalIds.has(itemId) || admissionItemIds.has(itemId);
+    });
+  };
+
+  const getAdmissionNetByItem = (structure: any) => {
+    const items = (structure?.structure_items || []).filter((si: any) => {
+      const cat = (si.category_name || si.item_details?.category_name || "").trim();
+      return cat === getAdmissionCategoryName();
+    });
+
+    const admissionTotal = items.reduce((sum: number, si: any) => sum + Number(si.amount || 0), 0);
+    const waiverAmount = formData.is_waived ? Number(formData.waiver_amount || 0) : 0;
+
+    return items.reduce((map: Record<string, number>, si: any) => {
+      const itemId = String(si.item?.id || si.item);
+      if (admissionTotal > 0 && waiverAmount > 0) {
+        const share = Number(si.amount || 0) / admissionTotal;
+        const itemWaiver = Number((waiverAmount * share).toFixed(2));
+        map[itemId] = Math.max(0, Number(si.amount || 0) - itemWaiver);
+      } else {
+        map[itemId] = Number(si.amount || 0);
+      }
+      return map;
+    }, {} as Record<string, number>);
+  };
+
+  const getAllocationItemCost = (si: any, netAdmissionByItem: Record<string, number>) => {
+    const itemId = String(si.item?.id || si.item);
+    return netAdmissionByItem[itemId] ?? Number(si.amount || 0);
+  };
+
+  const getItemAmountTotal = (amounts: Record<string, number>) =>
+    Object.values(amounts || {}).reduce((sum, value) => sum + Number(value || 0), 0);
+
+  const getDepositAmount = () => Number(formData.initial_payment_amount || 0);
+  const getAllocatedDepositTotal = () => getItemAmountTotal(formData.item_amounts || {});
+  const isItemAllocationValid = () => {
+    const depositAmount = getDepositAmount();
+    const allocatedTotal = getAllocatedDepositTotal();
+    if (allocatedTotal === 0) return true;
+    return Math.abs(depositAmount - allocatedTotal) < 0.01;
+  };
+
+  const getDefaultDepositAllocations = (structure: any, depositAmount: number) => {
+    if (!structure || depositAmount <= 0) return {};
+
+    const items = getSelectedFeeItems(structure);
+    const netAdmissionByItem = getAdmissionNetByItem(structure);
+    const admissionItemIds = new Set(
+      (structure.structure_items || [])
+        .filter((si: any) => {
+          const cat = (si.category_name || si.item_details?.category_name || "").trim();
+          return cat === getAdmissionCategoryName();
+        })
+        .map((si: any) => String(si.item?.id || si.item))
+    );
+
+    let remaining = Number(depositAmount || 0);
+    const allocations: Record<string, number> = {};
+
+    const sortedItems = [...items].sort((a, b) => {
+      const aId = String(a.item?.id || a.item);
+      const bId = String(b.item?.id || b.item);
+      const aPriority = admissionItemIds.has(aId) ? 0 : 1;
+      const bPriority = admissionItemIds.has(bId) ? 0 : 1;
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      return aId.localeCompare(bId);
+    });
+
+    for (const si of sortedItems) {
+      if (remaining <= 0) break;
+      const itemId = String(si.item?.id || si.item);
+      const cost = getAllocationItemCost(si, netAdmissionByItem);
+      const allocated = Math.min(cost, remaining);
+      if (allocated > 0) {
+        allocations[itemId] = allocated;
+        remaining -= allocated;
+      }
+    }
+
+    return allocations;
+  };
+
   const updateForm = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -158,23 +599,66 @@ export default function EnrollmentWizardModal({
   const validateStep = (step: number) => {
     switch (step) {
       case 1:
+        const hasPhoto = !!formData.profile_photo || !!applicationData.photo;
         return (
           formData.first_name &&
           formData.last_name &&
           formData.date_of_birth &&
           formData.gender &&
-          (formData.birth_certificate_number || formData.passport_number)
+          (formData.birth_certificate_number || formData.passport_number) &&
+          hasPhoto &&
+          formData.birth_certificate_file
         );
       case 2:
         return true;
+      // case 3:
+      //   return formData.current_class && formData.section;
       case 3:
-        return formData.current_class && formData.section;
+        const isBoarding = formData.boarding_status === "BOARDING";
+
+        return (
+          formData.current_class &&
+          formData.section?.trim() &&
+          (!isBoarding || (formData.house?.trim() && formData.dorm_room?.trim()))
+        );
       case 4:
         return formData.vaccination_status;
       case 5:
         return formData.guardian_name && formData.guardian_phone && formData.guardian_national_id;
-      case 6:
-        return !!formData.fee_structure_id && !!formData.payment_plan;
+
+      case 6: {
+        const hasPaymentProof =
+    (String(formData.initial_payment_reference || "").trim().length > 3) ||
+    !!formData.initial_payment_proof;
+
+  const waiverIsValid = !formData.is_waived || (
+    Number(formData.waiver_amount || 0) >= 0 &&
+    String(formData.waiver_reason || "").trim().length >= 3
+  );
+
+  const allocationValid = isItemAllocationValid();
+
+  const isValid = !!formData.fee_structure_id &&
+                  !!formData.payment_plan &&
+                  formData.terms_accepted === true &&
+                  formData.summary_confirmed === true &&
+                  hasPaymentProof &&
+                  waiverIsValid &&
+                  allocationValid;
+
+  // Temporary debug - remove after it works
+  console.log("=== STEP 6 VALIDATION ===", {
+    fee_structure: !!formData.fee_structure_id,
+    payment_plan: !!formData.payment_plan,
+    terms_accepted: formData.terms_accepted,
+    summary_confirmed: formData.summary_confirmed,
+    hasPaymentProof,
+    waiverIsValid,
+    overall: isValid
+  });
+
+  return isValid;
+}
       default:
         return true;
     }
@@ -184,137 +668,169 @@ export default function EnrollmentWizardModal({
     if (validateStep(currentStep)) {
       setCurrentStep((prev) => Math.min(prev + 1, totalSteps));
     } else {
-      toast.error("Please complete all required fields.");
+      if (currentStep === 6 && !isItemAllocationValid()) {
+        toast.error("Deposit allocation total must equal the entered amount before enrollment.");
+      } else {
+        toast.error("Please complete all required fields.");
+      }
     }
   };
 
   const handlePrev = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
 
+  // const handleSubmit = async () => {
+  //   setLoading(true);
+  //   try {
+  //     const payload = new FormData();
+
+  //     Object.entries(formData).forEach(([key, value]) => {
+  //       if (key === "selected_optional_items" && Array.isArray(value)) {
+  //         // Correctly handle the array for ManyToMany fields
+  //         value.forEach(id => payload.append("selected_optional_items", id));
+  //       } else if (value instanceof File) {
+  //         payload.append(key, value);
+  //       } else if (value !== null && typeof value !== "object") {
+  //         // Numeric safety for the waiver
+  //         if (key === "waiver_amount") {
+  //           payload.append(key, String(value || 0));
+  //         } else {
+  //           payload.append(key, String(value));
+  //         }
+  //       }
+  //     });
+
+  //     // Map your frontend IDs to the specific backend field names
+  //     payload.set("fee_structure", String(formData.fee_structure_id));
+  //     payload.set("payment_plan", String(formData.payment_plan));
+
+  //     // If manual admission number → send it; else backend generates
+  //     if (!formData.auto_generate_admission && formData.admission_number) {
+  //       payload.set("admission_number", formData.admission_number);
+  //     }
+
+  //     const res = await api.post(`/admissions/applications/${applicationId}/enroll/`, payload, {
+  //       headers: { "Content-Type": "multipart/form-data" },
+  //     });
+
+  //     toast.success("Student enrolled successfully!");
+  //     const studentIdRaw =
+  //       res.data.id ||
+  //       res.data.student_id ||
+  //       res.data.student ||
+  //       applicationData.student;
+
+  //     const studentId =
+  //       studentIdRaw && studentIdRaw !== "undefined" && studentIdRaw !== "null"
+  //         ? String(studentIdRaw)
+  //         : null;
+
+  //     if (!studentId) {
+  //       toast.warning("Student created, but no ID was returned. Please reload student list.");
+  //       onOpenChange(false);
+  //       return;
+  //     }
+
+  //     onEnrolled?.({
+  //       id: studentId,
+  //       full_name: res.data.full_name ?? res.data.student_name,
+  //       admission_number: res.data.admission_number,
+  //     });
+  //     onOpenChange(false);
+  //   } catch (err: any) {
+  //     toast.error(err.response?.data?.detail || "Enrollment failed");
+  //     console.error("Enrollment error full response:", err.response?.data);
+  //     console.error(err);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
   const handleSubmit = async () => {
-    setLoading(true);
-    try {
-      const payload = new FormData();
+  setLoading(true);
+  try {
+    const payload = new FormData();
 
-      Object.entries(formData).forEach(([key, value]) => {
-        if (key === "selected_optional_items" && Array.isArray(value)) {
-          // Correctly handle the array for ManyToMany fields
-          value.forEach(id => payload.append("selected_optional_items", id));
-        } else if (value !== null && typeof value !== "object") {
-          // Numeric safety for the waiver
-          if (key === "waiver_amount") {
-            payload.append(key, String(value || 0));
-          } else {
-            payload.append(key, String(value));
-          }
-        }
-      });
+    // Handle all fields properly
+    Object.entries(formData).forEach(([key, value]) => {
+      if (value === null || value === undefined) return;
 
-      // Map your frontend IDs to the specific backend field names
+      if (key === "selected_optional_items" && Array.isArray(value)) {
+        value.forEach((id) => payload.append("selected_optional_items", String(id)));
+      } 
+      else if (value instanceof File) {
+        payload.append(key, value);
+      } 
+      else if (typeof value === "boolean") {
+        // Critical: Django accepts "true" / "false" as strings for BooleanField
+        payload.append(key, value ? "true" : "false");
+      } 
+      else if (typeof value === "number" || !isNaN(Number(value))) {
+        payload.append(key, String(value));
+      } 
+      else {
+        payload.append(key, String(value));
+      }
+    });
+
+    // Explicit mapping for important fields (safety)
+    if (formData.fee_structure_id) {
       payload.set("fee_structure", String(formData.fee_structure_id));
-      payload.set("payment_plan", String(formData.payment_plan));
-
-      const res = await api.post(`/admissions/applications/${applicationId}/enroll/`, payload, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      toast.success("Student enrolled successfully!");
-      onEnrolled?.(res.data);
-      onOpenChange(false);
-    } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Enrollment failed");
-      console.error(err);
-    } finally {
-      setLoading(false);
     }
-  };
 
-  // reuse of the file input node from the previous step.
-  const ClassLogisticsStep = () => (
-    <div className="space-y-6">
-      <h3 className="text-lg font-semibold">Class & Daily Logistics</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label>Class *</Label>
-          <Input value={applicationData.class_applied?.name ?? ""} disabled />
-        </div>
+    if (formData.payment_plan) {
+      payload.set("payment_plan", String(formData.payment_plan));   // This is important
+    }
 
-        <div>
-          <Label>Section *</Label>
-          <Input
-            value={String(formData.section)}
-            onChange={(e) => updateForm("section", e.target.value)}
-            placeholder="A, B, C..."
-          />
-        </div>
+    const allocationTotal = getItemAmountTotal(formData.item_amounts || {});
+    if (allocationTotal > 0) {
+      payload.set("initial_payment_amount", String(allocationTotal));
+    }
 
-        <div>
-          <Label>House / Dorm</Label>
-          <Input
-            value={String(formData.house)}
-            onChange={(e) => updateForm("house", e.target.value)}
-            placeholder="e.g. Red House"
-          />
-        </div>
+    if (formData.item_amounts && typeof formData.item_amounts === "object") {
+      payload.set("item_amounts", JSON.stringify(formData.item_amounts));
+    }
 
-        <div>
-          <Label>Boarding Status *</Label>
-          <Select
-            value={formData.boarding_status}
-            onValueChange={(val) => updateForm("boarding_status", val)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="DAY">Day Scholar</SelectItem>
-              <SelectItem value="BOARDING">Boarding</SelectItem>
-              <SelectItem value="MIXED">Mixed</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+    // Manual admission number
+    if (!formData.auto_generate_admission && formData.admission_number) {
+      payload.set("admission_number", formData.admission_number);
+    }
 
-        {formData.boarding_status === "BOARDING" && (
-          <div>
-            <Label>Dorm Room</Label>
-            <Input
-              value={String(formData.dorm_room)}
-              onChange={(e) => updateForm("dorm_room", e.target.value)}
-              placeholder="Room 101"
-            />
-          </div>
-        )}
+    console.log("[ENROLL] Sending payload keys:", Array.from(payload.keys())); // Debug
 
-        <div>
-          <Label>Transport Mode</Label>
-          <Select
-            value={formData.transport_mode}
-            onValueChange={(val) => updateForm("transport_mode", val)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select mode" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="walking">Walking</SelectItem>
-              <SelectItem value="private">Private / Parent</SelectItem>
-              <SelectItem value="school_bus">School Bus</SelectItem>
-              <SelectItem value="public">Public Transport</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+    const res = await api.post(
+      `/admissions/applications/${applicationId}/enroll/`,
+      payload,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
 
-        {formData.transport_mode === "school_bus" && (
-          <div>
-            <Label>Bus Route / Stop</Label>
-            <Input
-              value={String(formData.transport_route)}
-              onChange={(e) => updateForm("transport_route", e.target.value)}
-              placeholder="e.g. Route 3 - Westlands Stop"
-            />
-          </div>
-        )}
-      </div>
-    </div>
-  );
+    toast.success("Student enrolled successfully!");
+
+    const studentId = res.data.id || 
+                     res.data.student_id || 
+                     res.data.student || 
+                     applicationData.student;
+
+    if (studentId) {
+      onEnrolled?.({
+        id: String(studentId),
+        full_name: res.data.full_name ?? res.data.student_name,
+        admission_number: res.data.admission_number,
+      });
+    } else {
+      toast.warning("Student enrolled, but ID not returned. Refresh the list.");
+    }
+
+    onOpenChange(false);
+
+  } catch (err: any) {
+    console.error("Enrollment error full response:", err.response?.data);
+    toast.error(err.response?.data?.detail || "Enrollment failed");
+  } finally {
+    setLoading(false);
+  }
+};
+
+  // ClassLogisticsStep is defined outside the component to avoid remounts on every render.
 
   const renderStep = () => {
     switch (currentStep) {
@@ -331,9 +847,9 @@ export default function EnrollmentWizardModal({
                 { label: "Gender *", key: "gender", disabled: true },
                 { label: "Date of Birth *", key: "date_of_birth", type: "date", disabled: true },
                 { label: "Nationality", key: "nationality", disabled: true },
-                { label: "Learner ID / UPI *", key: "learner_id", disabled: true },
+                { label: "Learner ID / UPI", key: "learner_id", disabled: false },
                 { label: "Birth Certificate Number *", key: "birth_certificate_number" },
-                { label: "Passport Number (non-Kenyan)", key: "passport_number" },
+                { label: "Passport Number (non-Citizen)", key: "passport_number" },
               ].map(({ label, key, type = "text", disabled = false }) => (
                 <div key={key}>
                   <Label>{label}</Label>
@@ -346,6 +862,111 @@ export default function EnrollmentWizardModal({
                   />
                 </div>
               ))}
+            </div>
+            {/* ── New fields ── */}
+            <div className="md:col-span-2">
+              <Label>Admission Number</Label>
+              <div className="flex items-center gap-3 mt-1">
+                <Checkbox
+                  id="auto-gen"
+                  checked={formData.auto_generate_admission}
+
+                  onCheckedChange={(v) =>
+                    updateForm("auto_generate_admission", v === true)
+                  }
+                />
+                <Label htmlFor="auto-gen" className="text-sm">
+                  Auto-generate (recommended – backend will create e.g. ADM-2026-0123)
+                </Label>
+              </div>
+              {!formData.auto_generate_admission && (
+                <Input
+                  className="mt-2"
+                  value={formData.admission_number}
+                  onChange={e => updateForm("admission_number", e.target.value)}
+                  placeholder="e.g. ADM-2026-001"
+                />
+              )}
+            </div>
+
+            <div>
+              <Label>Student Photo * (for ID card & records)</Label>
+
+              {/* Show existing photo if available */}
+              {applicationData.photo && (
+                <div className="mt-2 mb-4">
+                  <p className="text-sm font-medium text-slate-700 mb-1">Previously uploaded during application:</p>
+                  <div className="relative inline-block">
+                    <img
+                      src={applicationData.photo}
+                      alt="Student photo preview"
+                      className="h-32 w-32 object-cover rounded-lg border border-slate-300 shadow-sm"
+                      onError={(e) => {
+                        // Fallback if image fails to load
+                        e.currentTarget.src = "/fallback-student-avatar.png"; // add a placeholder image in public/
+                        e.currentTarget.alt = "Photo failed to load";
+                      }}
+                    />
+                    <p className="text-xs text-slate-500 mt-1 text-center">
+                      Click "Choose File" below to replace
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* File input – always show, but change label if photo exists */}
+              <div className={cn(
+                "border-2 border-dashed rounded-lg p-4 text-center",
+                applicationData.photo ? "border-slate-300 bg-slate-50" : "border-indigo-300 bg-indigo-50/30"
+              )}>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      updateForm("profile_photo", file);
+                      // Optional: show local preview immediately
+                      const previewUrl = URL.createObjectURL(file);
+                      // You could store this in state if you want instant preview of new upload
+                    }
+                  }}
+                  className="hidden"
+                  id="profile-photo-upload"
+                />
+                <label
+                  htmlFor="profile-photo-upload"
+                  className="cursor-pointer flex flex-col items-center gap-2"
+                >
+                  <div className="p-3 bg-indigo-100 rounded-full">
+                    <svg className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                  </div>
+                  <span className="text-sm font-medium text-indigo-700">
+                    {applicationData.photo ? "Replace Photo" : "Upload New Photo"}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    JPG, PNG • Max 5MB
+                  </span>
+                </label>
+              </div>
+
+              {/* Optional: show name of newly selected file */}
+              {formData.profile_photo && (
+                <p className="text-xs text-slate-600 mt-2">
+                  Selected: {formData.profile_photo.name}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <Label>Birth Certificate Upload * (PDF/Image – required for NEMIS)</Label>
+              <Input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={e => updateForm("birth_certificate_file", e.target.files?.[0] ?? null)}
+              />
             </div>
           </div>
         );
@@ -384,7 +1005,13 @@ export default function EnrollmentWizardModal({
         );
 
       case 3:
-        return <ClassLogisticsStep />;
+        return (
+          <ClassLogisticsStep
+            formData={formData}
+            applicationData={applicationData}
+            updateForm={updateForm}
+          />
+        );
 
       case 4:
         return (
@@ -473,8 +1100,7 @@ export default function EnrollmentWizardModal({
                     <Label>National ID / Passport *</Label>
                     <Input
                       value={formData.guardian_national_id ?? ""}
-                      onChange={(e) => updateForm("guardian_national_id", e.target.value)}
-                      placeholder="ID/Passport number"
+                      disabled
                     />
                   </div>
                   <div>
@@ -532,39 +1158,143 @@ export default function EnrollmentWizardModal({
           </div>
         );
 
-
       case 6: {
-        // 1. Identify the selected structure
         const selectedStructure = feeStructures.find(
           (fs) => String(fs.id) === String(formData.fee_structure_id)
         );
 
-        // 2. Derive mandatory vs optional amounts
-        // We calculate mandatory by filtering out items flagged as optional in the structure
-        const mandatoryAmount = selectedStructure?.structure_items?.reduce((sum: number, si: any) => {
-          const isOptional = selectedStructure.available_optional_items?.includes(si.item);
-          return isOptional ? sum : sum + Number(si.amount);
-        }, 0) || 0;
+        const selectedPlan = paymentPlans.find(
+          (p) => String(p.id) === String(formData.payment_plan)
+        );
 
-        const availableOptions = selectedStructure?.available_optional_items_details || [];
-        const selectedOptionalIds = formData.selected_optional_items || [];
+        if (!selectedStructure) {
+          return (
+            <div className="space-y-6 p-4">
+              <section className="space-y-3">
+                <Label className="text-sm font-bold">Select Fee Structure</Label>
+                <Select
+                  value={formData.fee_structure_id}
+                  onValueChange={(val) => {
+                    updateForm("fee_structure_id", val);
+                    updateForm("selected_optional_items", []);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose structure..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {feeStructures.map((fs) => (
+                      <SelectItem key={fs.id} value={String(fs.id)}>
+                        {fs.name} — {fs.period_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </section>
+              <div className="text-center text-slate-500 py-10">
+                Please select a fee structure to continue.
+              </div>
+            </div>
+          );
+        }
 
-        // 3. Calculate live total for checked optional items
-        const optionalTotal = availableOptions
-          .filter((item: any) => selectedOptionalIds.includes(item.id))
-          .reduce((sum: number, item: any) => {
-            // Find the specific amount for this item as defined in THIS structure
-            const structureItem = selectedStructure.structure_items.find((si: any) => si.item === item.id);
-            return sum + Number(structureItem?.amount || 0);
-          }, 0);
+        const ADMISSION_CATEGORY_NAME = "Admission & Registration";
 
-        const finalTotal = mandatoryAmount + optionalTotal - Number(formData.waiver_amount || 0);
+        const allItems = selectedStructure?.structure_items ?? [];
+
+        const optionalItemIds = new Set(
+          (selectedStructure?.available_optional_items ?? []).map((id: number) => String(id))
+        );
+
+        const admissionItems = allItems.filter((si: any) => {
+          const cat = (si.category_name || si.item_details?.category_name || "").trim();
+          return cat === ADMISSION_CATEGORY_NAME;
+        });
+
+        const admissionItemIds = new Set(
+          admissionItems.map((si: any) => String(si.item?.id || si.item))
+        );
+
+        const mandatoryItems = allItems.filter((si: any) => {
+          const itemId = String(si.item?.id || si.item);
+          return !optionalItemIds.has(itemId) || admissionItemIds.has(itemId);
+        });
+
+        const optionalItemsInStructure = allItems.filter((si: any) => {
+          const itemId = String(si.item?.id || si.item);
+          return optionalItemIds.has(itemId) && !admissionItemIds.has(itemId);
+        });
+
+        const selectedOptionalIds: string[] = (formData.selected_optional_items ?? [])
+          .map((id: any) => String(id))
+          .filter((id: string) => !admissionItemIds.has(id));
+
+        const totalAdmissionAmount = admissionItems.reduce((sum: number, si: any) =>
+          sum + Number(si.amount || 0), 0
+        );
+
+        const netAdmission = formData.is_waived
+          ? Math.max(0, totalAdmissionAmount - Number(formData.waiver_amount || 0))
+          : totalAdmissionAmount;
+
+        const otherMandatoryAmount = mandatoryItems
+          .filter((si: any) => {
+            const cat = (si.category_name || si.item_details?.category_name || "").trim();
+            return cat !== ADMISSION_CATEGORY_NAME;
+          })
+          .reduce((sum: number, si: any) => sum + Number(si.amount || 0), 0);
+
+        const optionalTotal = selectedOptionalIds.reduce((sum: number, id: string | number) => {
+          const matchingSI = selectedStructure?.structure_items?.find((si: any) =>
+            String(si.item?.id || si.item) === String(id)
+          );
+          return sum + (matchingSI ? Number(matchingSI.amount || 0) : 0);
+        }, 0);
+
+        const totalDueNow = otherMandatoryAmount + netAdmission + optionalTotal;
+        const depositAllocated = getItemAmountTotal(formData.item_amounts || {});
+        const depositPaid = depositAllocated > 0 ? depositAllocated : Number(formData.initial_payment_amount || 0);
+        const balanceDue = Math.max(0, totalDueNow - depositPaid);
+
+        type AllocationItem = {
+          itemId: string;
+          name: string;
+          category: string;
+          cost: number;
+          allocated: number;
+          isAdmission: boolean;
+        };
+
+        const allocationItems: AllocationItem[] = selectedStructure
+          ? getSelectedFeeItems(selectedStructure).map((si: any) => {
+              const itemId = String(si.item?.id || si.item);
+              const netAdmissionByItem = getAdmissionNetByItem(selectedStructure);
+              const cost = getAllocationItemCost(si, netAdmissionByItem);
+              return {
+                itemId,
+                name: si.item_details?.name || si.description || "Unnamed Item",
+                category: si.category_name || si.item_details?.category_name || "",
+                cost,
+                allocated: Number(formData.item_amounts?.[itemId] || 0),
+                isAdmission: admissionItemIds.has(itemId),
+              };
+            })
+          : [];
+
+        const allocatedDepositTotal = getItemAmountTotal(formData.item_amounts || {});
+        const suggestTransport = formData.transport_mode === "school_bus";
+        const transportItem = selectedStructure.available_optional_items_details?.find((it: any) =>
+          it.name.toLowerCase().includes("transport") || it.name.toLowerCase().includes("bus")
+        );
 
         return (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-              {/* Left Side: Configuration (Col Span 3) */}
+
+              {/* LEFT COLUMN */}
               <div className="lg:col-span-3 space-y-6">
+
+                {/* Fee Structure */}
                 <section className="space-y-3">
                   <Label className="text-sm font-bold flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px]">1</span>
@@ -574,7 +1304,7 @@ export default function EnrollmentWizardModal({
                     value={formData.fee_structure_id}
                     onValueChange={(val) => {
                       updateForm("fee_structure_id", val);
-                      updateForm("selected_optional_items", []); // Reset to prevent price errors
+                      updateForm("selected_optional_items", []);
                     }}
                   >
                     <SelectTrigger className="h-12 border-slate-200">
@@ -590,122 +1320,500 @@ export default function EnrollmentWizardModal({
                   </Select>
                 </section>
 
+                {/* Mandatory Fees */}
+                <section className="space-y-4 bg-slate-50 p-5 rounded-xl border">
+                  <h3 className="font-semibold text-lg">Mandatory Fees</h3>
+                  {/* Admission block */}
+                  <div className="bg-gradient-to-b from-amber-50/70 to-white p-5 rounded-lg border border-amber-200">
+                    <div className="flex justify-between items-center mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold">
+                          1x
+                        </div>
+                        <h4 className="font-semibold">Admission & Registration</h4>
+                      </div>
+                      <p className="text-xl font-bold">{currencySymbol} {totalAdmissionAmount.toLocaleString()}</p>
+                    </div>
+
+                    {admissionItems.length > 0 ? (
+                      <ul className="space-y-2 text-sm">
+                        {admissionItems.map((si: any) => (
+                          <li key={si.id} className="flex justify-between">
+                            <span>{si.item_details?.name || "Unnamed Item"}</span>
+                            <span>{currencySymbol} {Number(si.amount).toLocaleString()}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-amber-700">No admission items in this structure</p>
+                    )}
+
+                    {/* Waiver */}
+                    <div className="mt-4 pt-4 border-t">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Checkbox
+                          id="waive-admission"
+                          checked={formData.is_waived}
+                          onCheckedChange={(checked) => {
+                            updateForm("is_waived", checked);
+                            if (!checked) {
+                              updateForm("waiver_amount", 0);
+                              updateForm("waiver_reason", "");
+                            }
+                          }}
+                        />
+                        <Label htmlFor="waive-admission">Waive / discount admission fees</Label>
+                      </div>
+
+                      {formData.is_waived && (
+                        <div className="grid md:grid-cols-2 gap-4 pl-6">
+                          <div>
+                            <Label>Amount ({currencySymbol})</Label>
+                            <Input
+                              type="number"
+                              value={formData.waiver_amount || ""}
+                              onChange={(e) => updateForm("waiver_amount", Number(e.target.value) || 0)}
+                              min={0}
+                              max={totalAdmissionAmount}
+                            />
+                          </div>
+                          <div>
+                            <Label>Reason *</Label>
+                            <Input
+                              value={formData.waiver_reason || ""}
+                              onChange={(e) => updateForm("waiver_reason", e.target.value)}
+                              placeholder="e.g. Staff child"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-3 flex justify-between font-bold">
+                        <span>Net Admission:</span>
+                        <span>{currencySymbol} {netAdmission.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Other mandatory */}
+                  <div className="mt-4">
+                    <p className="font-medium">Other Mandatory Fees</p>
+                    <p className="text-lg font-bold mt-1">
+                      {currencySymbol} {otherMandatoryAmount.toLocaleString()}
+                    </p>
+                  </div>
+                </section>
+
+                {/* Optional Services */}
+                {/* 2. Optional Services – FIXED */}
                 <section className="space-y-3">
                   <Label className="text-sm font-bold flex items-center gap-2 text-indigo-600">
                     <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px]">2</span>
                     Add Optional Services
                   </Label>
-                  <div className="grid grid-cols-1 gap-2">
-                    {availableOptions.length > 0 ? (
-                      availableOptions.map((item: any) => {
-                        const itemAmount = selectedStructure.structure_items.find((si: any) => si.item === item.id)?.amount;
-                        const isChecked = selectedOptionalIds.includes(item.id);
+
+                  {optionalItemsInStructure.length > 0 ? (
+                    <div className="space-y-2">
+                      {optionalItemsInStructure.map((si: any) => {
+                        const itemId = String(si.item?.id || si.item); // FeeItem ID
+                        const itemDetails = si.item_details || {};
+                        const isChecked = selectedOptionalIds.includes(itemId);
+                        const amount = Number(si.amount || 0);
 
                         return (
                           <div
-                            key={item.id}
+                            key={itemId}
                             className={cn(
-                              "flex items-center justify-between p-4 rounded-xl border transition-all cursor-pointer",
-                              isChecked ? "bg-indigo-50 border-indigo-200 ring-1 ring-indigo-200" : "bg-white border-slate-100 hover:border-slate-300"
+                              "flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all",
+                              isChecked
+                                ? "bg-indigo-50 border-indigo-300 ring-1 ring-indigo-200"
+                                : "bg-white border-slate-200 hover:border-indigo-300"
                             )}
                             onClick={() => {
-                              const next = isChecked
-                                ? selectedOptionalIds.filter((id: string) => id !== item.id)
-                                : [...selectedOptionalIds, item.id];
-                              updateForm("selected_optional_items", next);
+                              let nextIds: string[];
+                              if (isChecked) {
+                                nextIds = selectedOptionalIds.filter(id => id !== itemId);
+                              } else {
+                                nextIds = [...selectedOptionalIds, itemId];
+                              }
+                              updateForm("selected_optional_items", nextIds);
                             }}
                           >
-                            <div className="flex items-center gap-3">
-                              <Checkbox checked={isChecked} onCheckedChange={() => { }} />
+                            <div className="flex items-center gap-3 flex-1">
+                              <Checkbox
+                                checked={isChecked}
+                                onCheckedChange={() => { }} // controlled by parent div click
+                                className="pointer-events-none"
+                              />
                               <div>
-                                <p className="text-sm font-bold text-slate-700">{item.name}</p>
-                                <p className="text-[10px] text-slate-500 uppercase tracking-tight">{item.category_name}</p>
+                                <p className="font-medium text-slate-800">
+                                  {itemDetails.name || "Unnamed Optional Item"}
+                                </p>
+                                <p className="text-xs text-slate-500">
+                                  {itemDetails.category_name || "Miscellaneous"}
+                                </p>
                               </div>
                             </div>
-                            <span className={cn(
-                              "font-mono font-bold text-sm",
-                              isChecked ? "text-indigo-600" : "text-slate-400"
-                            )}>
-                              + {Number(itemAmount).toLocaleString()}
-                            </span>
+                            <div className="text-right min-w-[100px]">
+                              <span className={cn(
+                                "font-mono font-bold text-sm",
+                                isChecked ? "text-indigo-600" : "text-slate-500"
+                              )}>
+                                + {amount.toLocaleString()} {currencySymbol}
+                              </span>
+                            </div>
                           </div>
                         );
-                      })
-                    ) : (
-                      <div className="text-center py-8 border-2 border-dashed rounded-xl bg-slate-50/50">
-                        <p className="text-xs text-slate-400 italic">No optional items for this structure.</p>
-                      </div>
-                    )}
-                  </div>
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 border-2 border-dashed rounded-xl bg-slate-50/50">
+                      <p className="text-sm text-slate-400 italic">
+                        No optional items available for this fee structure
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Quick summary of selected optional total */}
+                  {optionalTotal > 0 && (
+                    <div className="text-right text-sm font-medium text-indigo-700 pt-2">
+                      Selected optional total: +{optionalTotal.toLocaleString()} {currencySymbol}
+                    </div>
+                  )}
                 </section>
 
-                <section className="space-y-3">
+
+
+                {/* Payment Plan */}
+                <section className="space-y-4">
                   <Label className="text-sm font-bold">Payment Plan</Label>
-                  <Select value={formData.payment_plan} onValueChange={(val) => updateForm("payment_plan", val)}>
-                    <SelectTrigger className="border-slate-200"><SelectValue placeholder="Select Plan" /></SelectTrigger>
+
+                  <Select
+                    value={formData.payment_plan}
+                    onValueChange={(val) => updateForm("payment_plan", val)}
+                  >
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Select payment plan" />
+                    </SelectTrigger>
                     <SelectContent>
-                      {paymentPlans.map((plan) => (
-                        <SelectItem key={plan.id} value={String(plan.id)}>{plan.name}</SelectItem>
-                      ))}
+                      {paymentPlans
+                        .filter((plan) => plan.is_active !== false)
+                        .map((plan) => (
+                          <SelectItem key={plan.id} value={String(plan.id)}>
+                            {plan.name} {plan.is_recommended && "⭐ Recommended"}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
+
+                  {selectedPlan && selectedPlan.plan_type === "custom" ? (
+                    <p className="text-xs text-muted-foreground">
+                      This custom/partial plan keeps the remaining balance as one follow-up payment.
+                    </p>
+                  ) : selectedPlan ? (
+                    <p className="text-xs text-muted-foreground">
+                      Balance will be divided into {selectedPlan.number_of_installments} installments
+                      {selectedPlan.plan_type === "weekly" && " (weekly)"}
+                    </p>
+                  ) : null}
+
+                  {selectedPlan?.plan_type === "custom" && (
+                    <div className="mt-4">
+                      <Label>Agreed follow-up payment date</Label>
+                      <Input
+                        type="date"
+                        value={formData.remaining_payment_due_date}
+                        onChange={(e) => updateForm("remaining_payment_due_date", e.target.value)}
+                        min={today}
+                      />
+                    </div>
+                  )}
+                </section>
+
+                {/* PAYMENT SCHEDULE */}
+                {paymentBreakdown.installments.length > 0 ? (
+                  <div className="mt-8 p-6 border-2 border-slate-200 rounded-2xl bg-white">
+                    <h4 className="font-semibold text-xl mb-6">
+                      📅 Payment Schedule — {selectedPlan ? selectedPlan.name : "Custom Plan"}
+                    </h4>
+
+                    <div className="space-y-3">
+                      {/* Initial Payment */}
+                      <div className="grid grid-cols-3 gap-4 bg-emerald-50 p-4 rounded-xl">
+                        <div className="font-medium">Initial Payment</div>
+                        <div className="text-right font-bold text-emerald-700">
+                          {currencySymbol} {paymentBreakdown.initialPayment.toLocaleString()}
+                        </div>
+                        <div className="text-right">Today</div>
+                      </div>
+
+                      {/* Installments */}
+                      {paymentBreakdown.installments.map((inst, index) => (
+                        <div key={index} className="grid grid-cols-3 gap-4 p-4 border rounded-xl">
+                          <div className="font-medium">Installment {index + 1}</div>
+                          <div className="text-right font-semibold">
+                            {currencySymbol} {inst.amount.toLocaleString()}
+                          </div>
+                          <div className="text-right text-slate-600">{inst.dueDate}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-6 pt-4 border-t flex justify-between font-bold text-lg">
+                      <span>Total Amount Due</span>
+                      <span>{currencySymbol} {paymentBreakdown.total.toLocaleString()}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-6 p-6 border border-dashed border-slate-300 rounded-2xl text-center text-slate-500">
+                    Select a payment plan and enter initial payment to see detailed installment schedule
+                  </div>
+                )}
+
+
+                {/* Initial Payment / Deposit - IMPROVED */}
+                <section className="space-y-4 pt-4 border-t">
+                  <Label className="text-base font-bold">Initial Payment / Deposit</Label>
+
+                  {/* Admission Fee Warning */}
+                  {totalAdmissionAmount > 0 && (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm">
+                      <div className="font-medium text-amber-800 mb-1">
+                        Admission & Registration Fee: {currencySymbol} {totalAdmissionAmount.toLocaleString()}
+                      </div>
+                      {formData.is_waived ? (
+                        <p className="text-amber-700">
+                          Waiver applied: {currencySymbol} {Number(formData.waiver_amount || 0).toLocaleString()}
+                          ({formData.waiver_reason || "No reason provided"})
+                        </p>
+                      ) : (
+                        <p className="text-amber-700">
+                          Please pay at least part of the admission fee to proceed with enrollment.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="grid md:grid-cols-3 gap-4">
+                    <div>
+                      <Label>Amount Paid ({currencySymbol}) *</Label>
+                      <Input
+                        type="number"
+                        value={formData.initial_payment_amount || ""}
+                        onChange={(e) => updateForm("initial_payment_amount", Number(e.target.value) || 0)}
+                        placeholder="e.g. 5000"
+                      />
+                    </div>
+                    <div>
+                      <Label>Reference Code</Label>
+                      <Input
+                        value={formData.initial_payment_reference}
+                        onChange={(e) => updateForm("initial_payment_reference", e.target.value)}
+                        placeholder="MPESA code or bank ref"
+                      />
+                    </div>
+                    <div>
+                      <Label>Proof of Payment (optional)</Label>
+                      <Input
+                        type="file"
+                        onChange={(e) => updateForm("initial_payment_proof", e.target.files?.[0] ?? null)}
+                      />
+                    </div>
+                  </div>
+
+                  {allocationItems.length > 0 && (
+                    <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <p className="text-sm font-semibold">Allocate Deposit to Fee Items</p>
+                          <p className="text-xs text-slate-500">
+                            Adjust how the paid deposit is assigned across the selected fee items.
+                          </p>
+                        </div>
+                        <div className="text-right text-sm">
+                          <div>Allocated total</div>
+                          <div className="font-semibold">{currencySymbol} {allocatedDepositTotal.toLocaleString()}</div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-3">
+                        {allocationItems.map((item) => (
+                          <div key={item.itemId} className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr] gap-3 items-end">
+                            <div>
+                              <p className="text-sm font-medium">{item.name}</p>
+                              <p className="text-xs text-slate-500">{item.category}</p>
+                            </div>
+                            <div>
+                              <Label className="text-xs">Item Cost</Label>
+                              <div className="mt-1 text-sm font-semibold">{currencySymbol} {item.cost.toLocaleString()}</div>
+                            </div>
+                            <div>
+                              <Label className="text-xs">Deposit Allocated</Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                max={item.cost}
+                                value={item.allocated || ""}
+                                onChange={(e) => {
+                                  const nextAmount = Number(e.target.value) || 0;
+                                  updateForm("item_amounts", {
+                                    ...formData.item_amounts,
+                                    [item.itemId]: Math.max(0, Math.min(nextAmount, item.cost)),
+                                  });
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {allocatedDepositTotal !== Number(formData.initial_payment_amount || 0) && (
+                        <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
+                          The deposit amount shown above is based on the item allocations. If you adjust item allocations, the enrollment payment amount will be submitted as {currencySymbol} {allocatedDepositTotal.toLocaleString()}.
+                        </div>
+                      )}
+
+                      {!isItemAllocationValid() && (
+                        <div className="mt-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+                          The total deposit allocated to items must equal the entered amount paid before you can complete enrollment.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </section>
+
+                {/* Summary */}
+                <section className="space-y-6 pt-6 border-t">
+                  <h4 className="text-lg font-semibold">Final Summary</h4>
+                  <div className="bg-slate-50 p-5 rounded-xl border space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between">
+                        <span>Mandatory Fees (excl. admission)</span>
+                        <span>{currencySymbol} {otherMandatoryAmount.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Admission & Registration (net)</span>
+                        <span>{currencySymbol} {netAdmission.toLocaleString()}</span>
+                      </div>
+                      {optionalTotal > 0 && (
+                        <div className="flex justify-between text-indigo-700">
+                          <span>Optional Services</span>
+                          <span>+ {currencySymbol} {optionalTotal.toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between font-bold text-lg border-t pt-2">
+                        <span>Total Due Now</span>
+                        <span className="text-indigo-700">{currencySymbol} {totalDueNow.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span>Initial Payment</span>
+                        <span>{currencySymbol} {depositPaid.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between font-bold border-t pt-2">
+                        <span>Balance to Invoice</span>
+                        <span>{currencySymbol} {balanceDue.toLocaleString()}</span>
+                      </div>
+                    </div>
+
+                    {/* Transport hint */}
+                    {suggestTransport && transportItem && !selectedOptionalIds.includes(String(transportItem.id)) && (
+                      <p className="text-amber-700 text-sm bg-amber-50 p-3 rounded">
+                        School bus selected → consider adding <strong>{transportItem.name}</strong>
+                      </p>
+                    )}
+                  </div>
+
+              
+                {/* Confirmations - CRITICAL FIX */}
+<div className="space-y-4 pt-4 border-t">
+  <div className="flex items-start gap-3">
+    <Checkbox
+      id="terms"
+      checked={formData.terms_accepted === true}   // strict boolean
+      onCheckedChange={(checked) => {
+        console.log("Terms checkbox changed to:", checked); // ← temporary debug
+        updateForm("terms_accepted", checked === true);
+      }}
+    />
+    <Label htmlFor="terms" className="text-sm leading-tight cursor-pointer select-none">
+      I confirm the guardian has read and accepted the school rules, policies and fee structure.
+    </Label>
+  </div>
+
+  <div className="flex items-start gap-3">
+    <Checkbox
+      id="summary-confirm"
+      checked={formData.summary_confirmed === true}   // strict boolean
+      onCheckedChange={(checked) => {
+        console.log("Summary confirm checkbox changed to:", checked); // ← temporary debug
+        updateForm("summary_confirmed", checked === true);
+      }}
+    />
+    <Label htmlFor="summary-confirm" className="text-sm leading-tight cursor-pointer select-none">
+      I have carefully reviewed all the above details and confirm they are correct.
+    </Label>
+  </div>
+</div>
                 </section>
               </div>
 
-              {/* Right Side: Live Invoice Card (Col Span 2) */}
+              {/* RIGHT COLUMN – Invoice Preview */}
               <div className="lg:col-span-2">
-                <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-2xl sticky top-0 border border-slate-800">
-                  <div className="flex items-center justify-between mb-8">
-                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400">Invoice Preview</h4>
-                    <span className="text-[10px] bg-white/10 px-2 py-1 rounded text-slate-300">Draft</span>
-                  </div>
-
-                  <div className="space-y-5">
-                    <div className="flex justify-between items-start">
-                      <div className="space-y-1">
-                        <p className="text-xs font-bold text-slate-400 uppercase">Mandatory Base</p>
-                        <p className="text-xs text-slate-500 italic max-w-[120px]">{selectedStructure?.name}</p>
-                      </div>
-                      <span className="font-mono text-lg">{mandatoryAmount.toLocaleString()}</span>
+                <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-2xl sticky top-0">
+                  <h4 className="text-sm font-black uppercase tracking-wider text-indigo-400 mb-4">
+                    Enrollment Cost Summary
+                  </h4>
+                  <div className="space-y-4">
+                    <div className="flex justify-between text-sm text-slate-400">
+                      <span>Mandatory Fees</span>
+                      <span>{currencySymbol} {(otherMandatoryAmount + netAdmission).toLocaleString()}</span>
                     </div>
 
-                    {selectedOptionalIds.length > 0 && (
-                      <div className="space-y-3 animate-in slide-in-from-top-2">
-                        <div className="flex justify-between items-center text-indigo-400">
-                          <p className="text-xs font-bold uppercase tracking-widest">Optional Extras ({selectedOptionalIds.length})</p>
-                          <span className="font-mono">+{optionalTotal.toLocaleString()}</span>
-                        </div>
-                        <div className="space-y-1 pl-2 border-l border-indigo-500/30">
-                          {availableOptions.filter((o: any) => selectedOptionalIds.includes(o.id)).map((o: any) => (
-                            <div key={o.id} className="flex justify-between text-[10px] text-slate-400 italic">
-                              <span>{o.name}</span>
-                              <span>{Number(selectedStructure.structure_items.find((si: any) => si.item === o.id)?.amount).toLocaleString()}</span>
-                            </div>
-                          ))}
-                        </div>
+                    {optionalTotal > 0 && (
+                      <div className="flex justify-between text-sm text-indigo-300">
+                        <span>Optional Services</span>
+                        <span>+{currencySymbol} {optionalTotal.toLocaleString()}</span>
                       </div>
                     )}
 
-                    <Separator className="bg-slate-800" />
+                    <div className="flex justify-between font-semibold border-t border-slate-700 pt-3">
+                      <span>Total Term Bill</span>
+                      <span>{currencySymbol} {totalDueNow.toLocaleString()}</span>
+                    </div>
 
-                    <div className="flex justify-between items-center pt-2">
+                    {/* This is the missing link that makes the math work */}
+                    <div className="flex justify-between text-green-400 text-sm">
+                      <span>Initial Deposit</span>
+                      <span>- {currencySymbol} {depositPaid.toLocaleString()}</span>
+                    </div>
+
+                    <Separator className="bg-slate-700" />
+
+                    <div className="flex justify-between items-end">
                       <div>
-                        <p className="text-xs font-black uppercase tracking-widest text-white">Total Amount Due</p>
-                        <p className="text-[9px] text-slate-500 uppercase">{currencySymbol} / {selectedStructure?.period_name}</p>
+                        <p className="text-xs text-slate-400 uppercase font-bold">Due Today</p>
+                        <p className="text-2xl font-bold text-white">
+                          {currencySymbol} {depositPaid.toLocaleString()}
+                        </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-3xl font-black text-indigo-400 tracking-tighter">
-                          {finalTotal.toLocaleString()}
+                        <p className="text-xs text-slate-400 uppercase font-bold">Remaining</p>
+                        <p className="text-lg font-semibold text-indigo-400">
+                          {currencySymbol} {balanceDue.toLocaleString()}
                         </p>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="mt-8 bg-indigo-600/10 border border-indigo-500/20 rounded-xl p-4 text-center">
-                    <p className="text-[10px] text-indigo-300 font-medium">
-                      This will generate an invoice for <br />
-                      <span className="text-white font-bold">{formData.first_name} {formData.last_name}</span>
-                    </p>
+                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700 mt-4">
+                      <p className="text-[10px] text-slate-400 leading-relaxed">
+                        The remaining <span className="text-white font-bold">{currencySymbol} {balanceDue.toLocaleString()}</span> will
+                        {selectedPlan?.plan_type === "custom" ? (
+                          <> be due once on <span className="text-white font-bold">{formData.remaining_payment_due_date}</span>.</>
+                        ) : (
+                          <> be split into <span className="text-white font-bold">{selectedPlan?.number_of_installments || 1} installments</span> as per the {selectedPlan?.name || "selected"} plan.</>
+                        )}
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -717,6 +1825,7 @@ export default function EnrollmentWizardModal({
         return null;
     }
   };
+
 
 
   return (

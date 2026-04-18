@@ -4,7 +4,8 @@ from apps.finance import views
 from rest_framework.routers import DefaultRouter
 from .views import (
     FeeCategoryViewSet, FeeItemViewSet, FeeStructureViewSet,
-    StudentFeeAssignmentViewSet, InvoiceViewSet, PaymentViewSet, PaymentPlanViewSet
+    StudentFeeAssignmentViewSet, InvoiceViewSet, PaymentViewSet, PaymentPlanViewSet,
+    FinanceDashboardSummaryView,
 )
 
 router = DefaultRouter()
@@ -18,5 +19,6 @@ router.register(r'payments', PaymentViewSet, basename='payment')
 router.register(r'payment-plans', PaymentPlanViewSet, basename='payment-plan')
 
 urlpatterns = [
+    path('dashboard-summary/', FinanceDashboardSummaryView.as_view(), name='finance-dashboard-summary'),
     path('', include(router.urls)),
 ]

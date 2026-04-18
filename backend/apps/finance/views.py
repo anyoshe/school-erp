@@ -1,12 +1,16 @@
+from collections import defaultdict
 from datetime import timedelta
+from decimal import Decimal
 from rest_framework import viewsets, status
+from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Prefetch
 from .models import (
     FeeCategory, FeeItem, FeeStructure, StudentFeeAssignment, PaymentPlan,
-    Invoice, Payment
+    Invoice, InvoiceLine, Payment
 )
 from .serializers import (
     FeeCategorySerializer, FeeCategoryCreateUpdateSerializer,
@@ -17,7 +21,256 @@ from .serializers import (
     PaymentSerializer, PaymentCreateUpdateSerializer, PaymentPlanSerializer
 )
 from apps.core.permissions import IsAssociatedWithSchool  # Assume you have this
+from apps.admissions.models import AdmissionFeePayment
 from django.utils import timezone
+
+
+def _round_money(value: Decimal) -> Decimal:
+    return Decimal(str(value or 0)).quantize(Decimal("0.01"))
+
+
+def _resolve_school_ids(request):
+    school_id = request.headers.get("X-School-ID")
+    if school_id:
+        return list(request.user.schools.filter(id=school_id).values_list("id", flat=True))
+    return list(request.user.schools.values_list("id", flat=True))
+
+
+def _get_assignment_period_meta(assignment: StudentFeeAssignment):
+    structure = getattr(assignment, "fee_structure", None)
+    return (
+        getattr(structure, "academic_year", "") or "",
+        getattr(structure, "period_name", "") or "",
+    )
+
+
+def _build_finance_dashboard_summary(request):
+    school_ids = _resolve_school_ids(request)
+    today = timezone.now().date()
+
+    assignments = list(
+        StudentFeeAssignment.objects.filter(student__school_id__in=school_ids)
+        .select_related("student", "fee_structure")
+        .prefetch_related("selected_optional_items", "fee_structure__structure_items__item__category")
+    )
+
+    invoices = list(
+        Invoice.objects.filter(school_id__in=school_ids)
+        .select_related("student", "fee_assignment", "fee_assignment__fee_structure")
+        .prefetch_related(
+            Prefetch("lines", queryset=InvoiceLine.objects.select_related("item__category")),
+            "payments",
+        )
+    )
+
+    admission_payments = list(
+        AdmissionFeePayment.objects.filter(application__school_id__in=school_ids).select_related("application")
+    )
+
+    total_assigned = Decimal("0")
+    total_outstanding = Decimal("0")
+    total_revenue = Decimal("0")
+    students_with_balance = set()
+    current_year_candidates = set()
+    term_weights = defaultdict(int)
+    revenue_by_period = {
+        "all": Decimal("0"),
+        "year": Decimal("0"),
+        "term": Decimal("0"),
+        "session": Decimal("0"),
+    }
+
+    fee_group_breakdown = {}
+
+    def ensure_group(name: str, is_tuition: bool):
+        key = name.strip() or "Other fees"
+        if key not in fee_group_breakdown:
+            fee_group_breakdown[key] = {
+                "groupKey": key,
+                "description": key,
+                "allocated": Decimal("0"),
+                "pending": Decimal("0"),
+                "total": Decimal("0"),
+                "isTuition": is_tuition,
+            }
+        elif is_tuition:
+            fee_group_breakdown[key]["isTuition"] = True
+        return fee_group_breakdown[key]
+
+    invoices_by_assignment_id = defaultdict(list)
+    for invoice in invoices:
+        if invoice.fee_assignment_id:
+            invoices_by_assignment_id[invoice.fee_assignment_id].append(invoice)
+
+    for assignment in assignments:
+        year, term = _get_assignment_period_meta(assignment)
+        if year:
+            current_year_candidates.add(year)
+
+        assignment_items = assignment.get_assignment_items()
+        assigned = sum((Decimal(str(item["cost"])) for item in assignment_items), Decimal("0"))
+        assignment_invoices = invoices_by_assignment_id.get(assignment.id, [])
+
+        if assignment_invoices:
+            invoiced_total_due = sum(
+                (Decimal(str(invoice.current_total_due)) for invoice in assignment_invoices),
+                Decimal("0"),
+            )
+            remaining = sum(
+                (max(Decimal("0"), Decimal(str(invoice.balance))) for invoice in assignment_invoices),
+                Decimal("0"),
+            )
+            recognized = max(Decimal("0"), invoiced_total_due - remaining)
+        else:
+            remaining = sum((Decimal(str(item["remaining_amount"])) for item in assignment_items), Decimal("0"))
+            recognized = max(Decimal("0"), assigned - remaining)
+
+        total_assigned += assigned
+        total_outstanding += remaining
+        revenue_by_period["all"] += recognized
+
+        if remaining > 0:
+            students_with_balance.add(str(assignment.student_id))
+
+        if year:
+            term_weights[(year, term or "Term 1")] += 2 if remaining > 0 else 1
+
+        if assignment_invoices:
+            for invoice in assignment_invoices:
+                invoice_line_total = sum((Decimal(str(line.amount)) for line in invoice.lines.all()), Decimal("0"))
+                if invoice_line_total <= 0:
+                    continue
+
+                # Spread collected/pending value across lines proportionally so fee groups
+                # reflect live invoice payments instead of only initial deposit allocations.
+                payment_ratio = min(Decimal("1"), Decimal(str(invoice.amount_paid)) / invoice_line_total)
+
+                for line in invoice.lines.all():
+                    category = (
+                        getattr(getattr(line.item, "category", None), "name", None)
+                        or "Other fees"
+                    ).strip() or "Other fees"
+                    description = line.description or getattr(line.item, "name", "") or category
+                    is_tuition = "tuition" in category.lower() or "tuition" in description.lower()
+                    cost = Decimal(str(line.amount))
+                    allocated = (cost * payment_ratio).quantize(Decimal("0.01"))
+                    pending = max(Decimal("0"), cost - allocated)
+                    group = ensure_group(category, is_tuition)
+                    group["allocated"] += allocated
+                    group["pending"] += pending
+                    group["total"] += cost
+        else:
+            for item in assignment_items:
+                category = (item.get("category") or "Other fees").strip() or "Other fees"
+                is_tuition = "tuition" in category.lower() or "tuition" in str(item.get("description", "")).lower()
+                allocated = Decimal(str(item.get("deposit_allocated", 0)))
+                pending = Decimal(str(item.get("remaining_amount", 0)))
+                cost = Decimal(str(item.get("cost", 0)))
+                group = ensure_group(category, is_tuition)
+                group["allocated"] += allocated
+                group["pending"] += pending
+                group["total"] += cost
+
+        if year:
+            revenue_by_period["year"] += recognized
+
+    if current_year_candidates:
+        detected_year = sorted(current_year_candidates)[-1]
+    else:
+        detected_year = str(today.year)
+
+    detected_term = "Term 1"
+    max_weight = -1
+    for (year, term), weight in term_weights.items():
+        if year == detected_year and weight > max_weight:
+            max_weight = weight
+            detected_term = term or "Term 1"
+
+    for assignment in assignments:
+        year, term = _get_assignment_period_meta(assignment)
+        if year == detected_year:
+            assignment_items = assignment.get_assignment_items()
+            assignment_invoices = invoices_by_assignment_id.get(assignment.id, [])
+            if assignment_invoices:
+                assigned = sum((Decimal(str(item["cost"])) for item in assignment_items), Decimal("0"))
+                remaining = sum(
+                    (max(Decimal("0"), Decimal(str(invoice.balance))) for invoice in assignment_invoices),
+                    Decimal("0"),
+                )
+                recognized = max(Decimal("0"), assigned - remaining)
+            else:
+                assigned = sum((Decimal(str(item["cost"])) for item in assignment_items), Decimal("0"))
+                remaining = sum((Decimal(str(item["remaining_amount"])) for item in assignment_items), Decimal("0"))
+                recognized = max(Decimal("0"), assigned - remaining)
+            if term == detected_term:
+                revenue_by_period["term"] += recognized
+                revenue_by_period["session"] += recognized
+
+    overdue_balance = sum(
+        (
+            max(Decimal("0"), Decimal(str(invoice.balance)))
+            for invoice in invoices
+            if max(Decimal("0"), Decimal(str(invoice.balance))) > 0 and invoice.due_date < today
+        ),
+        Decimal("0"),
+    )
+    pending_invoices = sum(1 for invoice in invoices if max(Decimal("0"), Decimal(str(invoice.balance))) > 0)
+
+    total_revenue = sum((Decimal(str(invoice.amount_paid)) for invoice in invoices), Decimal("0"))
+    total_revenue += sum((Decimal(str(p.amount)) for p in admission_payments), Decimal("0"))
+
+    fee_assignment_ids = {assignment.id for assignment in assignments}
+    for invoice in invoices:
+        if invoice.fee_assignment_id not in fee_assignment_ids:
+            balance = max(Decimal("0"), Decimal(str(invoice.balance)))
+            amount_due = Decimal(str(invoice.current_total_due))
+            total_assigned += amount_due
+            total_outstanding += balance
+            if balance > 0:
+                students_with_balance.add(str(invoice.student_id))
+
+    fee_group_values = []
+    for entry in fee_group_breakdown.values():
+        fee_group_values.append({
+            "groupKey": entry["groupKey"],
+            "description": entry["description"],
+            "allocated": float(_round_money(entry["allocated"])),
+            "pending": float(_round_money(entry["pending"])),
+            "total": float(_round_money(entry["total"])),
+            "isTuition": entry["isTuition"],
+        })
+
+    fee_group_values.sort(key=lambda item: (not item["isTuition"], item["description"]))
+
+    return {
+        "stats": {
+            "totalOutstanding": float(_round_money(total_outstanding)),
+            "totalAssigned": float(_round_money(total_assigned)),
+            "totalRevenue": float(_round_money(total_revenue)),
+            "totalStudentsWithFees": len(assignments),
+            "studentsWithBalance": len(students_with_balance),
+            "overdueBalance": float(_round_money(overdue_balance)),
+            "pendingInvoices": pending_invoices,
+            "totalInvoiced": float(_round_money(total_assigned)),
+            "totalAdmissionPayments": float(_round_money(sum((Decimal(str(p.amount)) for p in admission_payments), Decimal("0")))),
+        },
+        "revenueByPeriod": {
+            "all": float(_round_money(revenue_by_period["all"])),
+            "year": float(_round_money(revenue_by_period["year"])),
+            "term": float(_round_money(revenue_by_period["term"])),
+            "session": float(_round_money(revenue_by_period["session"])),
+        },
+        "detectedTerm": detected_term,
+        "detectedYear": detected_year,
+        "feeGroupBreakdown": fee_group_values,
+    }
+
+
+class FinanceDashboardSummaryView(APIView):
+    permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
+
+    def get(self, request):
+        return Response(_build_finance_dashboard_summary(request))
 
 
 class FeeCategoryViewSet(viewsets.ModelViewSet):
@@ -63,6 +316,36 @@ class FeeItemViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(items, many=True)
         return Response(serializer.data)
 
+
+def create_invoice_lines(invoice: Invoice, assignment: StudentFeeAssignment, proportion: Decimal = Decimal('1')):
+    """Create invoice line items for a generated invoice."""
+    assignment_items = assignment.get_assignment_items()
+    if not assignment_items:
+        return
+
+    line_amounts = []
+    for entry in assignment_items:
+        amount = (entry.get('remaining_amount', entry.get('cost', Decimal('0'))) * proportion).quantize(Decimal('0.01'))
+        if amount <= Decimal('0.00'):
+            continue
+        line_amounts.append({
+            'item': entry['item'],
+            'description': entry['description'],
+            'amount': amount,
+        })
+
+    total_line_amount = sum(line['amount'] for line in line_amounts)
+    diff = invoice.amount_due - total_line_amount
+    if line_amounts and diff != Decimal('0.00'):
+        line_amounts[-1]['amount'] += diff
+
+    for line in line_amounts:
+        InvoiceLine.objects.create(
+            invoice=invoice,
+            item=line['item'],
+            description=line['description'],
+            amount=line['amount']
+        )
 
 class FeeStructureViewSet(viewsets.ModelViewSet):
     queryset = FeeStructure.objects.select_related('school', 'grade_level')\
@@ -118,26 +401,9 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        # Correct: user has many schools via related_name='schools'
-        return self.queryset.filter(school__in=user.schools.all())
+        # Filter by student's school (StudentFeeAssignment → student → school)
+        return self.queryset.filter(student__school__in=user.schools.all())
 
-    # @action(detail=True, methods=['post'], url_path='generate-invoice')
-    # def generate_invoice(self, request, pk=None):
-    #     assignment = self.get_object()
-    #     term = request.data.get('term', 'Term 1')
-    #     academic_year = request.data.get('academic_year', assignment.fee_structure.academic_year)
-
-    #     invoice = Invoice.objects.create(
-    #         student=assignment.student,
-    #         fee_assignment=assignment,
-    #         term=term,
-    #         academic_year=academic_year,
-    #         amount_due=assignment.effective_total,
-    #         due_date=timezone.now().date() + timezone.timedelta(days=30),
-    #         generated_by=request.user
-    #     )
-
-    #     return Response(InvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
     @action(detail=True, methods=['post'], url_path='generate-invoice')
     def generate_invoice(self, request, pk=None):
         assignment = self.get_object()
@@ -150,20 +416,25 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
 
         # 1. Logic for Single/Full Payment (No Plan)
         if not plan or plan.number_of_installments <= 1:
+            due_date = start_date + timedelta(days=14)
+            if plan and plan.days_interval:
+                due_date = start_date + timedelta(days=plan.days_interval)
+
             invoice = Invoice.objects.create(
                 student=assignment.student,
                 fee_assignment=assignment,
                 school=assignment.student.school,
                 term=term,
                 academic_year=academic_year,
-                amount_due=assignment.effective_total,
-                due_date=start_date + timedelta(days=14), # Default 2 weeks
+                amount_due=assignment.remaining_total,
+                due_date=due_date,
                 generated_by=request.user
             )
+            create_invoice_lines(invoice, assignment, Decimal('1'))
             return Response(InvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
 
         # 2. Logic for Flexible Installments (Weekly, Monthly, etc.)
-        total_amount = assignment.effective_total
+        total_amount = assignment.remaining_total
         num_installments = plan.number_of_installments
         amount_per_installment = total_amount / num_installments
         
@@ -175,11 +446,11 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
             'semester': 120,
             'termly': 120, # Adjust based on your school calendar
         }
-        days_step = interval_map.get(plan.plan_type.lower(), 30)
+        days_step = plan.days_interval or interval_map.get(plan.plan_type.lower(), 30)
 
         created_invoices = []
         for i in range(num_installments):
-            due_date = start_date + timedelta(days=(i * days_step))
+            due_date = start_date + timedelta(days=((i + 1) * days_step))
             
             invoice = Invoice.objects.create(
                 student=assignment.student,
@@ -193,6 +464,8 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
                 due_date=due_date,
                 generated_by=request.user
             )
+            proportion = (invoice.amount_due / total_amount) if total_amount else Decimal('0')
+            create_invoice_lines(invoice, assignment, proportion)
             created_invoices.append(invoice)
 
         return Response(
@@ -229,15 +502,14 @@ class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.select_related('invoice__student', 'paid_by').all()
     permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['invoice', 'payment_method', 'paid_at']
+    filterset_fields = ['invoice', 'invoice__student', 'payment_method', 'paid_at']
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return PaymentCreateUpdateSerializer
         return PaymentSerializer
 
-    # def get_queryset(self):
-    #     return self.queryset.filter(invoice__student__school=self.request.user.school)
+
     def get_queryset(self):
         user = self.request.user
         # Correct: user has many schools via related_name='schools'
@@ -250,16 +522,33 @@ class PaymentViewSet(viewsets.ModelViewSet):
         payment.invoice.refresh_from_db()  # Re-calculate balance
         return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
 
-# class PaymentPlanViewSet(viewsets.ModelViewSet):
-#     queryset = PaymentPlan.objects.prefetch_related('installments').all()
-#     serializer_class = PaymentPlanSerializer
-#     permission_classes = [IsAuthenticated]
+    @action(detail=True, methods=['get'], url_path='receipt')
+    def receipt(self, request, pk=None):
+        payment = self.get_object()
+        invoice = payment.invoice
+        lines = []
+        for line in invoice.lines.select_related('item__category').all():
+            lines.append({
+                'description': line.description,
+                'category': line.item.category.name if line.item and line.item.category else 'Unknown',
+                'amount': float(line.amount),
+            })
 
-#     def get_queryset(self):
-#         school_id = self.request.headers.get('X-School-ID')
-#         if school_id:
-#             return self.queryset.filter(school_id=school_id)
-#         return self.queryset
+        return Response({
+            'payment_id': str(payment.id),
+            'invoice_number': invoice.invoice_number,
+            'student_name': invoice.student.full_name,
+            'payment_method': payment.payment_method,
+            'reference_number': payment.reference_number,
+            'amount': float(payment.amount),
+            'paid_at': payment.paid_at,
+            'invoice_amount_due': float(invoice.amount_due),
+            'invoice_amount_paid': float(invoice.amount_paid),
+            'invoice_balance': float(invoice.balance),
+            'invoice_term': invoice.term,
+            'invoice_year': invoice.academic_year,
+            'line_items': lines,
+        })
     
 class PaymentPlanViewSet(viewsets.ModelViewSet):
     queryset = PaymentPlan.objects.prefetch_related('installments').all()
