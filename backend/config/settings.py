@@ -206,6 +206,192 @@
 
 
 
+# """
+# Django settings for config project.
+# """
+
+# import os
+# from pathlib import Path
+# from datetime import timedelta
+# from dotenv import load_dotenv
+# from urllib.parse import urlparse
+
+# # Load environment variables from .env
+# load_dotenv()
+
+# # Build paths inside the project like this: BASE_DIR / 'subdir'.
+# BASE_DIR = Path(__file__).resolve().parent.parent
+
+# # SECURITY WARNING: keep the secret key used in production secret!
+# SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-fallback-key-change-me")
+
+# # SECURITY WARNING: don't run with debug turned on in production!
+# DEBUG = os.getenv("DEBUG", "True") == "True"
+
+# ALLOWED_HOSTS = ["*"]  # We will tighten this later
+
+
+# # Application definition
+
+# INSTALLED_APPS = [
+#     'django.contrib.admin',
+#     'django.contrib.auth',
+#     'django.contrib.contenttypes',
+#     'django.contrib.sessions',
+#     'django.contrib.messages',
+#     'django.contrib.staticfiles',
+
+#     'rest_framework',
+#     'corsheaders',
+
+#     'apps.accounts',
+#     'apps.students',
+#     'apps.staff',
+#     'apps.academics.apps.AcademicsConfig',
+#     'apps.finance',
+#     'apps.attendance',
+#     'apps.library',
+#     'apps.admissions',
+#     'apps.reports',
+#     'apps.core',
+#     'apps.school',
+#     'apps.inventory',
+#     'apps.transport',
+#     'apps.parent_portal',
+#     'apps.elearning',
+#     'apps.health',
+#     'apps.events',
+#     'apps.alumni',
+#     'apps.procurement',
+# ]
+
+# MIDDLEWARE = [
+#     'corsheaders.middleware.CorsMiddleware',
+#     'django.middleware.security.SecurityMiddleware',
+#     'django.contrib.sessions.middleware.SessionMiddleware',
+#     'django.middleware.common.CommonMiddleware',
+#     'django.middleware.csrf.CsrfViewMiddleware',
+#     'django.contrib.auth.middleware.AuthenticationMiddleware',
+#     'django.contrib.messages.middleware.MessageMiddleware',
+#     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+# ]
+
+# ROOT_URLCONF = 'config.urls'
+
+# TEMPLATES = [
+#     {
+#         'BACKEND': 'django.template.backends.django.DjangoTemplates',
+#         'DIRS': [],
+#         'APP_DIRS': True,
+#         'OPTIONS': {
+#             'context_processors': [
+#                 'django.template.context_processors.request',
+#                 'django.contrib.auth.context_processors.auth',
+#                 'django.contrib.messages.context_processors.messages',
+#             ],
+#         },
+#     },
+# ]
+
+# WSGI_APPLICATION = 'config.wsgi.application'
+
+
+# # Database - reads from .env (Neon) with local fallback
+# DATABASE_URL = os.getenv("DATABASE_URL")
+
+# if DATABASE_URL:
+#     url = urlparse(DATABASE_URL)
+#     DATABASES = {
+#         "default": {
+#             "ENGINE": "django.db.backends.postgresql",
+#             "NAME": url.path[1:],
+#             "USER": url.username,
+#             "PASSWORD": url.password,
+#             "HOST": url.hostname,
+#             "PORT": url.port or 5432,
+#             "OPTIONS": {"sslmode": "require"},
+#         }
+#     }
+# else:
+#     # Local fallback
+#     DATABASES = {
+#         "default": {
+#             "ENGINE": "django.db.backends.postgresql",
+#             "NAME": "school_erp",
+#             "USER": "anyoshe",
+#             "PASSWORD": "anyoshe@1984",
+#             "HOST": "localhost",
+#             "PORT": "5432",
+#         }
+#     }
+
+
+# # Password validation
+# AUTH_PASSWORD_VALIDATORS = [
+#     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+#     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+#     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+#     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+# ]
+
+
+# # Internationalization
+# LANGUAGE_CODE = 'en-us'
+# TIME_ZONE = 'UTC'
+# USE_I18N = True
+# USE_TZ = True
+
+
+# # Static & Media
+# STATIC_URL = 'static/'
+# MEDIA_URL = "/media/"
+# MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+
+# AUTH_USER_MODEL = 'accounts.User'
+
+
+# # REST Framework + JWT
+# REST_FRAMEWORK = {
+#     'DEFAULT_AUTHENTICATION_CLASSES': (
+#         'rest_framework_simplejwt.authentication.JWTAuthentication',
+#     ),
+#     'DEFAULT_PERMISSION_CLASSES': (
+#         'rest_framework.permissions.AllowAny',
+#     ),
+# }
+
+# SIMPLE_JWT = {
+#     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+#     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+#     'AUTH_HEADER_TYPES': ('Bearer',),
+#     'USER_ID_FIELD': 'id',
+#     'USER_ID_CLAIM': 'user_id',
+#     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
+#     'TOKEN_OBTAIN_SERIALIZER': 'apps.accounts.serializers.MyTokenObtainPairSerializer',
+# }
+
+
+# # CORS (dev only)
+# CORS_ALLOW_ALL_ORIGINS = True
+# CORS_ALLOW_CREDENTIALS = True
+# CORS_ALLOW_HEADERS = [
+#     'authorization',
+#     'content-type',
+#     'x-school-id',
+# ]
+
+
+# # Email (Namecheap Private Email)
+# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+# EMAIL_HOST = 'mail.privateemail.com'
+# EMAIL_PORT = 587
+# EMAIL_USE_TLS = True
+# EMAIL_HOST_USER = 'hello@getaxe.tech'
+# EMAIL_HOST_PASSWORD = 'your-private-email-password'
+# DEFAULT_FROM_EMAIL = 'Admissions <hello@getaxe.tech>'
+
+
+
 """
 Django settings for config project.
 """
@@ -213,179 +399,310 @@ Django settings for config project.
 import os
 from pathlib import Path
 from datetime import timedelta
-from dotenv import load_dotenv
 from urllib.parse import urlparse
+
+from dotenv import load_dotenv
+from django.core.exceptions import ImproperlyConfigured
+
 
 # Load environment variables from .env
 load_dotenv()
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+# Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-fallback-key-change-me")
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG", "True") == "True"
+# ---------------------------------------------------------------------
+# SECURITY AND ENVIRONMENT CONFIGURATION
+# ---------------------------------------------------------------------
 
-ALLOWED_HOSTS = ["*"]  # We will tighten this later
+DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = "django-insecure-local-development-only"
+    else:
+        raise ImproperlyConfigured(
+            "SECRET_KEY must be set when DEBUG=False."
+        )
+
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv(
+        "ALLOWED_HOSTS", "localhost,127.0.0.1"
+    ).split(",")
+    if host.strip()
+]
 
 
-# Application definition
+# ---------------------------------------------------------------------
+# APPLICATION DEFINITION
+# ---------------------------------------------------------------------
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
 
-    'rest_framework',
-    'corsheaders',
+    "rest_framework",
+    "corsheaders",
 
-    'apps.accounts',
-    'apps.students',
-    'apps.staff',
-    'apps.academics.apps.AcademicsConfig',
-    'apps.finance',
-    'apps.attendance',
-    'apps.library',
-    'apps.admissions',
-    'apps.reports',
-    'apps.core',
-    'apps.school',
-    'apps.inventory',
-    'apps.transport',
-    'apps.parent_portal',
-    'apps.elearning',
-    'apps.health',
-    'apps.events',
-    'apps.alumni',
-    'apps.procurement',
+    "apps.accounts",
+    "apps.students",
+    "apps.staff",
+    "apps.academics.apps.AcademicsConfig",
+    "apps.finance",
+    "apps.attendance",
+    "apps.library",
+    "apps.admissions",
+    "apps.reports",
+    "apps.core",
+    "apps.school",
+    "apps.inventory",
+    "apps.transport",
+    "apps.parent_portal",
+    "apps.elearning",
+    "apps.health",
+    "apps.events",
+    "apps.alumni",
+    "apps.procurement",
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "corsheaders.middleware.CorsMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = 'config.urls'
+ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'config.wsgi.application'
+WSGI_APPLICATION = "config.wsgi.application"
 
 
-# Database - reads from .env (Neon) with local fallback
+# ---------------------------------------------------------------------
+# DATABASE CONFIGURATION
+# Supports Neon PostgreSQL in production and local PostgreSQL in dev.
+# ---------------------------------------------------------------------
+
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if DATABASE_URL:
     url = urlparse(DATABASE_URL)
+
+    if not url.hostname or not url.path.lstrip("/"):
+        raise ImproperlyConfigured(
+            "DATABASE_URL must contain a database name and hostname."
+        )
+
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": url.path[1:],
+            "NAME": url.path.lstrip("/"),
             "USER": url.username,
             "PASSWORD": url.password,
             "HOST": url.hostname,
             "PORT": url.port or 5432,
-            "OPTIONS": {"sslmode": "require"},
+            "OPTIONS": {
+                "sslmode": "require",
+            },
         }
     }
 else:
-    # Local fallback
+    if not DEBUG:
+        raise ImproperlyConfigured(
+            "DATABASE_URL must be set in production."
+        )
+
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": "school_erp",
-            "USER": "anyoshe",
-            "PASSWORD": "anyoshe@1984",
-            "HOST": "localhost",
-            "PORT": "5432",
+            "NAME": os.getenv("LOCAL_DB_NAME", "school_erp"),
+            "USER": os.getenv("LOCAL_DB_USER", "anyoshe"),
+            "PASSWORD": os.getenv("LOCAL_DB_PASSWORD", ""),
+            "HOST": os.getenv("LOCAL_DB_HOST", "localhost"),
+            "PORT": os.getenv("LOCAL_DB_PORT", "5432"),
         }
     }
 
 
-# Password validation
+# ---------------------------------------------------------------------
+# PASSWORD VALIDATION
+# ---------------------------------------------------------------------
+
 AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    {
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "UserAttributeSimilarityValidator"
+        ),
+    },
+    {
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "MinimumLengthValidator"
+        ),
+    },
+    {
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "CommonPasswordValidator"
+        ),
+    },
+    {
+        "NAME": (
+            "django.contrib.auth.password_validation."
+            "NumericPasswordValidator"
+        ),
+    },
 ]
 
 
-# Internationalization
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+# ---------------------------------------------------------------------
+# INTERNATIONALIZATION
+# ---------------------------------------------------------------------
+
+LANGUAGE_CODE = "en-us"
+
+TIME_ZONE = "UTC"
+
 USE_I18N = True
+
 USE_TZ = True
 
 
-# Static & Media
-STATIC_URL = 'static/'
+# ---------------------------------------------------------------------
+# STATIC AND MEDIA FILES
+# ---------------------------------------------------------------------
+
+STATIC_URL = "static/"
+
 MEDIA_URL = "/media/"
+
 MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 
-AUTH_USER_MODEL = 'accounts.User'
+
+# ---------------------------------------------------------------------
+# CUSTOM USER MODEL
+# ---------------------------------------------------------------------
+
+AUTH_USER_MODEL = "accounts.User"
 
 
-# REST Framework + JWT
+# ---------------------------------------------------------------------
+# DJANGO REST FRAMEWORK AND JWT AUTHENTICATION
+# ---------------------------------------------------------------------
+
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
-    'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.AllowAny',
+    "DEFAULT_PERMISSION_CLASSES": (
+        "rest_framework.permissions.AllowAny",
     ),
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
-    'AUTH_HEADER_TYPES': ('Bearer',),
-    'USER_ID_FIELD': 'id',
-    'USER_ID_CLAIM': 'user_id',
-    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
-    'TOKEN_OBTAIN_SERIALIZER': 'apps.accounts.serializers.MyTokenObtainPairSerializer',
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "USER_ID_FIELD": "id",
+    "USER_ID_CLAIM": "user_id",
+    "AUTH_TOKEN_CLASSES": (
+        "rest_framework_simplejwt.tokens.AccessToken",
+    ),
+    "TOKEN_OBTAIN_SERIALIZER": (
+        "apps.accounts.serializers.MyTokenObtainPairSerializer"
+    ),
 }
 
 
-# CORS (dev only)
-CORS_ALLOW_ALL_ORIGINS = True
+# ---------------------------------------------------------------------
+# CORS CONFIGURATION
+# In development, all origins are allowed.
+# In production, configure CORS_ALLOWED_ORIGINS in the environment.
+# ---------------------------------------------------------------------
+
+CORS_ALLOW_ALL_ORIGINS = DEBUG
+
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS", ""
+    ).split(",")
+    if origin.strip()
+]
+
 CORS_ALLOW_CREDENTIALS = True
+
 CORS_ALLOW_HEADERS = [
-    'authorization',
-    'content-type',
-    'x-school-id',
+    "authorization",
+    "content-type",
+    "x-school-id",
 ]
 
 
-# Email (Namecheap Private Email)
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'mail.privateemail.com'
-EMAIL_PORT = 587
+# ---------------------------------------------------------------------
+# CSRF TRUSTED ORIGINS
+# Add trusted HTTPS origins here if Django admin or other CSRF-protected
+# requests require them in production.
+# ---------------------------------------------------------------------
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CSRF_TRUSTED_ORIGINS", ""
+    ).split(",")
+    if origin.strip()
+]
+
+
+# ---------------------------------------------------------------------
+# EMAIL CONFIGURATION
+# Uses environment variables for deployment credentials.
+# ---------------------------------------------------------------------
+
+EMAIL_BACKEND = (
+    "django.core.mail.backends.smtp.EmailBackend"
+)
+
+EMAIL_HOST = os.getenv(
+    "EMAIL_HOST", "mail.privateemail.com"
+)
+
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'hello@getaxe.tech'
-EMAIL_HOST_PASSWORD = 'your-private-email-password'
-DEFAULT_FROM_EMAIL = 'Admissions <hello@getaxe.tech>'
+
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    "Admissions <hello@getaxe.tech>",
+)
