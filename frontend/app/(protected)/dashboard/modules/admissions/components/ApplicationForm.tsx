@@ -670,7 +670,11 @@ export default function ApplicationForm({
                   <p className="text-sm text-gray-500 mb-4">
                     Birth certificate, passport photo, previous reports, immunization card, ID, etc.
                   </p>
-                  <DocumentUpload onFilesChange={setDocuments} initialFiles={((initialData as { documents?: { name: string; url: string }[] }).documents || [])} />
+                  <DocumentUpload files={documents} onFilesChange={setDocuments} initialFiles={((initialData as { documents?: { name: string; url: string }[] }).documents || []).map((doc) => ({
+                    id: doc.url,
+                    file: doc.url,
+                    description: doc.name,
+                  }))} />
                 </div>
               </div>
             </TabsContent>

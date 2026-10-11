@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/utils/api";
 import { toast } from "sonner";
 
-export default function ChangePassword() {
+function ChangePasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isFirstTime = searchParams.get("first") === "true";
@@ -136,5 +136,18 @@ export default function ChangePassword() {
         </form>
       </div>
     </div>
+  );
+}
+export default function ChangePassword() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          Loading...
+        </div>
+      }
+    >
+      <ChangePasswordForm />
+    </Suspense>
   );
 }

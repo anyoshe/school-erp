@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, ChangeEvent } from "react";
+import { Suspense, useState, useEffect, ChangeEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import api from "@/utils/api";
@@ -99,7 +99,7 @@ const steps = [
   { id: 7, name: "Complete", icon: CheckCircle },
 ] as const;
 
-export default function SetupWizardPage() {
+function SetupWizardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isNewSchoolMode = searchParams.get("mode") === "new";
@@ -1153,5 +1153,19 @@ export default function SetupWizardPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SetupWizardPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          Loading setup...
+        </div>
+      }
+    >
+      <SetupWizardContent />
+    </Suspense>
   );
 }
