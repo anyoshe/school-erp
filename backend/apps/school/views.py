@@ -6,6 +6,7 @@ from django.db.models import Q
 from rest_framework import status
 from .models import School, Module
 from .serializers import SchoolSerializer, SchoolCreateUpdateSerializer, ModuleSerializer, SchoolMiniSerializer
+from .module_seed import seed_default_modules
 from apps.core.permissions import IsAssociatedWithSchool
 
 class ModuleViewSet(ModelViewSet):
@@ -13,6 +14,10 @@ class ModuleViewSet(ModelViewSet):
     serializer_class = ModuleSerializer
     permission_classes = [IsAuthenticated]
     http_method_names = ['get']  # read-only is perfect
+
+    def get_queryset(self):
+        seed_default_modules()
+        return Module.objects.all()
 
 
 class SchoolViewSet(ModelViewSet):

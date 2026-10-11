@@ -124,7 +124,6 @@ class CopyCurriculumTemplateAPIView(APIView):
                     'order': gl.order,
                     'code': gl.code or '',
                     'education_level': gl.education_level,
-                    'pathway': gl.pathway,
                 }
             )
             if grade_created:
@@ -201,19 +200,18 @@ class GradeLevelViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = GradeLevel.objects.all()
-
         school_id = self.request.headers.get('X-School-ID')
         curriculum_id = self.request.query_params.get('curriculum')
         is_template_only = self.request.query_params.get('school__isnull') == 'true'
 
-        if school_id:
+        # Fix: If we want templates, ignore the school_id header
+        if is_template_only:
+            queryset = queryset.filter(school__isnull=True)
+        elif school_id:
             queryset = queryset.filter(school_id=school_id)
 
         if curriculum_id:
             queryset = queryset.filter(curriculum_id=curriculum_id)
-
-        if is_template_only:
-            queryset = queryset.filter(school__isnull=True)
 
         return queryset.order_by('order', 'name')
 
@@ -244,21 +242,30 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             return DepartmentCreateUpdateSerializer
         return DepartmentSerializer
 
+    
     def get_queryset(self):
         queryset = Department.objects.all()
-
-        # 1. School from header (priority for authenticated school-specific views)
         school_id = self.request.headers.get('X-School-ID')
+        is_template_only = self.request.query_params.get('school__isnull') == 'true'
+
+        # 1. PRIORITY: If wizard is fetching global templates
+        if is_template_only:
+            return queryset.filter(school__isnull=True).order_by('name')
+
+        # 2. CONTEXT: If managing a specific school
         if school_id:
-            queryset = queryset.filter(school_id=school_id)
+            # Security check: Ensure user has access to this school
+            school = get_object_or_404(School, id=school_id)
+            if not school.users.filter(id=self.request.user.id).exists() and not self.request.user.is_staff:
+                raise PermissionDenied("You do not have access to this school context.")
+            
+            return queryset.filter(school_id=school_id).order_by('name')
+
+        # 3. FALLBACK: Staff can see everything, others see nothing
+        if self.request.user.is_staff:
             return queryset.order_by('name')
-
-        # 2. Respect ?school__isnull=true (for wizard template/global fetch)
-        if self.request.query_params.get('school__isnull') == 'true':
-            queryset = queryset.filter(school__isnull=True)
-
-        # Optional: other filters like curriculum if needed later
-        return queryset.order_by('name')
+            
+        return queryset.none()
 
     def perform_create(self, serializer):
         school_id = self.request.headers.get('X-School-ID')

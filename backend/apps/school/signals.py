@@ -1,8 +1,9 @@
 # school/signals.py  (create the file if it doesn't exist)
 
-from django.db.models.signals import post_save
+from django.db.models.signals import post_migrate, post_save
 from django.dispatch import receiver
 from apps.school.models import School
+from apps.school.module_seed import seed_default_modules
 from apps.finance.models import FeeCategory
 
 
@@ -38,3 +39,9 @@ def seed_default_categories_for_new_school(sender, instance, created, **kwargs):
                 "display_order": data["display_order"],
             }
         )
+
+
+@receiver(post_migrate)
+def seed_default_modules_after_migrate(sender, **kwargs):
+    if sender.name == "apps.school":
+        seed_default_modules()

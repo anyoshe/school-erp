@@ -43,56 +43,120 @@ interface ClassLogisticsStepProps {
   formData: Record<string, any>;
   applicationData: Application;
   updateForm: (field: string, value: any) => void;
+  schoolHierarchy: "secondary" | "primary" | "simple";
 }
 
-const ClassLogisticsStep = ({ formData, applicationData, updateForm }: ClassLogisticsStepProps) => (
+// ─────────────────────────────────────────────────────────────
+// Improved ClassLogisticsStep with clear Primary vs Secondary logic
+// ─────────────────────────────────────────────────────────────
+const ClassLogisticsStep = ({
+  formData,
+  applicationData,
+  updateForm,
+  schoolHierarchy,
+}: ClassLogisticsStepProps) => (
   <div className="space-y-6">
-    <h3 className="text-lg font-semibold">Class & Daily Logistics</h3>
+    <h3 className="text-lg font-semibold">Class & Placement Logistics</h3>
+
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Class / Grade - Always required */}
       <div>
-        <Label>Class *</Label>
-        <Input value={applicationData.class_applied?.name ?? ""} disabled />
+        <Label>Class / Grade *</Label>
+        <Input
+          value={applicationData.class_applied?.name ?? ""}
+          disabled
+        />
       </div>
 
+      {/* Section - Common to both (Boys/Girls or Lower/Upper Primary) */}
       <div>
         <Label>Section *</Label>
         <Input
           value={formData.section ?? ""}
           onChange={(e) => updateForm("section", e.target.value)}
-          placeholder="A, B, C, Red, Blue..."
-          inputMode="text"
-          autoComplete="off"
-          spellCheck={false}
+          placeholder={
+            schoolHierarchy === "secondary"
+              ? "Boys, Girls, Mixed..."
+              : "Lower Primary, Upper Primary, Red House..."
+          }
         />
         <p className="text-xs text-muted-foreground mt-1">
-          Usually a letter or color name
+          {schoolHierarchy === "secondary" ? "Gender or house grouping" : "Primary level or house"}
         </p>
       </div>
 
+      {/* ────── SECONDARY SCHOOL FIELDS ────── */}
+      {schoolHierarchy === "secondary" && (
+        <>
+          <div>
+            <Label>Pathway</Label>
+            <Select
+              value={formData.pathway ?? ""}
+              onValueChange={(val) => {
+                updateForm("pathway", val);
+                updateForm("track", "");   // Reset dependent fields
+                updateForm("stream", "");
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select Pathway (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="STEM">STEM</SelectItem>
+                <SelectItem value="ARTS">Arts</SelectItem>
+                <SelectItem value="SOCIAL_SCIENCES">Social Sciences</SelectItem>
+                <SelectItem value="TECHNICAL">Technical</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">Senior secondary pathway (e.g. CBC)</p>
+          </div>
+
+          <div>
+            <Label>Track</Label>
+            <Input
+              value={formData.track ?? ""}
+              onChange={(e) => updateForm("track", e.target.value)}
+              placeholder="e.g. Pure Sciences, Engineering, Humanities, Business..."
+              disabled={!formData.pathway}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Specific track under the selected pathway
+            </p>
+          </div>
+        </>
+      )}
+
+      {/* ────── STREAM FIELD - Different meaning per school type ────── */}
       <div>
-        <Label>Stream (optional)</Label>
+        <Label>
+          {schoolHierarchy === "secondary" ? "Stream (Class Division)" : "Stream"}
+        </Label>
         <Input
           value={formData.stream ?? ""}
           onChange={(e) => updateForm("stream", e.target.value)}
-          placeholder="e.g. Science, Arts, Technical, Boys..."
-          inputMode="text"
-          autoComplete="off"
-          spellCheck={false}
+          placeholder={
+            schoolHierarchy === "secondary"
+              ? "e.g. Blue, Orange, Green, 10A..."
+              : "e.g. Green, Orange, A, B, Red..."
+          }
         />
         <p className="text-xs text-muted-foreground mt-1">
-          Used in secondary for subject grouping
+          {schoolHierarchy === "secondary"
+            ? "Final division/stream within track (e.g. Grade 10 Blue)"
+            : "Used to divide classes in primary (e.g. Grade 1 Green / Grade 1 Orange)"}
         </p>
       </div>
+
+      {/* Boarding Status */}
       <div>
         <Label>Boarding Status *</Label>
         <Select
           value={formData.boarding_status}
           onValueChange={(val) => {
             updateForm("boarding_status", val);
-            // Optional: clear dorm/house when switching away from BOARDING
             if (val !== "BOARDING") {
-              updateForm("dorm_room", "");
               updateForm("house", "");
+              updateForm("dorm_room", "");
             }
           }}
         >
@@ -108,32 +172,27 @@ const ClassLogisticsStep = ({ formData, applicationData, updateForm }: ClassLogi
       </div>
 
       {formData.boarding_status === "BOARDING" && (
-        <div>
-          <Label>House *</Label>
-
-          <Input
-            value={formData.house ?? ""}
-            onChange={(e) => updateForm("house", e.target.value)}
-            placeholder="e.g. Lions, Eagles, Unity House"
-          />
-          <p className="text-xs text-muted-foreground mt-1">
-            Boarding house assignment
-          </p>
-        </div>
+        <>
+          <div>
+            <Label>House *</Label>
+            <Input
+              value={formData.house ?? ""}
+              onChange={(e) => updateForm("house", e.target.value)}
+              placeholder="e.g. Lions, Eagles, Unity House"
+            />
+          </div>
+          <div>
+            <Label>Dorm Room *</Label>
+            <Input
+              value={formData.dorm_room ?? ""}
+              onChange={(e) => updateForm("dorm_room", e.target.value)}
+              placeholder="e.g. Dorm A – Room 101"
+            />
+          </div>
+        </>
       )}
 
-      {formData.boarding_status === "BOARDING" && (
-        <div>
-          <Label>Dorm Room *</Label>
-          <Input
-            value={formData.dorm_room ?? ""}
-            onChange={(e) => updateForm("dorm_room", e.target.value)}
-            onBlur={(e) => updateForm("dorm_room", e.target.value.trim())}
-            placeholder="e.g. Dorm A – Room 101"
-          />
-        </div>
-      )}
-
+      {/* Transport Mode - unchanged */}
       <div>
         <Label>Transport Mode</Label>
         <Select
@@ -156,7 +215,7 @@ const ClassLogisticsStep = ({ formData, applicationData, updateForm }: ClassLogi
         <div>
           <Label>Bus Route / Stop</Label>
           <Input
-            value={String(formData.transport_route)}
+            value={String(formData.transport_route ?? "")}
             onChange={(e) => updateForm("transport_route", e.target.value)}
             placeholder="e.g. Route 3 - Westlands Stop"
           />
@@ -167,7 +226,6 @@ const ClassLogisticsStep = ({ formData, applicationData, updateForm }: ClassLogi
 );
 
 export default function EnrollmentWizardModal({
-
   open,
   onOpenChange,
   applicationId,
@@ -177,8 +235,19 @@ export default function EnrollmentWizardModal({
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 6;
-
   const today = format(new Date(), "yyyy-MM-dd");
+
+  const { currentSchool } = useCurrentSchool();
+
+    // ────── SCHOOL HIERARCHY CONFIGURATION ──────
+  const schoolHierarchy = useMemo<"secondary" | "primary" | "simple">(() => {
+    const hierarchy = (currentSchool as any)?.hierarchy_mode;
+    if (hierarchy === "primary" || hierarchy === "simple") {
+      return hierarchy;
+    }
+    return "secondary";
+  }, [currentSchool]);
+  
   const [formData, setFormData] = useState<Record<string, any>>(() => ({
     first_name: applicationData.first_name || "",
     middle_name: applicationData.middle_name || "",
@@ -203,6 +272,8 @@ export default function EnrollmentWizardModal({
 
     current_class: applicationData.class_applied?.id || "",
     section: "",
+    pathway: "",
+    track: "",
     stream: "",
     house: "",
     boarding_status: "DAY",
@@ -261,8 +332,6 @@ export default function EnrollmentWizardModal({
   // 1. Add this to your State/useEffect at the top of the component
   const [optionalItems, setOptionalItems] = useState<any[]>([]);
   const [paymentPlans, setPaymentPlans] = useState<any[]>([]);
-  const { currentSchool } = useCurrentSchool();
-
   const [paymentBreakdown, setPaymentBreakdown] = useState<{
     initialPayment: number;
     balance: number;
@@ -350,10 +419,6 @@ export default function EnrollmentWizardModal({
     const selectedPlan = paymentPlans.find(
       (p) => String(p.id) === String(formData.payment_plan)
     );
-
-    console.log("[CALC] Total Due (Mandatory + Selected Optional):", totalDue);
-    console.log("[CALC] Balance after initial payment:", balance);
-    console.log("[CALC] Selected Plan:", selectedPlan?.name);
 
     let installments: Array<{ amount: number; dueDate: string }> = [];
     const startDate = new Date();
@@ -611,16 +676,16 @@ export default function EnrollmentWizardModal({
         );
       case 2:
         return true;
-      // case 3:
-      //   return formData.current_class && formData.section;
+
       case 3:
         const isBoarding = formData.boarding_status === "BOARDING";
-
         return (
           formData.current_class &&
           formData.section?.trim() &&
           (!isBoarding || (formData.house?.trim() && formData.dorm_room?.trim()))
+          // Pathway/track/stream are optional for flexibility
         );
+
       case 4:
         return formData.vaccination_status;
       case 5:
@@ -628,37 +693,37 @@ export default function EnrollmentWizardModal({
 
       case 6: {
         const hasPaymentProof =
-    (String(formData.initial_payment_reference || "").trim().length > 3) ||
-    !!formData.initial_payment_proof;
+          (String(formData.initial_payment_reference || "").trim().length > 3) ||
+          !!formData.initial_payment_proof;
 
-  const waiverIsValid = !formData.is_waived || (
-    Number(formData.waiver_amount || 0) >= 0 &&
-    String(formData.waiver_reason || "").trim().length >= 3
-  );
+        const waiverIsValid = !formData.is_waived || (
+          Number(formData.waiver_amount || 0) >= 0 &&
+          String(formData.waiver_reason || "").trim().length >= 3
+        );
 
-  const allocationValid = isItemAllocationValid();
+        const allocationValid = isItemAllocationValid();
 
-  const isValid = !!formData.fee_structure_id &&
-                  !!formData.payment_plan &&
-                  formData.terms_accepted === true &&
-                  formData.summary_confirmed === true &&
-                  hasPaymentProof &&
-                  waiverIsValid &&
-                  allocationValid;
+        const isValid = !!formData.fee_structure_id &&
+          !!formData.payment_plan &&
+          formData.terms_accepted === true &&
+          formData.summary_confirmed === true &&
+          hasPaymentProof &&
+          waiverIsValid &&
+          allocationValid;
 
-  // Temporary debug - remove after it works
-  console.log("=== STEP 6 VALIDATION ===", {
-    fee_structure: !!formData.fee_structure_id,
-    payment_plan: !!formData.payment_plan,
-    terms_accepted: formData.terms_accepted,
-    summary_confirmed: formData.summary_confirmed,
-    hasPaymentProof,
-    waiverIsValid,
-    overall: isValid
-  });
+        // Temporary debug - remove after it works
+        console.log("=== STEP 6 VALIDATION ===", {
+          fee_structure: !!formData.fee_structure_id,
+          payment_plan: !!formData.payment_plan,
+          terms_accepted: formData.terms_accepted,
+          summary_confirmed: formData.summary_confirmed,
+          hasPaymentProof,
+          waiverIsValid,
+          overall: isValid
+        });
 
-  return isValid;
-}
+        return isValid;
+      }
       default:
         return true;
     }
@@ -678,157 +743,90 @@ export default function EnrollmentWizardModal({
 
   const handlePrev = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
 
-  // const handleSubmit = async () => {
-  //   setLoading(true);
-  //   try {
-  //     const payload = new FormData();
-
-  //     Object.entries(formData).forEach(([key, value]) => {
-  //       if (key === "selected_optional_items" && Array.isArray(value)) {
-  //         // Correctly handle the array for ManyToMany fields
-  //         value.forEach(id => payload.append("selected_optional_items", id));
-  //       } else if (value instanceof File) {
-  //         payload.append(key, value);
-  //       } else if (value !== null && typeof value !== "object") {
-  //         // Numeric safety for the waiver
-  //         if (key === "waiver_amount") {
-  //           payload.append(key, String(value || 0));
-  //         } else {
-  //           payload.append(key, String(value));
-  //         }
-  //       }
-  //     });
-
-  //     // Map your frontend IDs to the specific backend field names
-  //     payload.set("fee_structure", String(formData.fee_structure_id));
-  //     payload.set("payment_plan", String(formData.payment_plan));
-
-  //     // If manual admission number → send it; else backend generates
-  //     if (!formData.auto_generate_admission && formData.admission_number) {
-  //       payload.set("admission_number", formData.admission_number);
-  //     }
-
-  //     const res = await api.post(`/admissions/applications/${applicationId}/enroll/`, payload, {
-  //       headers: { "Content-Type": "multipart/form-data" },
-  //     });
-
-  //     toast.success("Student enrolled successfully!");
-  //     const studentIdRaw =
-  //       res.data.id ||
-  //       res.data.student_id ||
-  //       res.data.student ||
-  //       applicationData.student;
-
-  //     const studentId =
-  //       studentIdRaw && studentIdRaw !== "undefined" && studentIdRaw !== "null"
-  //         ? String(studentIdRaw)
-  //         : null;
-
-  //     if (!studentId) {
-  //       toast.warning("Student created, but no ID was returned. Please reload student list.");
-  //       onOpenChange(false);
-  //       return;
-  //     }
-
-  //     onEnrolled?.({
-  //       id: studentId,
-  //       full_name: res.data.full_name ?? res.data.student_name,
-  //       admission_number: res.data.admission_number,
-  //     });
-  //     onOpenChange(false);
-  //   } catch (err: any) {
-  //     toast.error(err.response?.data?.detail || "Enrollment failed");
-  //     console.error("Enrollment error full response:", err.response?.data);
-  //     console.error(err);
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
-
   const handleSubmit = async () => {
-  setLoading(true);
-  try {
-    const payload = new FormData();
+    setLoading(true);
+    try {
+      const payload = new FormData();
 
-    // Handle all fields properly
-    Object.entries(formData).forEach(([key, value]) => {
-      if (value === null || value === undefined) return;
+      // Handle all fields properly
+      Object.entries(formData).forEach(([key, value]) => {
+        if (value === null || value === undefined) return;
 
-      if (key === "selected_optional_items" && Array.isArray(value)) {
-        value.forEach((id) => payload.append("selected_optional_items", String(id)));
-      } 
-      else if (value instanceof File) {
-        payload.append(key, value);
-      } 
-      else if (typeof value === "boolean") {
-        // Critical: Django accepts "true" / "false" as strings for BooleanField
-        payload.append(key, value ? "true" : "false");
-      } 
-      else if (typeof value === "number" || !isNaN(Number(value))) {
-        payload.append(key, String(value));
-      } 
-      else {
-        payload.append(key, String(value));
-      }
-    });
-
-    // Explicit mapping for important fields (safety)
-    if (formData.fee_structure_id) {
-      payload.set("fee_structure", String(formData.fee_structure_id));
-    }
-
-    if (formData.payment_plan) {
-      payload.set("payment_plan", String(formData.payment_plan));   // This is important
-    }
-
-    const allocationTotal = getItemAmountTotal(formData.item_amounts || {});
-    if (allocationTotal > 0) {
-      payload.set("initial_payment_amount", String(allocationTotal));
-    }
-
-    if (formData.item_amounts && typeof formData.item_amounts === "object") {
-      payload.set("item_amounts", JSON.stringify(formData.item_amounts));
-    }
-
-    // Manual admission number
-    if (!formData.auto_generate_admission && formData.admission_number) {
-      payload.set("admission_number", formData.admission_number);
-    }
-
-    console.log("[ENROLL] Sending payload keys:", Array.from(payload.keys())); // Debug
-
-    const res = await api.post(
-      `/admissions/applications/${applicationId}/enroll/`,
-      payload,
-      { headers: { "Content-Type": "multipart/form-data" } }
-    );
-
-    toast.success("Student enrolled successfully!");
-
-    const studentId = res.data.id || 
-                     res.data.student_id || 
-                     res.data.student || 
-                     applicationData.student;
-
-    if (studentId) {
-      onEnrolled?.({
-        id: String(studentId),
-        full_name: res.data.full_name ?? res.data.student_name,
-        admission_number: res.data.admission_number,
+        if (key === "selected_optional_items" && Array.isArray(value)) {
+          value.forEach((id) => payload.append("selected_optional_items", String(id)));
+        }
+        else if (value instanceof File) {
+          payload.append(key, value);
+        }
+        else if (typeof value === "boolean") {
+          // Critical: Django accepts "true" / "false" as strings for BooleanField
+          payload.append(key, value ? "true" : "false");
+        }
+        else if (typeof value === "number" || !isNaN(Number(value))) {
+          payload.append(key, String(value));
+        }
+        else {
+          payload.append(key, String(value));
+        }
       });
-    } else {
-      toast.warning("Student enrolled, but ID not returned. Refresh the list.");
+
+      // Explicit mapping for important fields (safety)
+      if (formData.fee_structure_id) {
+        payload.set("fee_structure", String(formData.fee_structure_id));
+      }
+
+      if (formData.payment_plan) {
+        payload.set("payment_plan", String(formData.payment_plan));   // This is important
+      }
+
+      const allocationTotal = getItemAmountTotal(formData.item_amounts || {});
+      if (allocationTotal > 0) {
+        payload.set("initial_payment_amount", String(allocationTotal));
+      }
+
+      if (formData.item_amounts && typeof formData.item_amounts === "object") {
+        payload.set("item_amounts", JSON.stringify(formData.item_amounts));
+      }
+
+      // Manual admission number
+      if (!formData.auto_generate_admission && formData.admission_number) {
+        payload.set("admission_number", formData.admission_number);
+      }
+
+      console.log("[ENROLL] Sending payload keys:", Array.from(payload.keys())); // Debug
+
+      const res = await api.post(
+        `/admissions/applications/${applicationId}/enroll/`,
+        payload,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+
+      toast.success("Student enrolled successfully!");
+
+      const studentId = res.data.id ||
+        res.data.student_id ||
+        res.data.student ||
+        applicationData.student;
+
+      if (studentId) {
+        onEnrolled?.({
+          id: String(studentId),
+          full_name: res.data.full_name ?? res.data.student_name,
+          admission_number: res.data.admission_number,
+        });
+      } else {
+        toast.warning("Student enrolled, but ID not returned. Refresh the list.");
+      }
+
+      onOpenChange(false);
+
+    } catch (err: any) {
+      console.error("Enrollment error full response:", err.response?.data);
+      toast.error(err.response?.data?.detail || "Enrollment failed");
+    } finally {
+      setLoading(false);
     }
-
-    onOpenChange(false);
-
-  } catch (err: any) {
-    console.error("Enrollment error full response:", err.response?.data);
-    toast.error(err.response?.data?.detail || "Enrollment failed");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   // ClassLogisticsStep is defined outside the component to avoid remounts on every render.
 
@@ -1010,6 +1008,7 @@ export default function EnrollmentWizardModal({
             formData={formData}
             applicationData={applicationData}
             updateForm={updateForm}
+            schoolHierarchy={schoolHierarchy}   // ← Add this
           />
         );
 
@@ -1267,18 +1266,18 @@ export default function EnrollmentWizardModal({
 
         const allocationItems: AllocationItem[] = selectedStructure
           ? getSelectedFeeItems(selectedStructure).map((si: any) => {
-              const itemId = String(si.item?.id || si.item);
-              const netAdmissionByItem = getAdmissionNetByItem(selectedStructure);
-              const cost = getAllocationItemCost(si, netAdmissionByItem);
-              return {
-                itemId,
-                name: si.item_details?.name || si.description || "Unnamed Item",
-                category: si.category_name || si.item_details?.category_name || "",
-                cost,
-                allocated: Number(formData.item_amounts?.[itemId] || 0),
-                isAdmission: admissionItemIds.has(itemId),
-              };
-            })
+            const itemId = String(si.item?.id || si.item);
+            const netAdmissionByItem = getAdmissionNetByItem(selectedStructure);
+            const cost = getAllocationItemCost(si, netAdmissionByItem);
+            return {
+              itemId,
+              name: si.item_details?.name || si.description || "Unnamed Item",
+              category: si.category_name || si.item_details?.category_name || "",
+              cost,
+              allocated: Number(formData.item_amounts?.[itemId] || 0),
+              isAdmission: admissionItemIds.has(itemId),
+            };
+          })
           : [];
 
         const allocatedDepositTotal = getItemAmountTotal(formData.item_amounts || {});
@@ -1723,37 +1722,37 @@ export default function EnrollmentWizardModal({
                     )}
                   </div>
 
-              
-                {/* Confirmations - CRITICAL FIX */}
-<div className="space-y-4 pt-4 border-t">
-  <div className="flex items-start gap-3">
-    <Checkbox
-      id="terms"
-      checked={formData.terms_accepted === true}   // strict boolean
-      onCheckedChange={(checked) => {
-        console.log("Terms checkbox changed to:", checked); // ← temporary debug
-        updateForm("terms_accepted", checked === true);
-      }}
-    />
-    <Label htmlFor="terms" className="text-sm leading-tight cursor-pointer select-none">
-      I confirm the guardian has read and accepted the school rules, policies and fee structure.
-    </Label>
-  </div>
 
-  <div className="flex items-start gap-3">
-    <Checkbox
-      id="summary-confirm"
-      checked={formData.summary_confirmed === true}   // strict boolean
-      onCheckedChange={(checked) => {
-        console.log("Summary confirm checkbox changed to:", checked); // ← temporary debug
-        updateForm("summary_confirmed", checked === true);
-      }}
-    />
-    <Label htmlFor="summary-confirm" className="text-sm leading-tight cursor-pointer select-none">
-      I have carefully reviewed all the above details and confirm they are correct.
-    </Label>
-  </div>
-</div>
+                  {/* Confirmations - CRITICAL FIX */}
+                  <div className="space-y-4 pt-4 border-t">
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="terms"
+                        checked={formData.terms_accepted === true}   // strict boolean
+                        onCheckedChange={(checked) => {
+                          console.log("Terms checkbox changed to:", checked); // ← temporary debug
+                          updateForm("terms_accepted", checked === true);
+                        }}
+                      />
+                      <Label htmlFor="terms" className="text-sm leading-tight cursor-pointer select-none">
+                        I confirm the guardian has read and accepted the school rules, policies and fee structure.
+                      </Label>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        id="summary-confirm"
+                        checked={formData.summary_confirmed === true}   // strict boolean
+                        onCheckedChange={(checked) => {
+                          console.log("Summary confirm checkbox changed to:", checked); // ← temporary debug
+                          updateForm("summary_confirmed", checked === true);
+                        }}
+                      />
+                      <Label htmlFor="summary-confirm" className="text-sm leading-tight cursor-pointer select-none">
+                        I have carefully reviewed all the above details and confirm they are correct.
+                      </Label>
+                    </div>
+                  </div>
                 </section>
               </div>
 

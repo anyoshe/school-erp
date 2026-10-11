@@ -32,6 +32,11 @@ export interface Student {
     curriculum?: string;
     school?: string;
   } | null;
+  // Academic + Hierarchy
+
+  section?: string;
+  pathway?: string;
+  track?: string;
   stream?: string;
   boarding_status?: "DAY" | "BOARDING" | "MIXED";
   special_needs?: string;

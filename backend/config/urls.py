@@ -13,9 +13,11 @@ urlpatterns = [
     path('api/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
+    path('api/academics/', include('apps.academics.urls')),
+
     # 3. Accounts & Users (critical - user management)
     path('api/accounts/', include('apps.accounts.urls')),
-
+    
     # 3. Core Multi-Tenancy (School setup - your foundation)
     path('api/', include('apps.school.urls')),
 
@@ -29,7 +31,7 @@ urlpatterns = [
 
     # 6. Academic Flow (attendance → academics)
     path('api/attendance/', include('apps.attendance.urls')),
-    path('api/academics/', include('apps.academics.urls')),
+    
 
     # 7. Supporting modules (alphabetical)
     path('api/library/', include('apps.library.urls')),

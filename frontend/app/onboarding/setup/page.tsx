@@ -18,8 +18,11 @@ import {
   Phone,
   Mail,
   Loader2,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { setActiveSchool } from "@/utils/auth";
 
 interface CurriculumTemplate {
   id: number;
@@ -62,9 +65,22 @@ interface FormData {
   numberOfTerms: number;
   gradingSystem: "percentage" | "points" | "grades";
   passingMark: number;
+
+
   selectedCurriculumId?: number;
   selectedGradeLevelIds: number[];
   selectedDepartmentIds: number[];
+
+  // === Better Structure (Recommended) ===
+  pathways: { name: string; id?: number }[];           // Will get real IDs after creation
+
+  tracks: Record<string, string[]>;                    // pathwayName → track names
+
+  // Per Grade Level (most accurate)
+  sections: Record<number, string[]>;                  // gradeLevelId → sections
+  streams: Record<number, string[]>;                   // gradeLevelId → streams
+
+
   bankName: string;
   branchName: string;
   bankAccountName: string;
@@ -78,8 +94,9 @@ const steps = [
   { id: 2, name: "Academic Structure", icon: Calendar },
   { id: 3, name: "Curriculum Setup", icon: GraduationCap },
   { id: 4, name: "Departments & Grades", icon: GraduationCap },
-  { id: 5, name: "Payment Details", icon: DollarSign },
-  { id: 6, name: "Complete", icon: CheckCircle },
+  { id: 5, name: "Student Classification", icon: Users },        // ← NEW STEP
+  { id: 6, name: "Payment Details", icon: DollarSign },
+  { id: 7, name: "Complete", icon: CheckCircle },
 ] as const;
 
 export default function SetupWizardPage() {
@@ -120,6 +137,16 @@ export default function SetupWizardPage() {
     selectedCurriculumId: undefined,
     selectedGradeLevelIds: [],
     selectedDepartmentIds: [],
+    // In useState initial formData
+    pathways: [{ name: "STEM" }, { name: "Humanities" }, { name: "Arts & Sports" }],
+    tracks: {
+      "STEM": ["Pure Sciences", "Technical"],
+      "Humanities": ["Social Sciences", "Languages"],
+      "Arts & Sports": ["Performing Arts"],
+    },
+    sections: {},
+    streams: {},
+
     bankName: "",
     branchName: "",
     bankAccountName: "",
@@ -371,8 +398,8 @@ export default function SetupWizardPage() {
         currentSchoolId = schoolId;
       }
 
-      localStorage.setItem("currentSchoolId", currentSchoolId);
-      console.log("→ Saved currentSchoolId to localStorage:", currentSchoolId);
+      setActiveSchool(currentSchoolId);
+      console.log("→ Saved active_school_id to localStorage:", currentSchoolId);
 
       // ── COPY CURRICULUM TEMPLATE WITH SELECTED GRADES & DEPARTMENTS ──
       if (formData.selectedCurriculumId && (formData.selectedGradeLevelIds.length > 0 || formData.selectedDepartmentIds.length > 0)) {
@@ -770,99 +797,230 @@ export default function SetupWizardPage() {
               </div>
             )}
 
-            {/* Step 4: Departments & Grades */}
+            {/* Step 4: Grades & Departments */}
             {currentStep === 3 && (
               <div className="space-y-10">
                 <div className="text-center mb-8">
-                  <h3 className="text-xl font-semibold">Select Your School Structure</h3>
-                  <p className="text-gray-600 mt-2">
-                    Choose the grade levels and departments currently active in your school
-                  </p>
+                  <h3 className="text-xl font-semibold">School Structure</h3>
+                  <p className="text-gray-600 mt-2">Select active grade levels and departments</p>
                 </div>
 
                 {isLoading ? (
-                  <div className="flex flex-col items-center justify-center py-12">
+                  <div className="flex flex-col items-center py-12">
                     <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
-                    <p className="text-gray-600">Loading available structure...</p>
+                    <p>Loading structure...</p>
                   </div>
                 ) : !formData.selectedCurriculumId ? (
-                  <div className="text-center py-12 bg-gray-50 rounded-xl border border-gray-200">
-                    <p className="text-gray-700 font-medium">
-                      Please go back and select a curriculum first
-                    </p>
-                    <button
-                      onClick={() => setCurrentStep(2)}
-                      className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                    >
-                      Back to Curriculum Selection
+                  <div className="text-center py-12 bg-gray-50 rounded-xl border">
+                    <p>Please select a curriculum first</p>
+                    <button onClick={() => setCurrentStep(2)} className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg">
+                      Back to Curriculum
                     </button>
                   </div>
                 ) : (
                   <>
                     {/* Grade Levels */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-4 font-semibold">
-                        Grade / Form Levels
-                      </label>
-                      {gradeLevels.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-xl">
-                          No grade levels found for this curriculum
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          {gradeLevels.map((level) => (
-                            <label
-                              key={level.id}
-                              className="flex items-center gap-3 p-4 border rounded-xl hover:bg-gray-50 cursor-pointer transition-colors"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={formData.selectedGradeLevelIds.includes(level.id)}
-                                onChange={() => toggleGradeLevel(level.id)}
-                                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
-                              />
-                              <span className="font-medium">{level.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
+                      <label className="block text-sm font-semibold mb-4">Grade / Form Levels</label>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {gradeLevels.map((level) => (
+                          <label key={level.id} className="flex items-center gap-3 p-4 border rounded-xl hover:bg-gray-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.selectedGradeLevelIds.includes(level.id)}
+                              onChange={() => toggleGradeLevel(level.id)}
+                              className="w-5 h-5 text-blue-600"
+                            />
+                            <span className="font-medium">{level.name}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
 
                     {/* Departments */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-4 font-semibold">
-                        Departments / Streams
-                      </label>
-                      {departments.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-xl">
-                          No departments available
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          {departments.map((dept) => (
-                            <label
-                              key={dept.id}
-                              className="flex items-center gap-3 p-4 border rounded-xl hover:bg-gray-50 cursor-pointer transition-colors"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={formData.selectedDepartmentIds.includes(dept.id)}
-                                onChange={() => toggleDepartment(dept.id)}
-                                className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
-                              />
-                              <span className="font-medium">{dept.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
+                      <label className="block text-sm font-semibold mb-4">Departments</label>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {departments.map((dept) => (
+                          <label key={dept.id} className="flex items-center gap-3 p-4 border rounded-xl hover:bg-gray-50 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formData.selectedDepartmentIds.includes(dept.id)}
+                              onChange={() => toggleDepartment(dept.id)}
+                              className="w-5 h-5 text-blue-600"
+                            />
+                            <span className="font-medium">{dept.name}</span>
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </>
                 )}
               </div>
             )}
 
-            {/* Step 5: Banking & Payment Setup */}
+            {/* Step 5: Student Classification - Enhanced */}
             {currentStep === 4 && (
+              <div className="space-y-12">
+                <div className="text-center">
+                  <h3 className="text-2xl font-semibold">Define Student Classifications</h3>
+                  <p className="text-gray-600 mt-2">This will be used for student placement</p>
+                </div>
+
+                {/* Pathways + Tracks */}
+                <div className="p-6 border rounded-2xl bg-white">
+                  <label className="block font-semibold text-lg mb-4">Pathways & Tracks (Senior Secondary)</label>
+
+                  {formData.pathways.map((pathway, pIndex) => (
+                    <div key={pIndex} className="mb-8 last:mb-0 p-5 bg-gray-50 rounded-xl">
+                      <div className="flex justify-between items-center mb-3">
+                        <input
+                          type="text"
+                          value={pathway.name}
+                          onChange={(e) => {
+                            const newPathways = [...formData.pathways];
+                            newPathways[pIndex].name = e.target.value;
+                            updateForm("pathways", newPathways);
+                          }}
+                          className="font-semibold bg-transparent border-b focus:outline-none"
+                        />
+                        <button onClick={() => {
+                          const newPathways = formData.pathways.filter((_, i) => i !== pIndex);
+                          const newTracks = { ...formData.tracks };
+                          delete newTracks[pathway.name];
+                          updateForm("pathways", newPathways);
+                          updateForm("tracks", newTracks);
+                        }} className="text-red-500 text-xl">×</button>
+                      </div>
+
+                      <div className="pl-4 border-l-2 border-purple-300">
+                        <p className="text-sm text-gray-500 mb-2">Tracks under this pathway:</p>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {(formData.tracks[pathway.name] || []).map((track, tIndex) => (
+                            <Badge key={tIndex} variant="secondary" className="flex items-center gap-1">
+                              {track}
+                              <button
+                                onClick={() => {
+                                  const newTracks = { ...formData.tracks };
+                                  newTracks[pathway.name] = newTracks[pathway.name].filter((_, i) => i !== tIndex);
+                                  updateForm("tracks", newTracks);
+                                }}
+                                className="text-red-500 ml-1"
+                              >
+                                ×
+                              </button>
+                            </Badge>
+                          ))}
+                        </div>
+                        <input
+                          type="text"
+                          placeholder="Add track (e.g. Pure Sciences) and press Enter"
+                          className="w-full border rounded-lg px-4 py-2.5 text-sm"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                              const newTracks = { ...formData.tracks };
+                              if (!newTracks[pathway.name]) newTracks[pathway.name] = [];
+                              newTracks[pathway.name].push(e.currentTarget.value.trim());
+                              updateForm("tracks", newTracks);
+                              e.currentTarget.value = "";
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      updateForm("pathways", [...formData.pathways, { name: "" }]);
+                    }}
+                    className="mt-4 text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
+                  >
+                    + Add New Pathway
+                  </button>
+                </div>
+
+                {/* Per Grade Level Sections & Streams */}
+                <div>
+                  <label className="block font-semibold text-lg mb-6">Sections & Streams per Grade Level</label>
+                  {gradeLevels
+                    .filter(g => formData.selectedGradeLevelIds.includes(g.id))
+                    .map((grade) => (
+                      <div key={grade.id} className="mb-10 p-6 border rounded-2xl bg-white">
+                        <h4 className="font-semibold mb-4 text-lg">{grade.name}</h4>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                          {/* Sections */}
+                          <div>
+                            <label className="block text-sm font-medium mb-3">Sections / Houses</label>
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {(formData.sections[grade.id] || []).map((sec, i) => (
+                                <Badge key={i} variant="secondary">
+                                  {sec}
+                                  <button onClick={() => {
+                                    const newSecs = { ...formData.sections };
+                                    newSecs[grade.id] = newSecs[grade.id].filter((_, idx) => idx !== i);
+                                    updateForm("sections", newSecs);
+                                  }} className="ml-2 text-red-500">×</button>
+                                </Badge>
+                              ))}
+                            </div>
+                            <input
+                              placeholder="Add section (e.g. Red House)"
+                              className="w-full border rounded-lg px-4 py-3"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                                  const val = e.currentTarget.value.trim();
+                                  const newSecs = { ...formData.sections };
+                                  if (!newSecs[grade.id]) newSecs[grade.id] = [];
+                                  newSecs[grade.id].push(val);
+                                  updateForm("sections", newSecs);
+                                  e.currentTarget.value = "";
+                                }
+                              }}
+                            />
+                          </div>
+
+                          {/* Streams */}
+                          <div>
+                            <label className="block text-sm font-medium mb-3">Streams / Classes</label>
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {(formData.streams[grade.id] || []).map((str, i) => (
+                                <Badge key={i} variant="secondary" className="bg-green-50 text-green-700">
+                                  {str}
+                                  <button onClick={() => {
+                                    const newStreams = { ...formData.streams };
+                                    newStreams[grade.id] = newStreams[grade.id].filter((_, idx) => idx !== i);
+                                    updateForm("streams", newStreams);
+                                  }} className="ml-2 text-red-500">×</button>
+                                </Badge>
+                              ))}
+                            </div>
+                            <input
+                              placeholder="Add stream (e.g. 10 East, Science A)"
+                              className="w-full border rounded-lg px-4 py-3"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && e.currentTarget.value.trim()) {
+                                  const val = e.currentTarget.value.trim();
+                                  const newStreams = { ...formData.streams };
+                                  if (!newStreams[grade.id]) newStreams[grade.id] = [];
+                                  newStreams[grade.id].push(val);
+                                  updateForm("streams", newStreams);
+                                  e.currentTarget.value = "";
+                                }
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Step 6: Banking & Payment Setup */}
+            {currentStep === 5 && (
               <div className="space-y-6">
                 <div className="text-center mb-8">
                   <h3 className="text-xl font-semibold">Payment Details</h3>
@@ -933,8 +1091,8 @@ export default function SetupWizardPage() {
               </div>
             )}
 
-            {/* Step 6: Review & Complete */}
-            {currentStep === 5 && (
+            {/* Step 7: Review & Complete */}
+            {currentStep === 6 && (
               <div className="text-center py-12">
                 <div className="w-24 h-24 mx-auto mb-6 bg-green-100 rounded-full flex items-center justify-center">
                   <CheckCircle className="w-16 h-16 text-green-600" />

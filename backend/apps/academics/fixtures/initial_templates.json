@@ -160,7 +160,21 @@
   {"model": "academics.gradelevel", "pk": 171, "fields": {"school": null, "curriculum": 16, "name": "DP Year 1", "short_name": "DP1", "order": 11, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
   {"model": "academics.gradelevel", "pk": 172, "fields": {"school": null, "curriculum": 16, "name": "DP Year 2", "short_name": "DP2", "order": 12, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
 
-  
+  {"model": "academics.gradelevel", "pk": 200, "fields": {"school": null, "curriculum": 40, "name": "P1", "short_name": "P1", "order": 1, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 201, "fields": {"school": null, "curriculum": 40, "name": "P2", "short_name": "P2", "order": 2, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 202, "fields": {"school": null, "curriculum": 40, "name": "P3", "short_name": "P3", "order": 3, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 203, "fields": {"school": null, "curriculum": 40, "name": "P4", "short_name": "P4", "order": 4, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 204, "fields": {"school": null, "curriculum": 40, "name": "P5", "short_name": "P5", "order": 5, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 205, "fields": {"school": null, "curriculum": 40, "name": "P6", "short_name": "P6", "order": 6, "code": "", "education_level": "ELEMENTARY", "pathway": "GENERAL"}},
+
+  {"model": "academics.gradelevel", "pk": 206, "fields": {"school": null, "curriculum": 40, "name": "S1", "short_name": "S1", "order": 7, "code": "", "education_level": "MIDDLE", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 207, "fields": {"school": null, "curriculum": 40, "name": "S2", "short_name": "S2", "order": 8, "code": "", "education_level": "MIDDLE", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 208, "fields": {"school": null, "curriculum": 40, "name": "S3", "short_name": "S3", "order": 9, "code": "", "education_level": "MIDDLE", "pathway": "GENERAL"}},
+
+  {"model": "academics.gradelevel", "pk": 209, "fields": {"school": null, "curriculum": 40, "name": "S4", "short_name": "S4", "order": 10, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 210, "fields": {"school": null, "curriculum": 40, "name": "S5", "short_name": "S5", "order": 11, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+  {"model": "academics.gradelevel", "pk": 211, "fields": {"school": null, "curriculum": 40, "name": "S6", "short_name": "S6", "order": 12, "code": "", "education_level": "HIGH", "pathway": "GENERAL"}},
+
   {"model": "academics.department", "pk": 1000, "fields": {"school": null, "curriculum": null, "name": "Science", "short_name": "Sci", "code": "SCI"}},
   {"model": "academics.department", "pk": 1001, "fields": {"school": null, "curriculum": null, "name": "Humanities", "short_name": "Hum", "code": "HUM"}},
   {"model": "academics.department", "pk": 1002, "fields": {"school": null, "curriculum": null, "name": "Technical", "short_name": "Tech", "code": "TECH"}},

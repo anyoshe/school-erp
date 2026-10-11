@@ -1,3 +1,399 @@
+# # apps/admissions/models.py
+# import uuid
+# from django.db import models, transaction
+# from django.conf import settings
+# from django.utils import timezone
+# from django.core.exceptions import ValidationError
+# from decimal import Decimal
+# import hashlib
+# from apps.academics.models import GradeLevel
+# from apps.school.models import School
+# from apps.students.models import Student, Guardian, StudentGuardian, MedicalRecord
+# from apps.school.models import generate_unique_admission_number
+
+
+
+# class Application(models.Model):
+#     class Status(models.TextChoices):
+#         DRAFT = "DRAFT", "Draft"
+#         SUBMITTED = "SUBMITTED", "Submitted"
+#         UNDER_REVIEW = "UNDER_REVIEW", "Under Review"
+#         TEST_SCHEDULED = "TEST_SCHEDULED", "Test Scheduled"
+#         OFFERED = "OFFERED", "Offered"
+#         ACCEPTED = "ACCEPTED", "Accepted"
+#         REJECTED = "REJECTED", "Rejected"
+#         ENROLLED = "ENROLLED", "Enrolled"
+#         INTERVIEW_COMPLETED = "INTERVIEW_COMPLETED", "Interview Completed"
+
+#     class PlacementType(models.TextChoices):
+#         SELF = "SELF", "Self / Parent Application"
+#         PUBLIC = "PUBLIC", "Government / Public Authority Placement"
+#         TRANSFER = "TRANSFER", "Transfer from Another School"
+#         OTHER = "OTHER", "Other (e.g. scholarship, international)"
+
+#     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+#     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='admission_applications')
+#     admission_number = models.CharField(max_length=50, unique=True, null=True, blank=True)
+
+#     # Personal
+#     first_name = models.CharField(max_length=50)
+#     middle_name = models.CharField(max_length=50, blank=True)
+#     last_name = models.CharField(max_length=50)
+#     preferred_name = models.CharField(max_length=100, blank=True)
+#     gender = models.CharField(max_length=10, blank=True)
+#     date_of_birth = models.DateField(null=True, blank=True)
+#     nationality = models.CharField(max_length=100, blank=True)
+#     passport_number = models.CharField(max_length=50, blank=True)
+
+#     # Class / Level
+#     class_applied = models.ForeignKey(
+#         GradeLevel,
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         related_name='applications'
+#     )
+#      # ── NEW: Flexible Student Placement Hierarchy ──
+#     section = models.CharField(
+#         max_length=100, 
+#         blank=True, 
+#         verbose_name="Section",
+#         help_text="Boys/Girls/Mixed or Lower Primary/Upper Primary/Red House etc."
+#     )
+#     pathway = models.CharField(
+#         max_length=50, 
+#         blank=True, 
+#         verbose_name="Pathway",
+#         help_text="STEM, ARTS, SOCIAL_SCIENCES, TECHNICAL (mainly for secondary/CBC)"
+#     )
+#     track = models.CharField(
+#         max_length=100, 
+#         blank=True, 
+#         verbose_name="Track",
+#         help_text="e.g. Pure Sciences, Engineering, Humanities, Business (under pathway)"
+#     )
+#     stream = models.CharField(
+#         max_length=100, 
+#         blank=True, 
+#         verbose_name="Stream",
+#         help_text="Final class division e.g. Blue, Orange, Green, A, B (primary or secondary)"
+#     )
+
+
+#     # Guardian
+#     primary_guardian_name = models.CharField(max_length=100, blank=True)
+#     primary_guardian_phone = models.CharField(max_length=20, blank=True)
+#     primary_guardian_email = models.EmailField(blank=True, null=True)
+#     primary_guardian_relationship = models.CharField(max_length=50, blank=True)
+#     primary_guardian_id_number = models.CharField(max_length=50, blank=True)
+
+#     # Address
+#     address = models.TextField(blank=True)
+#     region = models.CharField(max_length=100, blank=True)          # generalized from county
+#     district = models.CharField(max_length=100, blank=True)        # generalized from sub_county
+
+#     # Academic / Entry
+#     previous_school = models.CharField(max_length=255, blank=True)
+#     learner_id = models.CharField(max_length=50, blank=True, verbose_name="Learner ID / Student Number")
+#     entry_exam_id = models.CharField(max_length=50, blank=True, verbose_name="Entry / National Exam ID")
+#     entry_exam_year = models.PositiveIntegerField(null=True, blank=True)
+#     placement_type = models.CharField(
+#         max_length=20,
+#         choices=PlacementType.choices,
+#         default=PlacementType.SELF
+#     )
+
+#     # Health & Emergency
+#     blood_group = models.CharField(max_length=5, blank=True)
+#     allergies = models.TextField(blank=True)
+#     chronic_conditions = models.TextField(blank=True)
+#     disability = models.CharField(max_length=100, blank=True)
+#     emergency_contact_name = models.CharField(max_length=100, blank=True)
+#     emergency_contact_phone = models.CharField(max_length=20, blank=True)
+#     emergency_relationship = models.CharField(max_length=50, blank=True)
+
+#     # ── NEW: Interview Scheduling Fields ──
+#     interview_date = models.DateField(null=True, blank=True)
+#     interview_time = models.TimeField(null=True, blank=True)
+#     interview_venue = models.CharField(max_length=200, blank=True)
+#     interview_contact_person = models.CharField(max_length=100, blank=True)
+#     interview_instructions = models.TextField(blank=True)
+
+
+#     # Add fields
+#     interview_outcome = models.CharField(
+#         max_length=20,
+#         choices=[
+#             ("PASS", "Pass"),
+#             ("FAIL", "Fail"),
+#             ("WAITLIST", "Waitlist"),
+#             ("OTHER", "Other"),
+#         ],
+#         blank=True,
+#         null=True,
+#     )
+#     interview_comments = models.TextField(blank=True)
+#     interview_completed_at = models.DateTimeField(null=True, blank=True)
+#     interview_score = models.IntegerField(null=True, blank=True)
+#     interviewer_name = models.CharField(max_length=100, blank=True)
+#     # Add after accepted_at / acceptance_notes
+#     offer_issued_at = models.DateTimeField(null=True, blank=True)
+#     offer_method = models.CharField(max_length=20, blank=True)  # 'email', 'whatsapp', 'download', etc.
+#     accepted_at = models.DateTimeField(null=True, blank=True)
+#     acceptance_notes = models.TextField(blank=True)
+
+#     # Documents / Media
+#     photo = models.ImageField(upload_to='admission_photos/', null=True, blank=True)
+
+#     # Misc
+#     religion = models.CharField(max_length=50, blank=True)
+#     category = models.CharField(max_length=50, blank=True)  # e.g. General, Bursary, International
+#     notes = models.TextField(blank=True)
+#     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+#     submitted_at = models.DateTimeField(null=True, blank=True)
+#     admission_date = models.DateField(null=True, blank=True)
+
+#     student = models.OneToOneField(
+#         "students.Student", 
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         blank=True,
+#         related_name='admission_application'
+#     )
+#     created_by = models.ForeignKey(
+#         settings.AUTH_USER_MODEL,          # ← correct way
+#         on_delete=models.SET_NULL,
+#         null=True,
+#         blank=True,
+#         related_name='created_applications'
+#     )
+#     updated_at = models.DateTimeField(auto_now=True)
+
+#     def get_placement_display(self) -> str:
+#         """Nice readable placement string"""
+#         parts = []
+#         if self.class_applied:
+#             parts.append(self.class_applied.name)
+#         if self.section:
+#             parts.append(self.section)
+#         if self.pathway:
+#             parts.append(self.pathway)
+#         if self.track:
+#             parts.append(self.track)
+#         if self.stream:
+#             parts.append(self.stream)
+#         return " - ".join(parts) if parts else "Not assigned"
+
+#     def save(self, *args, **kwargs):
+#         if self.status == self.Status.SUBMITTED and not self.submitted_at:
+#             self.submitted_at = timezone.now()
+
+#         # Check if record actually exists in DB
+#         old = Application.objects.filter(pk=self.pk).first()
+        
+#         if old:
+#             if self.status == self.Status.OFFERED and old.status != self.Status.OFFERED:
+#                 if not self.offer_issued_at:
+#                     self.offer_issued_at = timezone.now()
+            
+#             if self.status == self.Status.ACCEPTED and old.status != self.Status.ACCEPTED:
+#                 if not self.accepted_at:
+#                     self.accepted_at = timezone.now()
+
+#         super().save(*args, **kwargs) 
+    
+
+#     @transaction.atomic
+#     def enroll_as_student(self, created_by_user, wizard_data=None):
+#         if self.status not in [self.Status.ACCEPTED, self.Status.ENROLLED]:
+#             raise ValidationError("Only ACCEPTED applications can be enrolled")
+
+#         if self.student:
+#             raise ValidationError("Already enrolled")
+
+#         wd = wizard_data or {}
+
+#             # === SAFE SINGLE INITIAL DEPOSIT CREATION ===
+#         try:
+#             initial_amount = Decimal(str(wd.get('initial_payment_amount', 0) or 0))
+#             reference = str(wd.get('initial_payment_reference', '')).strip()
+#             print(f"[ENROLL PAYMENT DEBUG] Application={self.id} | Amount={initial_amount} | Ref='{reference}'")
+#         except Exception as e:
+#             print(f"[ENROLL PAYMENT DEBUG] Error parsing payment data: {e}")
+#             initial_amount = Decimal('0')
+#             reference = ''
+
+#         if initial_amount > 0:
+#             # Strong guard: check by application + amount + reference
+#             if not AdmissionFeePayment.objects.filter(
+#                 application=self,
+#                 amount=initial_amount,
+#                 receipt_number=reference
+#             ).exists():
+#                 payment = AdmissionFeePayment.objects.create(
+#                     application=self,
+#                     amount=initial_amount,
+#                     payment_method=reference or "Initial Enrollment Payment",
+#                     receipt_number=reference,
+#                 )
+#                 print(f"[ENROLL PAYMENT DEBUG] ✅ CREATED NEW PAYMENT | ID={payment.id} | Amount={initial_amount}")
+#             else:
+#                 print(f"[ENROLL PAYMENT DEBUG] ⚠️ SKIPPED - Payment already exists for this combo")
+#         else:
+#             print("[ENROLL PAYMENT DEBUG] No initial payment provided")
+        
+#          # Auto-generate admission number if missing
+#         if not self.admission_number:
+#             try:
+#                 self.admission_number = generate_unique_admission_number(self.school)
+#                 print(f"[ENROLL DEBUG] Generated admission number: {self.admission_number}")
+#             except Exception as e:
+#                 print(f"[ENROLL DEBUG] Error generating admission number: {e}")
+#                 raise
+
+#         # Save safely
+#         self.save(update_fields=['admission_number'])
+
+#         fee_structure_obj = None
+#         if wd.get('fee_structure'):
+#             try:
+#                 from apps.finance.models import FeeStructure
+#                 fee_structure_obj = FeeStructure.objects.get(pk=wd.get('fee_structure'))
+#             except (FeeStructure.DoesNotExist, ValueError, TypeError):
+#                 fee_structure_obj = None
+
+#         cleaned_gender = str(self.gender or '').strip()[:10]
+#         cleaned_section = str(wd.get('section', '') or '').strip()[:50]
+#         cleaned_pathway = str(wd.get('pathway', '')).strip()[:50]
+#         cleaned_track = str(wd.get('track', '')).strip()[:100]
+#         cleaned_stream = str(wd.get('stream', '')).strip()[:100]
+
+#         student = Student.objects.create(
+#             school=self.school,
+#             admission_number=self.admission_number,
+#             learner_id=wd.get('learner_id') or self.learner_id,                    # ← direct copy, no rename
+#             entry_exam_id=self.entry_exam_id,
+#             entry_exam_year=self.entry_exam_year,
+#             first_name=self.first_name,
+#             middle_name=self.middle_name,
+#             last_name=self.last_name,
+#             preferred_name=self.preferred_name,
+#             gender=cleaned_gender,
+#             date_of_birth=self.date_of_birth,
+#             nationality=self.nationality,
+#             religion=self.religion,
+#             photo=self.photo,
+#             address=self.address,
+#             region=self.region,                             # ← direct copy
+#             district=self.district,                         # ← direct copy
+#             blood_group=self.blood_group,
+#             allergies=self.allergies,
+#             chronic_conditions=self.chronic_conditions,
+#             disability=self.disability,
+#             emergency_name=self.emergency_contact_name or wd.get('emergency_name'),
+#             emergency_phone=self.emergency_contact_phone or wd.get('emergency_phone'),
+#             emergency_relation=self.emergency_relationship or wd.get('emergency_relation'),
+#             current_class=self.class_applied,
+#             boarding_status=wd.get('boarding_status', 'DAY'),
+#             special_needs=wd.get('special_needs', ''),
+#             notes=wd.get('notes', ''),
+#             created_by=created_by_user,
+#             # Admin-added / completed fields from wizard
+#             birth_certificate_number=wd.get("birth_certificate_number", ""),
+#             passport_number=wd.get("passport_number", ""),
+#             previous_school=wd.get("previous_school", ""),
+#             previous_grade=wd.get("previous_grade", ""),
+#             disability_type=wd.get("disability_type", ""),
+#             special_needs_category=wd.get("special_needs_category", ""),
+#             transport_mode=wd.get("transport_mode", "walking"),
+#             transport_route=wd.get("transport_route", ""),
+#             sponsor_name=wd.get("sponsor_name", ""),
+#             section=cleaned_section,
+#             pathway=cleaned_pathway,
+#             track=cleaned_track,
+#             stream=wd.get('stream', ''),
+#             house=wd.get('house', ''),
+#             dorm_room=wd.get('dorm_room', ''),
+#             vaccination_status=wd.get('vaccination_status', 'UNKNOWN'),
+#             fee_structure=fee_structure_obj,
+#         )
+
+#         # Create fee assignment if fee structure is provided
+#         if fee_structure_obj:
+#             from apps.finance.models import StudentFeeAssignment
+#             custom_due_date = None
+#             remaining_payment_due_date = wd.get('remaining_payment_due_date') or wd.get('balance_due_date')
+#             if remaining_payment_due_date:
+#                 try:
+#                     from datetime import date
+#                     custom_due_date = date.fromisoformat(str(remaining_payment_due_date))
+#                 except ValueError:
+#                     custom_due_date = None
+
+#             item_amounts = wd.get('item_amounts', {}) or {}
+#             if not isinstance(item_amounts, dict):
+#                 item_amounts = {}
+
+#             assignment = StudentFeeAssignment.objects.create(
+#                 student=student,
+#                 fee_structure=fee_structure_obj,
+#                 payment_plan_id=wd.get('payment_plan'),           # ← This was missing
+#                 custom_due_date=custom_due_date,
+#                 waiver_amount=Decimal(str(wd.get('waiver_amount', 0))),
+#                 waiver_reason=wd.get('waiver_reason', ''),
+#                 is_waived=bool(wd.get('is_waived', False)),
+#                 item_amounts=item_amounts,
+#                 assigned_by=created_by_user,
+#             )
+
+#             # Handle selected optional items
+#             selected_optional_items = wd.get('selected_optional_items', []) or []
+#             if selected_optional_items:
+#                 assignment.selected_optional_items.set(selected_optional_items)
+
+#             try:
+#                 from apps.finance.signals import regenerate_invoices_for_assignment
+#                 regenerate_invoices_for_assignment(assignment)
+#             except Exception as e:
+#                 print(f"[ENROLL DEBUG] Failed to regenerate invoices for assignment {assignment.id}: {e}")
+
+#         # Medical record auto-created / updated
+#         MedicalRecord.objects.update_or_create(
+#             student=student,
+#             defaults={
+#                 'school': self.school,
+#                 'blood_group': student.blood_group,
+#                 'allergies': student.allergies,
+#                 'chronic_conditions': student.chronic_conditions,
+#                 'immunization_status': student.vaccination_status,
+#                 'recorded_by': created_by_user,
+#             }
+#         )
+
+#         # Primary guardian link
+#         primary_guardian, _ = Guardian.objects.get_or_create(
+#             school=self.school,
+#             phone=self.primary_guardian_phone,
+#             defaults={
+#                 'full_name': self.primary_guardian_name,
+#                 'email': self.primary_guardian_email,
+#                 'relationship': self.primary_guardian_relationship,
+#                 'id_number': self.primary_guardian_id_number,
+#             }
+#         )
+#         StudentGuardian.objects.get_or_create(
+#             student=student,
+#             guardian=primary_guardian,
+#             defaults={'is_primary': True}
+#         )
+
+#         self.student = student
+#         self.status = self.Status.ENROLLED
+#         self.save()
+
+#         return student
+    
+
+
 # apps/admissions/models.py
 import uuid
 from django.db import models, transaction
@@ -5,7 +401,6 @@ from django.conf import settings
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from decimal import Decimal
-import hashlib
 from apps.academics.models import GradeLevel
 from apps.school.models import School
 from apps.students.models import Student, Guardian, StudentGuardian, MedicalRecord
@@ -34,7 +429,7 @@ class Application(models.Model):
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='admission_applications')
     admission_number = models.CharField(max_length=50, unique=True, null=True, blank=True)
 
-    # Personal
+    # Personal Information
     first_name = models.CharField(max_length=50)
     middle_name = models.CharField(max_length=50, blank=True)
     last_name = models.CharField(max_length=50)
@@ -52,6 +447,32 @@ class Application(models.Model):
         related_name='applications'
     )
 
+    # ── Flexible Student Placement Hierarchy ──
+    section = models.CharField(
+        max_length=100, 
+        blank=True, 
+        verbose_name="Section",
+        help_text="Boys/Girls/Mixed or Lower Primary/Upper Primary/Red House etc."
+    )
+    pathway = models.CharField(
+        max_length=50, 
+        blank=True, 
+        verbose_name="Pathway",
+        help_text="STEM, ARTS, SOCIAL_SCIENCES, TECHNICAL (mainly secondary/CBC)"
+    )
+    track = models.CharField(
+        max_length=100, 
+        blank=True, 
+        verbose_name="Track",
+        help_text="e.g. Pure Sciences, Engineering, Humanities, Business"
+    )
+    stream = models.CharField(
+        max_length=100, 
+        blank=True, 
+        verbose_name="Stream",
+        help_text="Final division e.g. Blue, Orange, Green, A, B"
+    )
+
     # Guardian
     primary_guardian_name = models.CharField(max_length=100, blank=True)
     primary_guardian_phone = models.CharField(max_length=20, blank=True)
@@ -61,13 +482,13 @@ class Application(models.Model):
 
     # Address
     address = models.TextField(blank=True)
-    region = models.CharField(max_length=100, blank=True)          # generalized from county
-    district = models.CharField(max_length=100, blank=True)        # generalized from sub_county
+    region = models.CharField(max_length=100, blank=True)
+    district = models.CharField(max_length=100, blank=True)
 
     # Academic / Entry
     previous_school = models.CharField(max_length=255, blank=True)
     learner_id = models.CharField(max_length=50, blank=True, verbose_name="Learner ID / Student Number")
-    entry_exam_id = models.CharField(max_length=50, blank=True, verbose_name="Entry / National Exam ID")
+    entry_exam_id = models.CharField(max_length=50, blank=True)
     entry_exam_year = models.PositiveIntegerField(null=True, blank=True)
     placement_type = models.CharField(
         max_length=20,
@@ -84,42 +505,29 @@ class Application(models.Model):
     emergency_contact_phone = models.CharField(max_length=20, blank=True)
     emergency_relationship = models.CharField(max_length=50, blank=True)
 
-    # ── NEW: Interview Scheduling Fields ──
+    # Interview Fields
     interview_date = models.DateField(null=True, blank=True)
     interview_time = models.TimeField(null=True, blank=True)
     interview_venue = models.CharField(max_length=200, blank=True)
     interview_contact_person = models.CharField(max_length=100, blank=True)
     interview_instructions = models.TextField(blank=True)
-
-
-    # Add fields
-    interview_outcome = models.CharField(
-        max_length=20,
-        choices=[
-            ("PASS", "Pass"),
-            ("FAIL", "Fail"),
-            ("WAITLIST", "Waitlist"),
-            ("OTHER", "Other"),
-        ],
-        blank=True,
-        null=True,
-    )
+    interview_outcome = models.CharField(max_length=20, blank=True, null=True,
+        choices=[("PASS", "Pass"), ("FAIL", "Fail"), ("WAITLIST", "Waitlist"), ("OTHER", "Other")])
     interview_comments = models.TextField(blank=True)
     interview_completed_at = models.DateTimeField(null=True, blank=True)
     interview_score = models.IntegerField(null=True, blank=True)
     interviewer_name = models.CharField(max_length=100, blank=True)
-    # Add after accepted_at / acceptance_notes
+
+    # Offer & Acceptance
     offer_issued_at = models.DateTimeField(null=True, blank=True)
-    offer_method = models.CharField(max_length=20, blank=True)  # 'email', 'whatsapp', 'download', etc.
+    offer_method = models.CharField(max_length=20, blank=True)
     accepted_at = models.DateTimeField(null=True, blank=True)
     acceptance_notes = models.TextField(blank=True)
 
-    # Documents / Media
+    # Documents / Misc
     photo = models.ImageField(upload_to='admission_photos/', null=True, blank=True)
-
-    # Misc
     religion = models.CharField(max_length=50, blank=True)
-    category = models.CharField(max_length=50, blank=True)  # e.g. General, Bursary, International
+    category = models.CharField(max_length=50, blank=True)
     notes = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     submitted_at = models.DateTimeField(null=True, blank=True)
@@ -133,7 +541,7 @@ class Application(models.Model):
         related_name='admission_application'
     )
     created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,          # ← correct way
+        settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -141,23 +549,35 @@ class Application(models.Model):
     )
     updated_at = models.DateTimeField(auto_now=True)
 
+    def get_placement_display(self) -> str:
+        """Returns a nice readable placement string"""
+        parts = []
+        if self.class_applied:
+            parts.append(self.class_applied.name)
+        if self.section:
+            parts.append(self.section)
+        if self.pathway:
+            parts.append(self.pathway)
+        if self.track:
+            parts.append(self.track)
+        if self.stream:
+            parts.append(self.stream)
+        return " - ".join(parts) if parts else "Not assigned"
+
     def save(self, *args, **kwargs):
         if self.status == self.Status.SUBMITTED and not self.submitted_at:
             self.submitted_at = timezone.now()
 
-        # Check if record actually exists in DB
         old = Application.objects.filter(pk=self.pk).first()
-        
         if old:
             if self.status == self.Status.OFFERED and old.status != self.Status.OFFERED:
                 if not self.offer_issued_at:
                     self.offer_issued_at = timezone.now()
-            
             if self.status == self.Status.ACCEPTED and old.status != self.Status.ACCEPTED:
                 if not self.accepted_at:
                     self.accepted_at = timezone.now()
 
-        super().save(*args, **kwargs) 
+        super().save(*args, **kwargs)
 
     @transaction.atomic
     def enroll_as_student(self, created_by_user, wizard_data=None):
@@ -169,130 +589,117 @@ class Application(models.Model):
 
         wd = wizard_data or {}
 
-            # === SAFE SINGLE INITIAL DEPOSIT CREATION ===
+        # === Payment Handling ===
         try:
             initial_amount = Decimal(str(wd.get('initial_payment_amount', 0) or 0))
             reference = str(wd.get('initial_payment_reference', '')).strip()
-            print(f"[ENROLL PAYMENT DEBUG] Application={self.id} | Amount={initial_amount} | Ref='{reference}'")
-        except Exception as e:
-            print(f"[ENROLL PAYMENT DEBUG] Error parsing payment data: {e}")
+        except Exception:
             initial_amount = Decimal('0')
             reference = ''
 
         if initial_amount > 0:
-            # Strong guard: check by application + amount + reference
             if not AdmissionFeePayment.objects.filter(
                 application=self,
                 amount=initial_amount,
                 receipt_number=reference
             ).exists():
-                payment = AdmissionFeePayment.objects.create(
+                AdmissionFeePayment.objects.create(
                     application=self,
                     amount=initial_amount,
                     payment_method=reference or "Initial Enrollment Payment",
                     receipt_number=reference,
                 )
-                print(f"[ENROLL PAYMENT DEBUG] ✅ CREATED NEW PAYMENT | ID={payment.id} | Amount={initial_amount}")
-            else:
-                print(f"[ENROLL PAYMENT DEBUG] ⚠️ SKIPPED - Payment already exists for this combo")
-        else:
-            print("[ENROLL PAYMENT DEBUG] No initial payment provided")
-        
-         # Auto-generate admission number if missing
+
+        # Generate admission number if missing
         if not self.admission_number:
-            try:
-                self.admission_number = generate_unique_admission_number(self.school)
-                print(f"[ENROLL DEBUG] Generated admission number: {self.admission_number}")
-            except Exception as e:
-                print(f"[ENROLL DEBUG] Error generating admission number: {e}")
-                raise
+            self.admission_number = generate_unique_admission_number(self.school)
+            self.save(update_fields=['admission_number'])
 
-        # Save safely
-        self.save(update_fields=['admission_number'])
-
+        # Fee Structure
         fee_structure_obj = None
         if wd.get('fee_structure'):
             try:
                 from apps.finance.models import FeeStructure
                 fee_structure_obj = FeeStructure.objects.get(pk=wd.get('fee_structure'))
-            except (FeeStructure.DoesNotExist, ValueError, TypeError):
+            except Exception:
                 fee_structure_obj = None
 
-        cleaned_gender = str(self.gender or '').strip()[:10]
-        cleaned_section = str(wd.get('section', '') or '').strip()[:50]
+        # Clean placement fields
+        cleaned_section = str(wd.get('section', '') or self.section or '').strip()[:100]
+        cleaned_pathway = str(wd.get('pathway', '')).strip()[:50]
+        cleaned_track   = str(wd.get('track', '')).strip()[:100]
+        cleaned_stream  = str(wd.get('stream', '')).strip()[:100]
 
+        # Create Student - Build on existing data
         student = Student.objects.create(
             school=self.school,
             admission_number=self.admission_number,
-            learner_id=wd.get('learner_id') or self.learner_id,                    # ← direct copy, no rename
-            entry_exam_id=self.entry_exam_id,
-            entry_exam_year=self.entry_exam_year,
+
+            # Core personal info (from Application)
+            learner_id=wd.get('learner_id') or self.learner_id,
+            entry_exam_id=self.entry_exam_id,           # ← Retained from Application
+            entry_exam_year=self.entry_exam_year,       # ← Retained from Application
             first_name=self.first_name,
             middle_name=self.middle_name,
             last_name=self.last_name,
             preferred_name=self.preferred_name,
-            gender=cleaned_gender,
+            gender=str(self.gender or '').strip()[:10],
             date_of_birth=self.date_of_birth,
             nationality=self.nationality,
             religion=self.religion,
             photo=self.photo,
             address=self.address,
-            region=self.region,                             # ← direct copy
-            district=self.district,                         # ← direct copy
+            region=self.region,
+            district=self.district,
             blood_group=self.blood_group,
             allergies=self.allergies,
             chronic_conditions=self.chronic_conditions,
             disability=self.disability,
+
+            # Emergency contact
             emergency_name=self.emergency_contact_name or wd.get('emergency_name'),
             emergency_phone=self.emergency_contact_phone or wd.get('emergency_phone'),
             emergency_relation=self.emergency_relationship or wd.get('emergency_relation'),
+
             current_class=self.class_applied,
             boarding_status=wd.get('boarding_status', 'DAY'),
-            special_needs=wd.get('special_needs', ''),
-            notes=wd.get('notes', ''),
-            created_by=created_by_user,
-            # Admin-added / completed fields from wizard
+
+            # Fields mainly from wizard (with fallback)
             birth_certificate_number=wd.get("birth_certificate_number", ""),
             passport_number=wd.get("passport_number", ""),
-            previous_school=wd.get("previous_school", ""),
+            previous_school=wd.get("previous_school", self.previous_school),
             previous_grade=wd.get("previous_grade", ""),
             disability_type=wd.get("disability_type", ""),
             special_needs_category=wd.get("special_needs_category", ""),
             transport_mode=wd.get("transport_mode", "walking"),
             transport_route=wd.get("transport_route", ""),
             sponsor_name=wd.get("sponsor_name", ""),
+            notes=wd.get('notes', self.notes or ""),
+
+            # ── NEW: Placement Hierarchy ──
             section=cleaned_section,
-            stream=wd.get('stream', ''),
+            pathway=cleaned_pathway,
+            track=cleaned_track,
+            stream=cleaned_stream,
             house=wd.get('house', ''),
             dorm_room=wd.get('dorm_room', ''),
             vaccination_status=wd.get('vaccination_status', 'UNKNOWN'),
+
             fee_structure=fee_structure_obj,
+            created_by=created_by_user,
         )
 
-        # Create fee assignment if fee structure is provided
+        # === Fee Assignment ===
         if fee_structure_obj:
             from apps.finance.models import StudentFeeAssignment
-            # assignment = StudentFeeAssignment.objects.create(
-            #     student=student,
-            #     fee_structure=fee_structure_obj,
-            #     payment_plan_id=wd.get('payment_plan'),
-            #     waiver_amount=Decimal(str(wd.get('waiver_amount', 0))),
-            #     waiver_reason=wd.get('waiver_reason', ''),
-            #     is_waived=wd.get('is_waived', False),
-            #     assigned_by=created_by_user,
-            # )
-            # selected_optional_items = wd.get('selected_optional_items', []) or []
-            # if selected_optional_items:
-            #     assignment.selected_optional_items.set(selected_optional_items)
-
             custom_due_date = None
-            remaining_payment_due_date = wd.get('remaining_payment_due_date') or wd.get('balance_due_date')
-            if remaining_payment_due_date:
+            remaining = wd.get('remaining_payment_due_date') or wd.get('balance_due_date')
+            if remaining:
                 try:
                     from datetime import date
-                    custom_due_date = date.fromisoformat(str(remaining_payment_due_date))
+                    custom_due_date = date.fromisoformat(str(remaining))
                 except ValueError:
-                    custom_due_date = None
+                    pass
 
             item_amounts = wd.get('item_amounts', {}) or {}
             if not isinstance(item_amounts, dict):
@@ -301,7 +708,7 @@ class Application(models.Model):
             assignment = StudentFeeAssignment.objects.create(
                 student=student,
                 fee_structure=fee_structure_obj,
-                payment_plan_id=wd.get('payment_plan'),           # ← This was missing
+                payment_plan_id=wd.get('payment_plan'),
                 custom_due_date=custom_due_date,
                 waiver_amount=Decimal(str(wd.get('waiver_amount', 0))),
                 waiver_reason=wd.get('waiver_reason', ''),
@@ -310,18 +717,17 @@ class Application(models.Model):
                 assigned_by=created_by_user,
             )
 
-            # Handle selected optional items
-            selected_optional_items = wd.get('selected_optional_items', []) or []
-            if selected_optional_items:
-                assignment.selected_optional_items.set(selected_optional_items)
+            selected_optional = wd.get('selected_optional_items', []) or []
+            if selected_optional:
+                assignment.selected_optional_items.set(selected_optional)
 
             try:
                 from apps.finance.signals import regenerate_invoices_for_assignment
                 regenerate_invoices_for_assignment(assignment)
             except Exception as e:
-                print(f"[ENROLL DEBUG] Failed to regenerate invoices for assignment {assignment.id}: {e}")
+                print(f"[ENROLL] Failed to regenerate invoices: {e}")
 
-        # Medical record auto-created / updated
+        # Medical Record
         MedicalRecord.objects.update_or_create(
             student=student,
             defaults={
@@ -334,7 +740,7 @@ class Application(models.Model):
             }
         )
 
-        # Primary guardian link
+        # Primary Guardian
         primary_guardian, _ = Guardian.objects.get_or_create(
             school=self.school,
             phone=self.primary_guardian_phone,
@@ -356,13 +762,12 @@ class Application(models.Model):
         self.save()
 
         return student
+    
     def __str__(self):
         return f"{self.first_name} {self.last_name} - {self.admission_number or 'Draft'}"
 
     class Meta:
         ordering = ['-submitted_at', 'last_name']
-
-
 class ApplicationDocument(models.Model):
     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='documents')
     file = models.FileField(upload_to='admission_documents/')

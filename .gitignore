@@ -21,3 +21,8 @@ out/
 
 # OS
 .DS_Store
+.vscode/
+.env
+.env.local
+backend/.env
+frontend/.env.local

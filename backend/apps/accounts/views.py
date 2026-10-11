@@ -3,7 +3,7 @@ from .models import Role
 from .serializers import RoleSerializer
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework import status
@@ -46,15 +46,20 @@ class CurrentUserView(APIView):
         user = User.objects.prefetch_related('schools__modules').get(pk=request.user.pk)
         serializer = CurrentUserSerializer(user)
         return Response(serializer.data)
-
-
 class UserViewSet(viewsets.ModelViewSet):
-    """
-    Manage users (create, list, update, delete)
-    """
     queryset = User.objects.all().order_by('-created_at')
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrHigher]
 
+    def get_permissions(self):
+        if self.action == 'create':
+            return [AllowAny()]
+        return [IsAuthenticated(), IsSchoolAdminOrHigher()]
+
+    def get_authentication_classes(self):
+        """Completely disable authentication for user creation (signup)"""
+        if self.action == 'create':
+            return []                     # ← This is the missing piece
+        return super().get_authentication_classes()  # or explicitly return [JWTAuthentication]
+    
     def get_serializer_class(self):
         if self.action == 'create':
             return UserCreateSerializer

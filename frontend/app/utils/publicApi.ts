@@ -6,15 +6,14 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/a
 const publicApi = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    "Content-Type": "multipart/form-data", // default for FormData
+    "Content-Type": "application/json", // default for JSON
   },
 });
 
-// No interceptors — no auth token, no X-School-ID
-// But still handle FormData correctly
+// Handle FormData correctly by removing Content-Type header
+// (browser will set it with correct boundary)
 publicApi.interceptors.request.use((config) => {
   if (config.data instanceof FormData) {
-    // Let browser set boundary automatically
     delete config.headers["Content-Type"];
   }
   return config;

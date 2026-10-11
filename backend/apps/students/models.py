@@ -30,7 +30,7 @@ class Student(models.Model):
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='students')
 
     # Identification (mirrors Application)
-    admission_number = models.CharField(max_length=50, unique=True)
+    admission_number = models.CharField(max_length=50)
     learner_id = models.CharField(max_length=50, blank=True, verbose_name="Learner ID / National Student ID")
     entry_exam_id = models.CharField(max_length=50, blank=True, verbose_name="Entry / National Exam ID")
     entry_exam_year = models.PositiveIntegerField(null=True, blank=True)
@@ -65,8 +65,20 @@ class Student(models.Model):
     address = models.TextField(blank=True)
     region = models.CharField(max_length=100, blank=True)
     district = models.CharField(max_length=100, blank=True)
+ 
+    # =========================================================
+    # ACADEMIC PLACEMENT
+    # =========================================================
 
-    # Academic Info (partly mirrored, partly operational)
+    # NEW — critical for reporting
+    academic_year = models.ForeignKey(
+        'academics.AcademicYear',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='students'
+    )
+
     current_class = models.ForeignKey(
         GradeLevel,
         on_delete=models.SET_NULL,
@@ -74,15 +86,44 @@ class Student(models.Model):
         blank=True,
         related_name='students'
     )
-    section = models.CharField(max_length=50, blank=True)               # A, B, C... or longer section names
-    stream = models.CharField(max_length=50, blank=True)                # Science, Arts...
-    house = models.CharField(max_length=50, blank=True)                 # Red House, etc.
+
+    # ── Flexible Placement Hierarchy (using dedicated models) ──
+    section = models.ForeignKey(
+        'academics.Section',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='students'
+    )
+    pathway = models.ForeignKey(
+        'academics.Pathway',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='students'
+    )
+    track = models.ForeignKey(
+        'academics.Track',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='students'
+    )
+    stream = models.ForeignKey(
+        'academics.Stream',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='students'
+    )
+
+    house = models.CharField(max_length=100, blank=True)
     boarding_status = models.CharField(
         max_length=20,
         choices=[('DAY', 'Day'), ('BOARDING', 'Boarding'), ('MIXED', 'Mixed')],
         default='DAY'
     )
-    dorm_room = models.CharField(max_length=20, blank=True)
+    dorm_room = models.CharField(max_length=50, blank=True)
 
     # Health & Emergency (mirrors Application + extras)
     blood_group = models.CharField(max_length=5, blank=True)
@@ -108,7 +149,21 @@ class Student(models.Model):
     admission_date = models.DateField(default=timezone.now)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     notes = models.TextField(blank=True)
+    # =========================================================
+    # MANAGEMENT
+    # =========================================================
 
+    admission_date = models.DateField(
+        default=timezone.now
+    )
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.ACTIVE
+    )
+
+    notes = models.TextField(blank=True)
     # Finance Link (no stored balance — dynamic from finance app)
     fee_structure = models.ForeignKey(
         'finance.FeeStructure', 
@@ -134,16 +189,34 @@ class Student(models.Model):
         related_name='student_profile'
     )
 
-    # Status & Audit
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    created_by = models.ForeignKey(
-        User, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        related_name='students_created'
+    # # Status & Audit
+    # created_at = models.DateTimeField(auto_now_add=True)
+    # updated_at = models.DateTimeField(auto_now=True)
+    # created_by = models.ForeignKey(
+    #     User, 
+    #     on_delete=models.SET_NULL, 
+    #     null=True, 
+    #     related_name='students_created'
+    # )
+    # =========================================================
+    # AUDIT
+    # =========================================================
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
     )
 
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='students_created'
+    )
+    
     class Meta:
         unique_together = ['school', 'admission_number']
         ordering = ['admission_number']
@@ -158,6 +231,25 @@ class Student(models.Model):
     @property
     def full_name(self):
         return f"{self.first_name} {self.middle_name or ''} {self.last_name}".strip()
+    
+    @property
+    def placement_display(self):
+        """Nice readable full placement string (e.g. Grade 10 - STEM - Pure Sciences - Blue)"""
+        parts = []
+        if self.current_class:
+            parts.append(self.current_class.name)
+        if self.section:
+            parts.append(self.section)
+        if self.pathway:
+            parts.append(self.pathway)
+        if self.track:
+            parts.append(self.track)
+        if self.stream:
+            parts.append(self.stream)
+        return " - ".join(parts) if parts else "Not assigned"
+    
+
+
 
     def get_outstanding_balance(self):
         """Calculate outstanding balance considering fee assignment, admission payments, and invoice payments"""
@@ -187,8 +279,134 @@ class Student(models.Model):
             total_due = invoices.aggregate(models.Sum('amount_due'))['amount_due__sum'] or 0
             total_paid = Payment.objects.filter(invoice__in=invoices).aggregate(models.Sum('amount'))['amount__sum'] or 0
             return total_due - total_paid
+        
+    
+class Enrollment(models.Model):
+    """
+    Tracks student placement per academic year.
 
+    CRITICAL for promotions & history.
+    """
 
+    student = models.ForeignKey(
+        Student,
+        on_delete=models.CASCADE,
+        related_name="enrollments"
+    )
+
+    academic_year = models.ForeignKey(
+        'academics.AcademicYear',
+        on_delete=models.CASCADE,
+        related_name="enrollments"
+    )
+
+    grade_level = models.ForeignKey(
+        'academics.GradeLevel',
+        on_delete=models.CASCADE
+    )
+
+    section = models.ForeignKey(
+        'academics.Section',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    pathway = models.ForeignKey(
+        'academics.Pathway',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    track = models.ForeignKey(
+        'academics.Track',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    stream = models.ForeignKey(
+        'academics.Stream',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    is_active = models.BooleanField(
+        default=True
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    class Meta:
+
+        unique_together = (
+            "student",
+            "academic_year"
+        )
+
+    def __str__(self):
+
+        return f"{self.student} - {self.academic_year}" 
+# =========================================================
+# STUDENT SUBJECT ASSIGNMENT (HYBRID MODEL)
+# =========================================================
+
+class StudentSubject(models.Model):
+    """
+    Links student to subjects.
+
+    Supports:
+        Compulsory subjects
+        Optional subjects
+        Electives
+    """
+
+    student = models.ForeignKey(
+        'Student',
+        on_delete=models.CASCADE,
+        related_name="student_subjects"
+    )
+
+    subject = models.ForeignKey(
+        'academics.Subject',
+        on_delete=models.CASCADE,
+        related_name="student_subjects"
+    )
+
+    academic_year = models.ForeignKey(
+        'academics.AcademicYear',
+        on_delete=models.CASCADE
+    )
+
+    enrollment = models.ForeignKey(
+        'students.Enrollment',
+        on_delete=models.CASCADE,
+        related_name="subjects"
+    )
+
+    is_compulsory = models.BooleanField(
+        default=True
+    )
+
+    is_active = models.BooleanField(
+        default=True
+    )
+
+    class Meta:
+
+        unique_together = (
+            "student",
+            "enrollment",
+            "subject"
+        )
+
+    def __str__(self):
+
+        return f"{self.student} - {self.subject}"  
 class Guardian(models.Model):
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='student_guardians')
     full_name = models.CharField(max_length=150)

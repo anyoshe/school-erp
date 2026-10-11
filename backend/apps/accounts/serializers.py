@@ -15,7 +15,12 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
-        attrs['username'] = attrs.get('email')  # map email to username
+        # Accept either email or username in the login payload.
+        # This makes the token endpoint robust across custom and default JWT serializers.
+        if self.username_field == 'email':
+            attrs['username'] = attrs.get('email') or attrs.get('username')
+        else:
+            attrs[self.username_field] = attrs.get(self.username_field) or attrs.get('username')
         return super().validate(attrs)
 
 
@@ -52,43 +57,6 @@ class UserSerializer(serializers.ModelSerializer):
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}".strip() or obj.email
 
-# class UserCreateSerializer(serializers.ModelSerializer):
-#     password = serializers.CharField(write_only=True, required=False)  # ← now optional
-#     temporary_password = serializers.SerializerMethodField(read_only=True)
-
-#     class Meta:
-#         model = User
-#         fields = ['id', 'email', 'password', 'role', 'first_name', 'last_name', 'is_active', 'is_staff', 'temporary_password']
-
-#     def create(self, validated_data):
-#         password = validated_data.pop('password', None)
-        
-#         if not password:
-#             # Generate secure temporary password (e.g. 12 chars)
-#             import secrets
-#             import string
-#             alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-#             password = ''.join(secrets.choice(alphabet) for i in range(12))
-
-#         user = User.objects.create_user(
-#             email=validated_data['email'],
-#             password=password,
-#             force_change_password=True,  # ← Mark for first-time password change
-#             **{k: v for k, v in validated_data.items() if k != 'email'}
-#         )
-
-#         # Store the temp password both on user and in serializer context
-#         user._temporary_password = password  # temporary attribute – not saved
-#         self.context['temporary_password'] = password
-#         return user
-
-#     def get_temporary_password(self, obj):
-#         """Return the temporary password"""
-#         # Try to get from object first (during initial serialization)
-#         if hasattr(obj, '_temporary_password'):
-#             return obj._temporary_password
-#         # Fall back to context (during re-serialization)
-#         return self.context.get('temporary_password', None)
 class UserCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False)
     temporary_password = serializers.CharField(read_only=True, allow_null=True)  # ← add this
