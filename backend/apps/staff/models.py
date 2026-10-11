@@ -2,6 +2,7 @@
 import uuid
 from django.db import models
 from apps.accounts.models import User
+from apps.school.models import School
 
 class Staff(models.Model):
     class Role(models.TextChoices):
@@ -13,6 +14,13 @@ class Staff(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="staff_profile")
+    school = models.ForeignKey(
+        School,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="staff_members",
+    )
     role = models.CharField(max_length=20, choices=Role.choices)
     department = models.CharField(max_length=50, blank=True, null=True)
     hire_date = models.DateField()

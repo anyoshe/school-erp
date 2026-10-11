@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 from apps.school.models import School  # adjust import path if needed
+from apps.school.support import accessible_school_ids
 
 from .models import User, Permission, UserPermission
 from .serializers import (
@@ -68,16 +69,9 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserSerializer
 
     def get_queryset(self):
-        user = self.request.user
-
-        if user.role == User.Role.SUPER_ADMIN:
-            return super().get_queryset()
-
-        # School admins / principals / deputy see users in their schools
-        if hasattr(user, 'schools') and user.schools.exists():
-            return User.objects.filter(schools__in=user.schools.all()).distinct()
-
-        return User.objects.none()
+        return User.objects.filter(
+            schools__id__in=accessible_school_ids(self.request)
+        ).distinct()
     
     def create(self, request, *args, **kwargs):
         response = super().create(request, *args, **kwargs)
@@ -124,15 +118,9 @@ class UserPermissionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsSuperAdmin] 
 
     def get_queryset(self):
-        user = self.request.user
-        if user.role == User.Role.SUPER_ADMIN:
-            return super().get_queryset()
-
-        if user.schools.exists():
-            return UserPermission.objects.filter(
-                user__schools__in=user.schools.all()
-            ).distinct()
-        return UserPermission.objects.none()
+        return UserPermission.objects.filter(
+            user__schools__id__in=accessible_school_ids(self.request)
+        ).distinct()
     
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
@@ -165,7 +153,11 @@ class SchoolUserViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         school_id = self.kwargs['school_id']
-        school = get_object_or_404(School, id=school_id)
+        school = get_object_or_404(
+            School,
+            id=school_id,
+            pk__in=accessible_school_ids(self.request),
+        )
         # Adjust this based on your actual relationship
         # If User has ManyToManyField to School named 'schools':
         return User.objects.filter(schools=school)
@@ -179,7 +171,11 @@ class SchoolUserViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         school_id = self.kwargs['school_id']
-        school = get_object_or_404(School, id=school_id)
+        school = get_object_or_404(
+            School,
+            id=school_id,
+            pk__in=accessible_school_ids(request),
+        )
 
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)

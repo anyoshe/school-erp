@@ -23,6 +23,7 @@ from .serializers import (
 from apps.core.permissions import IsAssociatedWithSchool  # Assume you have this
 from apps.admissions.models import AdmissionFeePayment
 from django.utils import timezone
+from apps.school.support import accessible_school_ids, selected_school
 
 
 def _round_money(value: Decimal) -> Decimal:
@@ -30,10 +31,7 @@ def _round_money(value: Decimal) -> Decimal:
 
 
 def _resolve_school_ids(request):
-    school_id = request.headers.get("X-School-ID")
-    if school_id:
-        return list(request.user.schools.filter(id=school_id).values_list("id", flat=True))
-    return list(request.user.schools.values_list("id", flat=True))
+    return list(accessible_school_ids(request))
 
 
 def _get_assignment_period_meta(assignment: StudentFeeAssignment):
@@ -285,11 +283,9 @@ class FeeCategoryViewSet(viewsets.ModelViewSet):
         return FeeCategorySerializer
 
     def get_queryset(self):
-        queryset = self.queryset
-        school_id = self.request.headers.get('X-School-ID')
-        if school_id:
-            queryset = queryset.filter(school_id=school_id)
-        return queryset
+        return self.queryset.filter(
+            school_id__in=accessible_school_ids(self.request)
+        )
 
 
 class FeeItemViewSet(viewsets.ModelViewSet):
@@ -304,11 +300,9 @@ class FeeItemViewSet(viewsets.ModelViewSet):
         return FeeItemSerializer
 
     def get_queryset(self):
-        queryset = self.queryset
-        school_id = self.request.headers.get('X-School-ID')
-        if school_id:
-            queryset = queryset.filter(category__school_id=school_id)
-        return queryset
+        return self.queryset.filter(
+            category__school_id__in=accessible_school_ids(self.request)
+        )
 
     @action(detail=False, methods=['get'], url_path='by-category/(?P<category_id>[^/.]+)')
     def by_category(self, request, category_id=None):
@@ -361,12 +355,9 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
 
 
     def get_queryset(self):
-        queryset = self.queryset
-        
-        # Filter by School Header (Existing)
-        school_id = self.request.headers.get('X-School-ID')
-        if school_id:
-            queryset = queryset.filter(school_id=school_id)
+        queryset = self.queryset.filter(
+            school_id__in=accessible_school_ids(self.request)
+        )
             
         # NEW: Filter by Grade Level from URL params
         grade_level = self.request.query_params.get('grade_level')
@@ -400,9 +391,9 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
         return StudentFeeAssignmentSerializer
 
     def get_queryset(self):
-        user = self.request.user
-        # Filter by student's school (StudentFeeAssignment → student → school)
-        return self.queryset.filter(student__school__in=user.schools.all())
+        return self.queryset.filter(
+            student__school_id__in=accessible_school_ids(self.request)
+        )
 
     @action(detail=True, methods=['post'], url_path='generate-invoice')
     def generate_invoice(self, request, pk=None):
@@ -487,9 +478,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
   
     def get_queryset(self):
-        user = self.request.user
-        # Correct: user has many schools via related_name='schools'
-        return self.queryset.filter(school__in=user.schools.all())
+        return self.queryset.filter(
+            school_id__in=accessible_school_ids(self.request)
+        )
 
     @action(detail=False, methods=['get'], url_path='overdue')
     def overdue_invoices(self, request):
@@ -511,9 +502,9 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
 
     def get_queryset(self):
-        user = self.request.user
-        # Correct: user has many schools via related_name='schools'
-        return self.queryset.filter(school__in=user.schools.all())
+        return self.queryset.filter(
+            school_id__in=accessible_school_ids(self.request)
+        )
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -556,17 +547,9 @@ class PaymentPlanViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Filtering so users only see plans for their specific school
-        school_id = self.request.headers.get('X-School-ID')
-        if school_id:
-            return self.queryset.filter(school_id=school_id)
-        return self.queryset
+        return self.queryset.filter(
+            school_id__in=accessible_school_ids(self.request)
+        )
 
     def perform_create(self, serializer):
-        # This is CRITICAL: It picks up the school ID from your dashboard header
-        school_id = self.request.headers.get('X-School-ID')
-        if not school_id:
-            # Fallback for testing: pick the first school the user is assigned to
-            school_id = self.request.user.schools.first().id
-            
-        serializer.save(school_id=school_id)
+        serializer.save(school=selected_school(self.request))

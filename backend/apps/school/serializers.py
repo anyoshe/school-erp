@@ -26,6 +26,26 @@ class SchoolMiniSerializer(serializers.ModelSerializer):
             'modules'             
         ]
 
+
+class PlatformSchoolSerializer(serializers.ModelSerializer):
+    owner = serializers.UUIDField(source="owner.id", read_only=True, allow_null=True)
+
+    class Meta:
+        model = School
+        fields = [
+            "id",
+            "owner",
+            "name",
+            "short_name",
+            "email",
+            "city",
+            "country",
+            "setup_complete",
+            "created_at",
+            "updated_at",
+        ]
+
+
 class ModuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Module
@@ -53,10 +73,26 @@ class SchoolSerializer(serializers.ModelSerializer):
             'official_registration_number',
             'registration_authority', 'registration_date',
             'modules', 'grade_levels', 'logo',
-            # Add these new fields:
             'bank_name', 'branch_name', 'bank_account_name', 
             'bank_account_number', 'paybill_number', 'payment_instructions',
             'created_at', 'updated_at'
+        ]
+
+
+class PublicSchoolSerializer(serializers.ModelSerializer):
+    """Minimal school profile for public-facing pages and anonymous admissions flows."""
+    class Meta:
+        model = School
+        fields = [
+            'id',
+            'name',
+            'short_name',
+            'slug',
+            'city',
+            'country',
+            'website',
+            'logo',
+            'setup_complete',
         ]
 
 
@@ -101,19 +137,6 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"Invalid module IDs: {invalid_ids}")
         return value
     
-    def to_internal_value(self, data):
-        print("→→→ to_internal_value() called")
-        print("   Incoming data (from request.data):", dict(data))
-        print("   setup_complete present?", 'setup_complete' in data)
-
-        validated = super().to_internal_value(data)
-
-        print("   After validation → validated_data keys:", list(validated.keys()))
-        print("   setup_complete in validated_data?", 'setup_complete' in validated)
-        print("←←←")
-
-        return validated
-
     def update(self, instance, validated_data):
         request = self.context.get('request')
         if not request:
@@ -124,20 +147,9 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
         # Security: Only owner or admin can update
         if instance.owner != user and not user.is_staff:
             raise PermissionDenied("You do not have permission to update this school.")
-        print("→→→ UPDATE METHOD")
-        print("   validated_data keys:", list(validated_data.keys()))
 
-        if 'setup_complete' in validated_data:
-            print("   setup_complete VALUE received:", validated_data['setup_complete'])
-        else:
-            print("   !!! setup_complete NOT PRESENT in validated_data !!!")
-
-         
-        # Pop module_ids EARLY
         module_ids = validated_data.pop('module_ids', None)
-        print("DEBUG: PATCH received module_ids:", module_ids)  # ← Add this for debug
 
-        # Update normal fields
         for attr, value in validated_data.items():
             if attr == 'logo':
                 if value is None and instance.logo:
@@ -149,15 +161,8 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
             else:
                 setattr(instance, attr, value)
 
-        # Apply modules if provided
         if module_ids is not None:
             instance.modules.set(module_ids)
 
         instance.save()
         return instance
-    
-    # apps/school/serializers.py
-class PublicSchoolSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = School
-        fields = ['id', 'name', 'slug', 'short_name']  # only what the frontend needs

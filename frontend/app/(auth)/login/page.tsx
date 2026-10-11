@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { loginUser, signupUser } from "@/services/auth.service";
 import { saveToken } from "@/utils/auth";
 import { motion, AnimatePresence } from "framer-motion";
@@ -40,6 +41,7 @@ const colors = {
 
 export default function Welcome() {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
@@ -84,6 +86,7 @@ export default function Welcome() {
 
         // Save tokens
         saveToken(tokenData.access);
+        queryClient.removeQueries({ queryKey: ["currentUser"] });
         if (tokenData.refresh) {
           localStorage.setItem("refreshToken", tokenData.refresh);
         }

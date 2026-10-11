@@ -619,7 +619,7 @@ AUTH_USER_MODEL = "accounts.User"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.school.authentication.SchoolContextJWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.AllowAny",
@@ -663,6 +663,7 @@ CORS_ALLOW_HEADERS = [
     "authorization",
     "content-type",
     "x-school-id",
+    "x-school-support-id",
 ]
 
 

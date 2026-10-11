@@ -19,15 +19,36 @@ class IsAssociatedWithSchool(permissions.BasePermission):
         return True  # write permissions checked in has_object_permission
 
     def has_object_permission(self, request, view, obj):
-        # obj can be School, FeeCategory, FeeItem, Curriculum, etc.
-        # Get the related school object
-        school = getattr(obj, 'school', obj)  # if obj is FeeCategory → obj.school
+        school = getattr(obj, "school", None)
+        if school is None and hasattr(obj, "category"):
+            school = getattr(obj.category, "school", None)
+        if school is None and hasattr(obj, "student"):
+            school = getattr(obj.student, "school", None)
+        if school is None and hasattr(obj, "invoice"):
+            school = getattr(obj.invoice, "school", None)
+        if school is None and hasattr(obj, "application"):
+            school = getattr(obj.application, "school", None)
+        if school is None and hasattr(obj, "users"):
+            school = obj
 
-        # If somehow no school relation → deny
-        if not hasattr(school, 'users'):
+        if school is None:
             return False
 
-        return request.user in school.users.all()
+        if request.user.is_superuser:
+            from apps.school.support import active_support_session
+
+            support_session = active_support_session(request.user)
+            return bool(
+                request.method in permissions.SAFE_METHODS
+                and support_session
+                and support_session.school_id == school.pk
+                and request.headers.get("X-School-ID") == str(school.pk)
+                and request.headers.get("X-School-Support-ID") == str(support_session.pk)
+            )
+
+        from apps.school.support import accessible_school_ids
+
+        return accessible_school_ids(request).filter(pk=school.pk).exists()
     
 # from rest_framework import permissions
 

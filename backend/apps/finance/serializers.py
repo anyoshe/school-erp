@@ -13,6 +13,11 @@ from apps.academics.models import GradeLevel
 from apps.academics.serializers import GradeLevelSerializer
 from apps.students.models import Student, StudentGuardian
 from apps.students.serializers import StudentSerializer, StudentGuardianSerializer
+from apps.school.support import selected_school
+
+
+def _selected_school_for_serializer(serializer):
+    return selected_school(serializer.context["request"])
 
 class FeeCategorySerializer(serializers.ModelSerializer):
     school = SchoolSerializer(read_only=True)
@@ -29,10 +34,8 @@ class FeeCategoryCreateUpdateSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'description', 'is_mandatory', 'display_order', 'school']
 
     def validate_school(self, value):
-        request = self.context['request']
-        user = request.user
-        if value not in School.objects.filter(users=user):
-            raise serializers.ValidationError("You do not have permission for this school.")
+        if value != _selected_school_for_serializer(self):
+            raise serializers.ValidationError("School must match the selected school.")
         return value
 
 # --- Fee Item & Structure Serializers ---
@@ -62,14 +65,17 @@ class FeeItemCreateUpdateSerializer(serializers.ModelSerializer):
         ]
 
     def validate_category(self, value):
-        request = self.context['request']
-        school_id = request.headers.get('X-School-ID')
-        print(f"[DEBUG] PATCH validate_category: item={self.instance.id if self.instance else 'new'}, "
-            f"header_school={school_id}, category_school={value.school_id}")
-        
-        if school_id and str(value.school_id) != school_id:
-            print(f"[DEBUG] MISMATCH → raising ValidationError")
+        school = _selected_school_for_serializer(self)
+        if value.school_id != school.id:
             raise serializers.ValidationError("Category does not belong to the selected school.")
+        return value
+
+    def validate_grade_level_ids(self, value):
+        school = _selected_school_for_serializer(self)
+        if any(grade_level.school_id != school.id for grade_level in value):
+            raise serializers.ValidationError(
+                "Grade levels must belong to the selected school."
+            )
         return value
 
     def create(self, validated_data):
@@ -164,26 +170,39 @@ class FeeStructureCreateUpdateSerializer(serializers.ModelSerializer):
         ]
 
     def validate_school(self, value):
-        request = self.context['request']
-        user_schools = School.objects.filter(users=request.user)
-        if value not in user_schools:
-            raise serializers.ValidationError("You do not have permission for this school.")
+        if value != _selected_school_for_serializer(self):
+            raise serializers.ValidationError("School must match the selected school.")
         return value
 
     def validate_grade_level(self, value):
-        # Ensure grade level belongs to the selected school
-        school_id_input = self.initial_data.get('school')
-        if school_id_input:
-            try:
-                import uuid
-                school_uuid = uuid.UUID(str(school_id_input))
-                if value.school_id != school_uuid:
-                    raise serializers.ValidationError(
-                        "Selected grade level does not belong to the chosen school."
-                    )
-            except ValueError:
-                raise serializers.ValidationError("Invalid school ID format.")
+        school = _selected_school_for_serializer(self)
+        if value.school_id != school.id:
+            raise serializers.ValidationError(
+                "Selected grade level does not belong to the selected school."
+            )
         return value
+
+    def validate_available_optional_items(self, value):
+        school = _selected_school_for_serializer(self)
+        if any(item.category.school_id != school.id for item in value):
+            raise serializers.ValidationError(
+                "Optional fee items must belong to the selected school."
+            )
+        return value
+
+    def validate(self, attrs):
+        school = _selected_school_for_serializer(self)
+        structure_school = attrs.get("school", getattr(self.instance, "school", school))
+        if structure_school != school:
+            raise serializers.ValidationError(
+                {"school": "School must match the selected school."}
+            )
+        for item_data in attrs.get("structure_items", []):
+            if item_data["item"].category.school_id != school.id:
+                raise serializers.ValidationError(
+                    {"structure_items": "Fee items must belong to the selected school."}
+                )
+        return attrs
 
     @transaction.atomic
     def create(self, validated_data):
@@ -295,6 +314,38 @@ class StudentFeeAssignmentCreateUpdateSerializer(serializers.ModelSerializer):
             'id', 'student', 'fee_structure', 'waiver_amount', 'waiver_reason', 'is_waived', 'payment_plan', 'custom_due_date', 'selected_optional_items', 'item_amounts'
         ]
 
+    def validate_student(self, value):
+        school = _selected_school_for_serializer(self)
+        if value.school_id != school.id:
+            raise serializers.ValidationError(
+                "Student must belong to the selected school."
+            )
+        return value
+
+    def validate_fee_structure(self, value):
+        school = _selected_school_for_serializer(self)
+        if value and value.school_id != school.id:
+            raise serializers.ValidationError(
+                "Fee structure must belong to the selected school."
+            )
+        return value
+
+    def validate_payment_plan(self, value):
+        school = _selected_school_for_serializer(self)
+        if value and value.school_id != school.id:
+            raise serializers.ValidationError(
+                "Payment plan must belong to the selected school."
+            )
+        return value
+
+    def validate_selected_optional_items(self, value):
+        school = _selected_school_for_serializer(self)
+        if any(item.category.school_id != school.id for item in value):
+            raise serializers.ValidationError(
+                "Optional fee items must belong to the selected school."
+            )
+        return value
+
     def create(self, validated_data):
         validated_data['assigned_by'] = self.context['request'].user
         validated_data['assigned_at'] = timezone.now().date()
@@ -349,8 +400,68 @@ class InvoiceCreateUpdateSerializer(serializers.ModelSerializer):
             'amount_due', 'due_date', 'generated_by'
         ]
 
+    def validate_student(self, value):
+        school = _selected_school_for_serializer(self)
+        if value.school_id != school.id:
+            raise serializers.ValidationError(
+                "Student must belong to the selected school."
+            )
+        return value
+
+    def validate_fee_assignment(self, value):
+        school = _selected_school_for_serializer(self)
+        if value.student.school_id != school.id:
+            raise serializers.ValidationError(
+                "Fee assignment must belong to the selected school."
+            )
+        student_id = self.initial_data.get(
+            "student",
+            str(self.instance.student_id) if self.instance else None,
+        )
+        if student_id and str(value.student_id) != str(student_id):
+            raise serializers.ValidationError(
+                "Fee assignment must belong to the selected student."
+            )
+        return value
+
+    def validate(self, attrs):
+        school = _selected_school_for_serializer(self)
+        student = attrs.get("student", getattr(self.instance, "student", None))
+        fee_assignment = attrs.get(
+            "fee_assignment", getattr(self.instance, "fee_assignment", None)
+        )
+        if student and student.school_id != school.id:
+            raise serializers.ValidationError(
+                {"student": "Student must belong to the selected school."}
+            )
+        if fee_assignment:
+            if fee_assignment.student.school_id != school.id:
+                raise serializers.ValidationError(
+                    {"fee_assignment": "Fee assignment must belong to the selected school."}
+                )
+            if student and fee_assignment.student_id != student.id:
+                raise serializers.ValidationError(
+                    {"fee_assignment": "Fee assignment must belong to the selected student."}
+                )
+            if (
+                fee_assignment.fee_structure
+                and fee_assignment.fee_structure.school_id != school.id
+            ):
+                raise serializers.ValidationError(
+                    {"fee_assignment": "Fee structure must belong to the selected school."}
+                )
+            if (
+                fee_assignment.payment_plan
+                and fee_assignment.payment_plan.school_id != school.id
+            ):
+                raise serializers.ValidationError(
+                    {"fee_assignment": "Payment plan must belong to the selected school."}
+                )
+        return attrs
+
 
     def create(self, validated_data):
+        validated_data["school"] = _selected_school_for_serializer(self)
         validated_data['generated_by'] = self.context['request'].user
         return super().create(validated_data)
 
@@ -375,12 +486,34 @@ class PaymentCreateUpdateSerializer(serializers.ModelSerializer):
             'paid_by', 'notes'
         ]
     def validate(self, data):
-        if data['amount'] <= 0:
+        school = _selected_school_for_serializer(self)
+        amount = data.get("amount", self.instance.amount if self.instance else None)
+        if amount is None or amount <= 0:
             raise serializers.ValidationError("Payment amount must be greater than zero.")
 
-        invoice = data.get('invoice')
-        amount = data.get('amount')
-        if invoice and amount is not None:
+        invoice = data.get(
+            "invoice", self.instance.invoice if self.instance else None
+        )
+        paid_by = data.get(
+            "paid_by", self.instance.paid_by if self.instance else None
+        )
+        if invoice and (
+            invoice.school_id != school.id
+            or invoice.student.school_id != school.id
+        ):
+            raise serializers.ValidationError(
+                {"invoice": "Invoice must belong to the selected school."}
+            )
+        if paid_by and paid_by.student.school_id != school.id:
+            raise serializers.ValidationError(
+                {"paid_by": "Payer must belong to the selected school."}
+            )
+        if invoice and paid_by and paid_by.student_id != invoice.student_id:
+            raise serializers.ValidationError(
+                {"paid_by": "Payer must be linked to the invoice's student."}
+            )
+        data["school"] = school
+        if invoice:
             outstanding = invoice.current_total_due - invoice.amount_paid
             if amount > outstanding:
                 raise serializers.ValidationError(

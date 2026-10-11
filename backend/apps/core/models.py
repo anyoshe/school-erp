@@ -2,6 +2,7 @@
 import uuid
 from django.db import models
 from apps.accounts.models import User
+from apps.school.models import School
 
 class AuditLog(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -10,8 +11,13 @@ class AuditLog(models.Model):
     table_name = models.CharField(max_length=50)
     record_id = models.UUIDField()
     timestamp = models.DateTimeField(auto_now_add=True)
-     # Optional school FK if you want to filter audit by school
-    # school = models.ForeignKey('core.School', on_delete=models.CASCADE, null=True, blank=True)
+    school = models.ForeignKey(
+        School,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="system_audit_logs",
+    )
 
 class SyncQueue(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -20,5 +26,10 @@ class SyncQueue(models.Model):
     operation = models.CharField(max_length=20)  # CREATE / UPDATE / DELETE
     synced = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
-     # Optional school FK
-    # school = models.ForeignKey('core.School', on_delete=models.CASCADE, null=True, blank=True)
+    school = models.ForeignKey(
+        School,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="sync_queue_entries",
+    )

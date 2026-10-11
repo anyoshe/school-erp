@@ -7,6 +7,7 @@ from .serializers import (
     SyncQueueSerializer,
     SyncQueueCreateUpdateSerializer
 )
+from apps.school.support import accessible_school_ids, selected_school
 
 # ----------------------------
 # AUDIT LOG VIEWSET
@@ -14,6 +15,12 @@ from .serializers import (
 class AuditLogViewSet(ModelViewSet):
     queryset = AuditLog.objects.select_related('user').all().order_by('-timestamp')
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(school_id__in=accessible_school_ids(self.request))
+
+    def perform_create(self, serializer):
+        serializer.save(school=selected_school(self.request), user=self.request.user)
 
     def get_serializer_class(self):
         """
@@ -30,6 +37,12 @@ class AuditLogViewSet(ModelViewSet):
 class SyncQueueViewSet(ModelViewSet):
     queryset = SyncQueue.objects.all().order_by('-created_at')
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(school_id__in=accessible_school_ids(self.request))
+
+    def perform_create(self, serializer):
+        serializer.save(school=selected_school(self.request))
 
     def get_serializer_class(self):
         """

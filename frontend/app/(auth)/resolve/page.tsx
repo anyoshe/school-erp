@@ -17,6 +17,16 @@ export default function AuthResolvePage() {
         const user = await getCurrentUser(true);
         console.log("User data:", JSON.stringify(user, null, 2));
 
+        if (user.force_change_password) {
+          router.replace("/change-password?first=true");
+          return;
+        }
+
+        if (user.is_superuser) {
+          router.replace("/platform-admin");
+          return;
+        }
+
         if (!user.schools || user.schools.length === 0) {
           console.log("→ No schools → /onboarding/setup");
           router.replace("/onboarding/setup");
@@ -36,12 +46,6 @@ export default function AuthResolvePage() {
         if (modules.length === 0) {
           console.log("→ No modules → /onboarding/select-modules");
           router.replace("/onboarding/select-modules");
-          return;
-        }
-
-        if (user.force_change_password) {
-          console.log("→ Force password change → /auth/change-password?first=true");
-          router.replace("/change-password?first=true");
           return;
         }
 

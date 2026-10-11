@@ -10,7 +10,7 @@ class IsSuperAdmin(BasePermission):
     Allows access only to super admins
     """
     def has_permission(self, request, view):
-        return request.user.is_authenticated and request.user.role == User.Role.SUPER_ADMIN
+        return request.user.is_authenticated and request.user.is_superuser
 
 
 class IsSchoolAdminOrHigher(BasePermission):

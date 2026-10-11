@@ -13,6 +13,8 @@ from .serializers import (
     StudentGuardianSerializer, LinkExistingGuardianSerializer,
     MedicalRecordSerializer, MedicalRecordCreateUpdateSerializer
 )
+from apps.school.support import accessible_school_ids, selected_school
+from rest_framework.exceptions import PermissionDenied
 
 
 class StudentViewSet(viewsets.ModelViewSet):
@@ -42,29 +44,29 @@ class StudentViewSet(viewsets.ModelViewSet):
         if not self.request.user.is_authenticated:
             return Student.objects.none()
 
-        user = self.request.user
-
-        # Superusers see all (bypass filters)
-        if user.is_superuser:
-            return self.queryset
-
-        # Prefer X-School-ID header (sent by frontend for current school)
-        school_id_str = self.request.headers.get('X-School-ID')
-        if school_id_str:
-            try:
-                from uuid import UUID
-                school_id = UUID(school_id_str)
-                return self.queryset.filter(school_id=school_id)
-            except ValueError:
-                pass
-
-        # Fallback: user's linked school(s)
-        return self.queryset.filter(school__in=user.schools.all())
+        return self.queryset.filter(school_id__in=accessible_school_ids(self.request))
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return StudentCreateUpdateSerializer
         return StudentSerializer
+
+    def _validate_school_relations(self, validated_data, school):
+        for field in ("current_class", "section", "pathway", "track", "stream", "academic_year", "fee_structure"):
+            related = validated_data.get(field)
+            related_school_id = getattr(related, "school_id", None)
+            if related and related_school_id and related_school_id != school.id:
+                raise PermissionDenied(f"{field} must belong to the selected school.")
+
+    def perform_create(self, serializer):
+        school = selected_school(self.request)
+        self._validate_school_relations(serializer.validated_data, school)
+        serializer.save(school=school)
+
+    def perform_update(self, serializer):
+        school = selected_school(self.request)
+        self._validate_school_relations(serializer.validated_data, school)
+        serializer.save(school=school)
 
     @action(detail=False, methods=['get'], url_path='outstanding-fees')
     def outstanding_fees_report(self, request):
@@ -330,7 +332,13 @@ class GuardianViewSet(viewsets.ModelViewSet):
     # def get_queryset(self):
     #     return self.queryset.filter(school=self.request.user.school)
     def get_queryset(self):
-        return self.queryset.filter(school__in=self.request.user.schools.all())
+        return self.queryset.filter(school_id__in=accessible_school_ids(self.request))
+
+    def perform_create(self, serializer):
+        serializer.save(school=selected_school(self.request))
+
+    def perform_update(self, serializer):
+        serializer.save(school=selected_school(self.request))
 
 
 class StudentGuardianViewSet(viewsets.ModelViewSet):
@@ -345,15 +353,9 @@ class StudentGuardianViewSet(viewsets.ModelViewSet):
         return StudentGuardianSerializer
 
     def get_queryset(self):
-        school_id = self.request.headers.get('X-School-ID')
-        if school_id:
-            try:
-                from uuid import UUID
-                school_uuid = UUID(school_id)
-                return self.queryset.filter(student__school_id=school_uuid)
-            except ValueError:
-                pass
-        return self.queryset.filter(student__school__in=self.request.user.schools.all())
+        return self.queryset.filter(
+            student__school_id__in=accessible_school_ids(self.request)
+        )
 
     @action(detail=False, methods=['post'], url_path='link-existing')
     def link_existing(self, request):
@@ -372,15 +374,7 @@ class MedicalRecordViewSet(viewsets.ModelViewSet):
     filterset_fields = ['student', 'immunization_status']
 
     def get_queryset(self):
-        school_id = self.request.headers.get('X-School-ID')
-        if school_id:
-            try:
-                from uuid import UUID
-                school_uuid = UUID(school_id)
-                return self.queryset.filter(school_id=school_uuid)
-            except ValueError:
-                pass
-        return self.queryset.filter(school__in=self.request.user.schools.all())
+        return self.queryset.filter(school_id__in=accessible_school_ids(self.request))
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
@@ -388,7 +382,15 @@ class MedicalRecordViewSet(viewsets.ModelViewSet):
         return MedicalRecordSerializer
 
     def perform_create(self, serializer):
-        serializer.save(school=self.request.user.school, recorded_by=self.request.user)
+        school = selected_school(self.request)
+        student = serializer.validated_data.get("student")
+        if student and student.school_id != school.id:
+            raise PermissionDenied("Medical records must belong to the selected school's students.")
+        serializer.save(school=school, recorded_by=self.request.user)
 
     def perform_update(self, serializer):
+        school = selected_school(self.request)
+        student = serializer.validated_data.get("student", serializer.instance.student)
+        if student.school_id != school.id:
+            raise PermissionDenied("Medical records must belong to the selected school's students.")
         serializer.save(reviewed_by=self.request.user)

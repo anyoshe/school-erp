@@ -2,14 +2,20 @@
 import uuid
 from django.db import models
 from apps.accounts.models import User
+from apps.school.models import School
 
 class Book(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=200)
     author = models.CharField(max_length=100)
     quantity = models.PositiveIntegerField(default=1)
-    # If books are school-specific in Phase 4, you could also add:
-    # school = models.ForeignKey('core.School', on_delete=models.CASCADE, null=True, blank=True)
+    school = models.ForeignKey(
+        School,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="library_books",
+    )
 
 class Borrowing(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

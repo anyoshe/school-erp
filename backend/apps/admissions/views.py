@@ -4,6 +4,7 @@ from decimal import Decimal
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.exceptions import PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db import transaction
@@ -16,6 +17,7 @@ from .serializers import (
     ApplicationListSerializer
 )
 from apps.school.models import School
+from apps.school.support import accessible_school_ids, selected_school
 from django.utils import timezone
 
 
@@ -38,43 +40,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
         user = self.request.user
 
-        # Superusers see all (bypass filters)
-        if user.is_superuser:
-            print(f"[DEBUG] Superuser {user.email} accessing all applications")
-            return self.queryset
-
-    # Prefer X-School-ID header (sent by frontend for current school)
-        school_id_str = self.request.headers.get('X-School-ID')
-        if school_id_str:
-            try:
-                from uuid import UUID
-                school_id = UUID(school_id_str)
-                print(f"[DEBUG] Using X-School-ID: {school_id} for user {user.email}")
-                return self.queryset.filter(school_id=school_id)
-            except ValueError:
-                print(f"[DEBUG] Invalid X-School-ID: {school_id_str}")
-                pass
-
-    # Fallback: user's linked school(s) - but only if no header
-        school = getattr(user, "school", None)
-        if not school:
-            schools_qs = getattr(user, "schools", None)
-            if schools_qs:
-                try:
-                    schools = schools_qs.all()
-                except AttributeError:
-                    schools = list(schools_qs) if schools_qs else []
-                
-                if schools:
-                    print(f"[DEBUG] Fallback to user schools: {[s.id for s in schools]}")
-                    return self.queryset.filter(school__in=schools)
-
-        if not school:
-            print(f"[DEBUG] User {user.email} has no linked school")
-            return Application.objects.none()
-
-        print(f"[DEBUG] Using user.school: {school.id}")
-        return self.queryset.filter(school=school)
+        return self.queryset.filter(school_id__in=accessible_school_ids(self.request))
     
     def get_serializer_class(self):
         if self.action in ['list']:
@@ -85,7 +51,11 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
 
     def perform_create(self, serializer):
-        application = serializer.save(created_by=self.request.user)
+        school = selected_school(self.request)
+        class_applied = serializer.validated_data.get("class_applied")
+        if class_applied and class_applied.school_id != school.id:
+            raise PermissionDenied("The selected class does not belong to this school.")
+        application = serializer.save(school=school, created_by=self.request.user)
         if application.status == Application.Status.ENROLLED:
             application.enroll_as_student(self.request.user)
 
@@ -98,6 +68,10 @@ class ApplicationViewSet(viewsets.ModelViewSet):
     
     def perform_update(self, serializer):
         instance = serializer.instance
+        school = selected_school(self.request)
+        class_applied = serializer.validated_data.get("class_applied")
+        if class_applied and class_applied.school_id != school.id:
+            raise PermissionDenied("The selected class does not belong to this school.")
         new_status = serializer.validated_data.get('status')
 
         if new_status:
@@ -111,7 +85,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             if new_status == Application.Status.ACCEPTED and instance.status != Application.Status.ACCEPTED:
                 serializer.validated_data['accepted_at'] = timezone.now()
 
-        serializer.save()
+        serializer.save(school=school)
 
         
     @action(detail=True, methods=['post'], url_path='enroll')
@@ -123,8 +97,8 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         application = self.get_object()
 
         # School permission check
-        user_school = getattr(request.user, "school", None) or getattr(request.user, "schools", None).first()
-        if not user_school or application.school != user_school:
+        user_school = selected_school(request)
+        if application.school_id != user_school.id:
             return Response({"detail": "You can only enroll applications from your own school."},
                             status=status.HTTP_403_FORBIDDEN)
 
@@ -346,7 +320,9 @@ class ApplicationDocumentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return self.queryset.filter(application__school__in=self.request.user.schools.all())
+        return self.queryset.filter(
+            application__school_id__in=accessible_school_ids(self.request)
+        )
 
 
 class AdmissionFeePaymentViewSet(viewsets.ModelViewSet):
@@ -357,7 +333,9 @@ class AdmissionFeePaymentViewSet(viewsets.ModelViewSet):
     filterset_fields = ['application', 'application__student', 'payment_method', 'receipt_number']
 
     def get_queryset(self):
-        return self.queryset.filter(application__school__in=self.request.user.schools.all())
+        return self.queryset.filter(
+            application__school_id__in=accessible_school_ids(self.request)
+        )
 
     @action(detail=True, methods=['get'], url_path='receipt')
     def receipt(self, request, pk=None):

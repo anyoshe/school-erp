@@ -35,7 +35,7 @@
 // app/services/auth.service.ts
 import axios from "axios";
 
-const API_URL = "http://127.0.0.1:8000/api/";   // Use full URL in development
+const API_URL = `${(process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api").replace(/\/$/, "")}/`;
 
 // Clean public axios (NO auth header ever)
 const publicApi = axios.create({

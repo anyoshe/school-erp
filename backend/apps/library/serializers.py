@@ -14,6 +14,7 @@ class BookSerializer(serializers.ModelSerializer):
         model = Book
         fields = [
             'id',
+            'school',
             'title',
             'author',
             'quantity'
@@ -28,10 +29,12 @@ class BookCreateUpdateSerializer(serializers.ModelSerializer):
         model = Book
         fields = [
             'id',
+            'school',
             'title',
             'author',
             'quantity'
         ]
+        read_only_fields = ['school']
 
 
 # ----------------------------

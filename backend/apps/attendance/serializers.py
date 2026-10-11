@@ -17,6 +17,7 @@ class AttendanceSerializer(serializers.ModelSerializer):
         model = Attendance
         fields = [
             'id',
+            'school',
             'user',
             'user_email',
             'date',
@@ -34,8 +35,10 @@ class AttendanceCreateUpdateSerializer(serializers.ModelSerializer):
         model = Attendance
         fields = [
             'id',
+            'school',
             'user',
             'date',
             'status',
             'recorded_by'
         ]
+        read_only_fields = ['school', 'recorded_by']

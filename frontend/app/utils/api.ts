@@ -1,7 +1,11 @@
 
 // app/utils/api.ts
 import axios from "axios";
-import { getToken, getActiveSchoolId } from "./auth";
+import {
+  getToken,
+  getActiveSchoolId,
+  getSchoolSupportSessionId,
+} from "./auth";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
@@ -14,7 +18,13 @@ const api = axios.create({
 if (typeof window !== "undefined") {
   api.interceptors.request.use((config) => {
     const token = getToken();
-    const schoolId = getActiveSchoolId(); // store in localStorage or cookie
+    const url = config.url || "";
+    const isPlatformRequest =
+      url.includes("/accounts/me/") ||
+      url.includes("/schools/platform-directory/") ||
+      url.includes("/schools/support-context/") ||
+      url.includes("/schools/start-support-context/");
+    const schoolId = isPlatformRequest ? null : getActiveSchoolId();
     
     console.log("[API] Making request to:", config.url);
     console.log("[API] Token present:", !!token);
@@ -27,6 +37,10 @@ if (typeof window !== "undefined") {
     if (schoolId && config.headers) {
       config.headers["X-School-ID"] = schoolId;
       console.log("[API] Added X-School-ID header:", schoolId);
+      const supportSessionId = getSchoolSupportSessionId();
+      if (supportSessionId) {
+        config.headers["X-School-Support-ID"] = supportSessionId;
+      }
     }
 
     // Handle FormData properly

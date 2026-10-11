@@ -16,6 +16,7 @@ class ReportSerializer(serializers.ModelSerializer):
         model = Report
         fields = [
             'id',
+            'school',
             'name',
             'description',
             'generated_at',
@@ -32,7 +33,9 @@ class ReportCreateUpdateSerializer(serializers.ModelSerializer):
         model = Report
         fields = [
             'id',
+            'school',
             'name',
             'description',
             'created_by'
         ]
+        read_only_fields = ['school', 'created_by']

@@ -18,6 +18,7 @@ class StaffSerializer(serializers.ModelSerializer):
             'id',
             'user',
             'user_email',
+            'school',
             'role',
             'department',
             'hire_date',
@@ -34,11 +35,13 @@ class StaffCreateUpdateSerializer(serializers.ModelSerializer):
         model = Staff
         fields = [
             'id',
+            'school',
             'user',
             'role',
             'department',
             'hire_date'
         ]
+        read_only_fields = ['school']
 
 
 # ----------------------------

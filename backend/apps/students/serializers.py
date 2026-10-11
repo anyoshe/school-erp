@@ -4,11 +4,14 @@ from django.db import IntegrityError
 from .models import Student, Guardian, StudentGuardian, MedicalRecord, MedicalDocument
 from apps.academics.serializers import GradeLevelSerializer
 from apps.school.serializers import SchoolSerializer
+from apps.school.support import selected_school
 
 
 # ── BASE SERIALIZERS FIRST ──────────────────────────────────────────────────
 
 class GuardianSerializer(serializers.ModelSerializer):
+    school = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = Guardian
         fields = '__all__'
@@ -52,6 +55,20 @@ class LinkExistingGuardianSerializer(serializers.ModelSerializer):
             'has_pickup_permission', 'has_legal_custody', 'preferred_contact_method'
         ]
 
+    def validate(self, attrs):
+        school = selected_school(self.context["request"])
+        student = attrs.get("student", self.instance.student if self.instance else None)
+        guardian = attrs.get("guardian", self.instance.guardian if self.instance else None)
+        if student and student.school_id != school.id:
+            raise serializers.ValidationError(
+                {"student": "Student must belong to the selected school."}
+            )
+        if guardian and guardian.school_id != school.id:
+            raise serializers.ValidationError(
+                {"guardian": "Guardian must belong to the selected school."}
+            )
+        return attrs
+
 
 class MedicalDocumentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -77,6 +94,7 @@ class MedicalRecordSerializer(serializers.ModelSerializer):
 
 
 class MedicalRecordCreateUpdateSerializer(serializers.ModelSerializer):
+    school = serializers.PrimaryKeyRelatedField(read_only=True)
     documents = MedicalDocumentSerializer(many=True, required=False)
     consent_by = serializers.PrimaryKeyRelatedField(
         queryset=Guardian.objects.all(),
@@ -87,6 +105,14 @@ class MedicalRecordCreateUpdateSerializer(serializers.ModelSerializer):
         model = MedicalRecord
         fields = '__all__'
         read_only_fields = ['id', 'created_at', 'updated_at', 'recorded_by', 'reviewed_by']
+
+    def validate_consent_by(self, value):
+        school = selected_school(self.context["request"])
+        if value and value.school_id != school.id:
+            raise serializers.ValidationError(
+                "Consent guardian must belong to the selected school."
+            )
+        return value
 
     def create(self, validated_data):
         documents_data = validated_data.pop('documents', [])
@@ -108,6 +134,7 @@ class MedicalRecordCreateUpdateSerializer(serializers.ModelSerializer):
 # ── STUDENT CREATE/UPDATE (LAST, can reference others) ──────────────────────
 
 class StudentCreateUpdateSerializer(serializers.ModelSerializer):
+    school = serializers.PrimaryKeyRelatedField(read_only=True)
     full_name = serializers.ReadOnlyField()
     guardians = StudentGuardianSerializer(many=True, required=False)
     medical_record = MedicalRecordSerializer(source='student_medical_record', required=False)

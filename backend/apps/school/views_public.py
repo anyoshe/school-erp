@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework import status
 from .models import School
-from .serializers import SchoolSerializer  # ← use your existing one or create a minimal one
+from .serializers import PublicSchoolSerializer
 
 class PublicSchoolDetailView(APIView):
     permission_classes = [AllowAny]
@@ -12,7 +12,7 @@ class PublicSchoolDetailView(APIView):
     def get(self, request, slug):
         try:
             school = School.objects.get(slug=slug)
-            serializer = SchoolSerializer(school)  # or a minimal PublicSchoolSerializer
+            serializer = PublicSchoolSerializer(school)
             return Response(serializer.data)
         except School.DoesNotExist:
             return Response(

@@ -16,6 +16,7 @@ from .serializers import (
     DepartmentSerializer, DepartmentCreateUpdateSerializer,
 )
 from apps.school.models import School
+from apps.school.support import accessible_school_ids, selected_school
 
 class CurriculumTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -36,22 +37,12 @@ class CurriculumViewSet(viewsets.ModelViewSet):
         return CurriculumSerializer
 
     def get_queryset(self):
-        school_id = self.request.headers.get('X-School-ID')
-        if school_id:
-            return Curriculum.objects.filter(school_id=school_id)
-        if self.request.user.is_staff:
-            return Curriculum.objects.all()
-        return Curriculum.objects.none()
+        return Curriculum.objects.filter(
+            school_id__in=accessible_school_ids(self.request)
+        )
 
     def perform_create(self, serializer):
-        school_id = self.request.headers.get('X-School-ID')
-        if not school_id:
-            serializer.save()
-        else:
-            school = get_object_or_404(School, id=school_id)
-            if not school.users.filter(id=self.request.user.id).exists():
-                raise PermissionDenied("You do not have access to this school")
-            serializer.save(school=school)
+        serializer.save(school=selected_school(self.request))
 
 class CopyCurriculumTemplateAPIView(APIView):
     """
@@ -62,13 +53,10 @@ class CopyCurriculumTemplateAPIView(APIView):
 
     @transaction.atomic
     def post(self, request):
-        school_id = request.headers.get('X-School-ID')
+        school = selected_school(request)
+        school_id = school.id
         if not school_id:
             return Response({"error": "X-School-ID header required"}, status=400)
-
-        school = get_object_or_404(School, id=school_id)
-        if not school.users.filter(id=request.user.id).exists():
-            raise PermissionDenied("No access to this school")
 
         template_id = request.data.get('template_id')
         grade_level_ids = request.data.get('grade_level_ids', [])
@@ -200,15 +188,16 @@ class GradeLevelViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = GradeLevel.objects.all()
-        school_id = self.request.headers.get('X-School-ID')
         curriculum_id = self.request.query_params.get('curriculum')
         is_template_only = self.request.query_params.get('school__isnull') == 'true'
 
         # Fix: If we want templates, ignore the school_id header
         if is_template_only:
             queryset = queryset.filter(school__isnull=True)
-        elif school_id:
-            queryset = queryset.filter(school_id=school_id)
+        else:
+            queryset = queryset.filter(
+                school_id__in=accessible_school_ids(self.request)
+            )
 
         if curriculum_id:
             queryset = queryset.filter(curriculum_id=curriculum_id)
@@ -216,21 +205,20 @@ class GradeLevelViewSet(viewsets.ModelViewSet):
         return queryset.order_by('order', 'name')
 
     def perform_create(self, serializer):
-        school_id = self.request.headers.get('X-School-ID')
-        if not school_id:
-            raise PermissionDenied("X-School-ID header required")
-        school = get_object_or_404(School, id=school_id)
-        serializer.save(school=school)
+        serializer.save(school=selected_school(self.request))
 
     @action(detail=False, methods=['delete'], url_path='bulk-delete')
     @transaction.atomic
     def bulk_delete(self, request):
         ids = request.data.get('ids', [])
-        school_id = request.headers.get('X-School-ID')
-        if not school_id or not ids:
+        school = selected_school(request)
+        if not ids:
             return Response({"detail": "Missing IDs or X-School-ID"}, status=400)
 
-        deleted = GradeLevel.objects.filter(id__in=ids, school_id=school_id).delete()
+        deleted = GradeLevel.objects.filter(
+            id__in=ids,
+            school_id=school.id,
+        ).delete()
         return Response({"detail": f"Deleted {deleted[0]} grade levels"}, status=204)
 
 
@@ -245,7 +233,6 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         queryset = Department.objects.all()
-        school_id = self.request.headers.get('X-School-ID')
         is_template_only = self.request.query_params.get('school__isnull') == 'true'
 
         # 1. PRIORITY: If wizard is fetching global templates
@@ -253,26 +240,12 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             return queryset.filter(school__isnull=True).order_by('name')
 
         # 2. CONTEXT: If managing a specific school
-        if school_id:
-            # Security check: Ensure user has access to this school
-            school = get_object_or_404(School, id=school_id)
-            if not school.users.filter(id=self.request.user.id).exists() and not self.request.user.is_staff:
-                raise PermissionDenied("You do not have access to this school context.")
-            
-            return queryset.filter(school_id=school_id).order_by('name')
-
-        # 3. FALLBACK: Staff can see everything, others see nothing
-        if self.request.user.is_staff:
-            return queryset.order_by('name')
-            
-        return queryset.none()
+        return queryset.filter(
+            school_id__in=accessible_school_ids(self.request)
+        ).order_by('name')
 
     def perform_create(self, serializer):
-        school_id = self.request.headers.get('X-School-ID')
-        if not school_id:
-            raise PermissionDenied("X-School-ID header required")
-        school = get_object_or_404(School, id=school_id)
-        serializer.save(school=school)
+        serializer.save(school=selected_school(self.request))
 
 class PublicGradeLevelsView(APIView):
     """

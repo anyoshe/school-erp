@@ -294,6 +294,7 @@ import uuid
 import re
 
 from django.db import models, transaction
+from django.db.models import Q
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils.text import slugify
@@ -649,6 +650,72 @@ class School(models.Model):
             self.slug = slug[:100]
 
         super().save(*args, **kwargs)
+
+
+class SchoolSupportSession(models.Model):
+    """Auditable, time-bounded read-only access to a school's data by support staff."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    administrator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="school_support_sessions",
+    )
+    school = models.ForeignKey(
+        School,
+        on_delete=models.PROTECT,
+        related_name="support_sessions",
+    )
+    reason = models.CharField(max_length=500)
+    started_at = models.DateTimeField(auto_now_add=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+        indexes = [
+            models.Index(fields=["administrator", "ended_at"]),
+            models.Index(fields=["school", "started_at"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["administrator"],
+                condition=Q(ended_at__isnull=True),
+                name="one_active_school_support_per_admin",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.administrator_id} supporting {self.school_id}"
+
+
+class SchoolSupportAuditLog(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    administrator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="school_support_audit_entries",
+    )
+    school = models.ForeignKey(
+        School,
+        on_delete=models.PROTECT,
+        related_name="support_audit_entries",
+    )
+    support_session = models.ForeignKey(
+        SchoolSupportSession,
+        on_delete=models.PROTECT,
+        related_name="audit_entries",
+    )
+    action = models.CharField(max_length=50)
+    record_type = models.CharField(max_length=100, blank=True)
+    record_id = models.CharField(max_length=100, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-timestamp"]
+        indexes = [models.Index(fields=["school", "timestamp"])]
+
+    def __str__(self):
+        return f"{self.action} on {self.school_id} by {self.administrator_id}"
 
 
 

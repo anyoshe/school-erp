@@ -1,5 +1,4 @@
 import api from "@/utils/api";
-import axios from "axios";
 // ----------------------------
 // Auth
 // ----------------------------
@@ -10,7 +9,7 @@ export interface LoginResponse {
 
 
 export const loginUser = async (email: string, password: string) => {
-  const response = await axios.post("http://localhost:8000/api/accounts/token/", {
+  const response = await api.post("/accounts/token/", {
     email,
     password,
   });

@@ -1,13 +1,26 @@
-// app/contexts/CurrentSchoolContext.tsx
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  ReactNode,
+} from "react";
 import api from "@/utils/api";
+import {
+  getActiveSchoolId,
+  removeActiveSchool,
+  removeSchoolSupportSessionId,
+  setActiveSchool as persistActiveSchool,
+  setSchoolSupportSessionId,
+} from "@/utils/auth";
 import { toast } from "sonner";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useRouter } from "next/navigation";
 
-// ────────────────────────────────────────────────────────────────
-// Types (expanded to include all current fields from your backend)
-// ────────────────────────────────────────────────────────────────
 export interface Module {
   id: number;
   name: string;
@@ -55,60 +68,71 @@ interface CurrentSchoolContextType {
   schools: School[];
   loading: boolean;
   error: string | null;
+  isPlatformAdmin: boolean;
   refreshSchools: () => Promise<void>;
+  enterSchoolSupport: (schoolId: string, reason: string) => Promise<void>;
+  exitSchoolSupport: () => Promise<void>;
 }
 
 const CurrentSchoolContext = createContext<CurrentSchoolContextType | undefined>(undefined);
 
 export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
+  const router = useRouter();
+  const { user, loading: userLoading } = useCurrentUser();
   const [schools, setSchools] = useState<School[]>([]);
   const [currentSchool, setCurrentSchoolState] = useState<School | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const initializedForUser = useRef<string | null>(null);
 
-  // ────────────────────────────────────────────────────────────────
-  // Core fetch logic (full details every time)
-  // ────────────────────────────────────────────────────────────────
   const fetchAndSetSchools = useCallback(async () => {
+    if (userLoading || !user) return;
+
     try {
       setLoading(true);
       setError(null);
+      setIsPlatformAdmin(Boolean(user.is_superuser));
 
-      // 1. Get list of all accessible schools
-      const schoolsRes = await api.get("/schools/my-schools/");
-      const fetchedSchools: School[] = schoolsRes.data;
+      if (user.is_superuser) {
+        setSchools([]);
+        const contextResponse = await api.get("/schools/support-context/");
+        const support = contextResponse.data;
+        if (!support.active || !support.school || !support.id) {
+          removeActiveSchool();
+          removeSchoolSupportSessionId();
+          setCurrentSchoolState(null);
+          router.replace("/platform-admin");
+          return;
+        }
+
+        persistActiveSchool(support.school.id);
+        setSchoolSupportSessionId(support.id);
+        const detailResponse = await api.get(`/schools/${support.school.id}/`);
+        setCurrentSchoolState(detailResponse.data as School);
+        return;
+      }
+
+      removeSchoolSupportSessionId();
+      const schoolsResponse = await api.get("/schools/my-schools/");
+      const fetchedSchools: School[] = schoolsResponse.data;
       setSchools(fetchedSchools);
 
       if (fetchedSchools.length === 0) {
         setCurrentSchoolState(null);
-        localStorage.removeItem("currentSchoolId");
+        removeActiveSchool();
         return;
       }
 
-      // 2. Decide which one to select as current
-      // const savedId = localStorage.getItem("currentSchoolId");
-      const savedId = localStorage.getItem("active_school_id");
-      let selected = savedId ? fetchedSchools.find((s) => s.id === savedId) : null;
-
-      // Fallback: newest or first school
-      if (!selected) {
-        selected = fetchedSchools.sort((a, b) =>
-          new Date(b.updated_at || b.created_at || 0).getTime() -
-          new Date(a.updated_at || a.created_at || 0).getTime()
+      const savedId = getActiveSchoolId();
+      const selected = fetchedSchools.find((school) => school.id === savedId)
+        || [...fetchedSchools].sort((a, b) =>
+          new Date(b.updated_at || b.created_at || 0).getTime()
+          - new Date(a.updated_at || a.created_at || 0).getTime()
         )[0];
-      }
-
-      if (selected) {
-        // 3. Always fetch FULL details (important for new fields!)
-        const detailRes = await api.get(`/schools/${selected.id}/`);
-        const fullSchool = detailRes.data as School;
-
-        setCurrentSchoolState(fullSchool);
-        // localStorage.setItem("currentSchoolId", selected.id);
-        localStorage.setItem("active_school_id", selected.id);
-        console.log("[Context] Current school loaded:", fullSchool.id, fullSchool.name);
-        console.log("[Context] Current school loaded:", fullSchool.id, fullSchool.name);
-      }
+      const detailResponse = await api.get(`/schools/${selected.id}/`);
+      setCurrentSchoolState(detailResponse.data as School);
+      persistActiveSchool(selected.id);
     } catch (err: any) {
       console.error("[Context] Failed to load schools:", err);
       setError("Could not load your schools. Please try again later.");
@@ -118,36 +142,45 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user, userLoading, router]);
 
-  // Initial load
   useEffect(() => {
-    fetchAndSetSchools();
+    if (
+      !userLoading
+      && user
+      && initializedForUser.current !== user.id
+    ) {
+      initializedForUser.current = user.id;
+      void fetchAndSetSchools();
+    }
   }, [fetchAndSetSchools]);
 
-  // Public refresh method (called from pages after updates)
-  const refreshSchools = async () => {
-    console.log("[Context] Manual refresh triggered");
-    await fetchAndSetSchools();
-  };
-
-  // Custom setter with persistence
-  // const setCurrentSchool = (school: School | null) => {
-  //   setCurrentSchoolState(school);
-  //   if (school) {
-  //     localStorage.setItem("currentSchoolId", school.id);
-  //   } else {
-  //     localStorage.removeItem("currentSchoolId");
-  //   }
-  // };
-  // Inside CurrentSchoolContext.tsx
   const setCurrentSchool = (school: School | null) => {
     setCurrentSchoolState(school);
     if (school) {
-      localStorage.setItem("active_school_id", school.id); // Updated key name
+      persistActiveSchool(school.id);
     } else {
-      localStorage.removeItem("active_school_id");
+      removeActiveSchool();
     }
+  };
+
+  const enterSchoolSupport = async (schoolId: string, reason: string) => {
+    const response = await api.post("/schools/start-support-context/", { school_id: schoolId, reason });
+    persistActiveSchool(schoolId);
+    setSchoolSupportSessionId(response.data.id);
+    const schoolResponse = await api.get(`/schools/${schoolId}/`);
+    setCurrentSchoolState(schoolResponse.data as School);
+  };
+
+  const exitSchoolSupport = async () => {
+    await api.post("/schools/end-support-context/");
+    removeActiveSchool();
+    removeSchoolSupportSessionId();
+    setCurrentSchoolState(null);
+  };
+
+  const refreshSchools = async () => {
+    await fetchAndSetSchools();
   };
 
   return (
@@ -158,7 +191,10 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
         schools,
         loading,
         error,
+        isPlatformAdmin,
         refreshSchools,
+        enterSchoolSupport,
+        exitSchoolSupport,
       }}
     >
       {children}
@@ -166,7 +202,6 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
   );
 }
 
-// Hook
 export function useCurrentSchool() {
   const context = useContext(CurrentSchoolContext);
   if (!context) {

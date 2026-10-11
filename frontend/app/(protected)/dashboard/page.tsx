@@ -1,41 +1,25 @@
 "use client";
 
 import { Users, BookOpen, DollarSign, TrendingUp, Calendar, Library, BarChart3, Cpu, Shield, Globe, Database, Activity, ChevronRight, Clock, CheckCircle, Target } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { getCurrentUser } from "@/utils/api";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 export default function DashboardHome() {
   const [activeFilter, setActiveFilter] = useState("today");
   const { currentSchool, loading: schoolLoading } = useCurrentSchool();
-  const [userName, setUserName] = useState("User");
+  const { user } = useCurrentUser();
   const router = useRouter();
-
-  useEffect(() => {
-    async function fetchUser() {
-      try {
-        const user = await getCurrentUser(true);
-        let fullName =
-          user.full_name ||
-          `${user.first_name || ""} ${user.last_name || ""}`.trim() ||
-          user.email?.split("@")[0] ||
-          "User";
-
-        // Capitalize each word properly
-        fullName = fullName
-          .split(" ")
-          .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(" ");
-
-        setUserName(fullName);
-      } catch (error) {
-        console.error("Failed to fetch user name:", error);
-        setUserName("User");
-      }
-    }
-    fetchUser();
-  }, []);
+  const rawUserName =
+    user?.full_name ||
+    `${user?.first_name || ""} ${user?.last_name || ""}`.trim() ||
+    user?.email?.split("@")[0] ||
+    "User";
+  const userName = rawUserName
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
   // Very simple loading state while school context is initializing
   if (schoolLoading) {
     return (

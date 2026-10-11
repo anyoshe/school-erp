@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getCurrentUser } from "@/utils/api";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { CurrentSchoolProvider } from "@/contexts/CurrentSchoolContext";
 import Sidebar from "./components/layout/Sidebar";
 import Navbar from "./components/layout/Navbar";
@@ -13,30 +13,14 @@ interface DashboardLayoutProps {
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { user, loading } = useCurrentUser();
 
   useEffect(() => {
-    const validateAuth = async () => {
-      try {
-        console.log("[DashboardLayout] Validating auth...");
-        // Force fresh fetch to avoid stale/cached user data
-        await getCurrentUser(true);
-        console.log("[DashboardLayout] Auth valid → proceed to dashboard");
-        setIsAuthenticated(true);
-      } catch (error) {
-        console.error("[DashboardLayout] Auth failed:", error);
-        router.replace("/login");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    validateAuth();
-  }, [router]);
+    if (!loading && !user) router.replace("/login");
+  }, [loading, user, router]);
 
   // Loading state: show spinner while checking auth
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-blue-50/50">
         <div className="text-center">
@@ -49,7 +33,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   // Not authenticated → nothing renders (redirect already happened)
-  if (!isAuthenticated) {
+  if (!user) {
     return null;
   }
 

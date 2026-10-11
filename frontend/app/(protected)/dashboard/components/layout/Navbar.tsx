@@ -8,10 +8,13 @@ import {
   Search,
   ChevronDown,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import SchoolSwitcher from "../SchoolSwitcher";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
-import { getCurrentUser } from "@/utils/api";
+import api from "@/utils/api";
+import { removeActiveSchool, removeSchoolSupportSessionId } from "@/utils/auth";
+import { toast } from "sonner";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 interface NavbarProps {
   onMenuClick: () => void;
@@ -25,31 +28,8 @@ export default function Navbar({
   isDesktopSidebarOpen,
 }: NavbarProps) {
   const { currentSchool } = useCurrentSchool();
-
-  // User state
-  const [user, setUser] = useState<{
-    full_name?: string;
-    first_name?: string;
-    last_name?: string;
-    email: string;
-    role: string;
-  } | null>(null);
-  const [isLoadingUser, setIsLoadingUser] = useState(true);
-
-  useEffect(() => {
-    async function fetchUser() {
-      try {
-        const data = await getCurrentUser(true); // fresh data
-        setUser(data);
-      } catch (error) {
-        console.error("Failed to fetch user:", error);
-      } finally {
-        setIsLoadingUser(false);
-      }
-    }
-
-    fetchUser();
-  }, []);
+  const router = useRouter();
+  const { user, loading: isLoadingUser } = useCurrentUser();
 
   // Compute display name (priority: full_name → first+last → email username → fallback)
   const displayName = user
@@ -69,6 +49,18 @@ export default function Navbar({
   const displayRole = user?.role
     ? user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()
     : "Loading...";
+
+  async function exitSupportContext() {
+    try {
+      await api.post("/schools/end-support-context/");
+      removeActiveSchool();
+      removeSchoolSupportSessionId();
+      router.replace("/platform-admin");
+    } catch (error) {
+      console.error("Could not exit school-support context:", error);
+      toast.error("Could not exit school-support access.");
+    }
+  }
 
   return (
     <header className="sticky top-0 z-20 bg-white border-b border-gray-200 shadow-sm">
@@ -129,6 +121,18 @@ export default function Navbar({
 
             {/* Actual switcher */}
             <SchoolSwitcher />
+            {user?.is_superuser && currentSchool && (
+              <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1.5">
+                <span className="text-xs font-semibold text-amber-900">Support · Read only</span>
+                <button
+                  type="button"
+                  onClick={exitSupportContext}
+                  className="text-xs font-semibold text-amber-800 underline hover:text-amber-950"
+                >
+                  Exit
+                </button>
+              </div>
+            )}
           </div>
 
           {/* CENTER - Search */}

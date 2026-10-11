@@ -81,7 +81,11 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     if (!path) return "";
     if (path.startsWith('http')) return path;
     const fileName = path.split('/').pop();
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const baseUrl = (
+      process.env.NEXT_PUBLIC_MEDIA_URL ||
+      (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api')
+        .replace(/\/api\/?$/, '')
+    ).replace(/\/$/, '');
     return `${baseUrl}/media/admission_photos/${fileName}`;
   };
 

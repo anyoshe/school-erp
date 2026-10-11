@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import {
-  Home, Settings, LogOut,
+  Home, Settings, LogOut, Shield,
   Users, BookOpen, DollarSign, Calendar, Library, BarChart3, Info, MapPin, Book, Image, Grid, ChevronDown, GraduationCap, FileText
 } from "lucide-react";
 import { usePathname } from "next/navigation";
@@ -72,7 +73,7 @@ const SETTINGS_LINKS: MenuItem[] = [
 
 export default function Sidebar({ isCollapsed }: SidebarProps) {
   const pathname = usePathname();
-  const { currentSchool, loading } = useCurrentSchool();
+  const { currentSchool, loading, isPlatformAdmin } = useCurrentSchool();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   if (loading) return <div className="p-6 text-gray-400">Loading modules...</div>;
@@ -159,41 +160,62 @@ if (duplicates.length > 0) {
       {/* Menu */}
       <nav className="flex-1 p-4 overflow-y-auto">
         <ul className="space-y-2">
+          {isPlatformAdmin && (
+            <li>
+              <Link
+                href="/platform-admin"
+                className={clsx(
+                  "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
+                  pathname === "/platform-admin"
+                    ? "bg-blue-50 text-blue-600 font-medium"
+                    : "text-gray-700 hover:bg-gray-100"
+                )}
+              >
+                <Shield className="w-5 h-5" />
+                {!isCollapsed && <span>Platform dashboard</span>}
+              </Link>
+            </li>
+          )}
+
           {/* Dashboard */}
           <li>
-            <a
-              href="/dashboard"
+            <Link
+              href={isPlatformAdmin && !currentSchool ? "/platform-admin" : "/dashboard"}
               className={clsx(
                 "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
-                pathname === "/dashboard"
+                pathname === "/dashboard" && (!isPlatformAdmin || Boolean(currentSchool))
                   ? "bg-blue-50 text-blue-600 font-medium"
                   : "text-gray-700 hover:bg-gray-100"
               )}
             >
               <Home className="w-5 h-5" />
-              {!isCollapsed && <span>Dashboard</span>}
-            </a>
+              {!isCollapsed && <span>{isPlatformAdmin && !currentSchool ? "School directory" : "Dashboard"}</span>}
+            </Link>
           </li>
 
           {/* Dynamic Modules */}
-          {dynamicItems.map((item) => (
-            <li key={item.href}>
-              <a
-                href={item.href}
-                className={clsx(
-                  "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
-                  pathname.startsWith(item.href || "")
-                    ? "bg-blue-50 text-blue-600 font-medium"
-                    : "text-gray-700 hover:bg-gray-100"
-                )}
-              >
-                <item.icon className="w-5 h-5" />
-                {!isCollapsed && <span>{item.label}</span>}
-              </a>
-            </li>
-          ))}
+          {dynamicItems.map((item) => {
+            if (!item.href) return null;
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  className={clsx(
+                    "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
+                    pathname.startsWith(item.href)
+                      ? "bg-blue-50 text-blue-600 font-medium"
+                      : "text-gray-700 hover:bg-gray-100"
+                  )}
+                >
+                  <item.icon className="w-5 h-5" />
+                  {!isCollapsed && <span>{item.label}</span>}
+                </Link>
+              </li>
+            );
+          })}
 
           {/* Settings */}
+          {(!isPlatformAdmin || Boolean(currentSchool)) && (
           <li>
             <button
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
@@ -226,11 +248,12 @@ if (duplicates.length > 0) {
               )}
             >
               {SETTINGS_LINKS.map((link) => {
-                const isActive = pathname.startsWith(link.href || "");
+                if (!link.href) return null;
+                const isActive = pathname.startsWith(link.href);
                 const Icon = link.icon;
                 return (
                   <li key={link.label}>
-                    <a
+                    <Link
                       href={link.href}
                       className={clsx(
                         "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
@@ -241,14 +264,16 @@ if (duplicates.length > 0) {
                     >
                       <Icon className="w-4 h-4 flex-shrink-0" />
                       {!isCollapsed && <span>{link.label}</span>}
-                    </a>
+                    </Link>
                   </li>
                 );
               })}
             </ul>
           </li>
+          )}
 
           {/* Add School */}
+          {!isPlatformAdmin && (
           <li>
             <button
               onClick={() => window.location.href = "/onboarding/setup?mode=new"}
@@ -258,6 +283,7 @@ if (duplicates.length > 0) {
               {!isCollapsed && <span>Add School</span>}
             </button>
           </li>
+          )}
         </ul>
       </nav>
 

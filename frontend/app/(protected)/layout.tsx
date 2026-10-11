@@ -2,25 +2,19 @@
 // app/(protected)/layout.tsx
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { getCurrentUser } from "@/utils/api";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
+  const { user, loading } = useCurrentUser();
 
   useEffect(() => {
-    async function checkAuth() {
-      try {
-        await getCurrentUser(); // Will throw if not authenticated
-        setLoading(false);
-      } catch {
-        router.replace("/login");
-      }
+    if (!loading && !user) {
+      router.replace("/login");
     }
-    checkAuth();
-  }, [router]);
+  }, [loading, router, user]);
 
   if (loading) {
     return (

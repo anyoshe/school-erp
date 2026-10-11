@@ -27,52 +27,35 @@
 // app/hooks/useCurrentUser.ts
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { getCurrentUser } from "@/utils/api";
 
 export interface CurrentUser {
   id: string;
   email: string;
-  role: string;           // the code e.g. "ADMISSIONS_OFFICER"
-  role_display?: string;  // the nice name e.g. "Admissions Officer / Registrar"
-  full_name: string;
+  role: string;
+  role_display?: string;
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  is_superuser?: boolean;
+  force_change_password?: boolean;
   schools: Array<{
     id: string;
     name: string;
-    // ... other fields you need
   }>;
 }
 
 export function useCurrentUser() {
-  const [user, setUser] = useState<CurrentUser | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: user = null, isLoading, error } = useQuery<CurrentUser>({
+    queryKey: ["currentUser"],
+    queryFn: () => getCurrentUser(),
+    staleTime: 60_000,
+  });
 
-  useEffect(() => {
-    let isMounted = true;
-
-    getCurrentUser(true) // force fresh on mount — avoids stale role data
-      .then((data) => {
-        if (isMounted) {
-          setUser(data);
-          setError(null);
-        }
-      })
-      .catch((err) => {
-        if (isMounted) {
-          console.error("Failed to load current user:", err);
-          setError("Failed to load user information");
-          setUser(null);
-        }
-      })
-      .finally(() => {
-        if (isMounted) setLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  return { user, loading, error };
+  return {
+    user,
+    loading: isLoading,
+    error: error ? "Failed to load user information" : null,
+  };
 }

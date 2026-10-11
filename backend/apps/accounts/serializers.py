@@ -161,6 +161,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             "email",
             "full_name",
             "schools",
+            "is_superuser",
             "role",           # the code, e.g. "ADMISSIONS_OFFICER"
             "role_display",   # the nice name, e.g. "Admissions Officer / Registrar"
             "is_temporary_password",
