@@ -1881,7 +1881,7 @@ export default function EnrollmentWizardModal({
               <Button
                 onClick={handleSubmit}
                 disabled={loading || !validateStep(currentStep)}
-                className="bg-green-600 hover:bg-green-700 min-w-[180px]"
+                className="bg-secondary hover:bg-green-700 min-w-[180px]"
               >
                 {loading ? (
                   <>

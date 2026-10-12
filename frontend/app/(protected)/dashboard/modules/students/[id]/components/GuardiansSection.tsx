@@ -51,7 +51,7 @@
 //               <div className="space-y-1">
 //                 <div className="flex items-center gap-2">
 //                   <p className="font-semibold">{g.fullName}</p>
-//                   {link.isPrimary && <span className="text-xs bg-blue-100 text-blue-700 px-2 rounded-full">Primary</span>}
+//                   {link.isPrimary && <span className="text-xs bg-blue-100 text-primary-800 px-2 rounded-full">Primary</span>}
 //                   {link.isEmergencyContact && <span className="text-xs bg-red-100 text-red-700 px-2 rounded-full">Emergency</span>}
 //                 </div>
 //                 <p className="text-sm text-gray-600">{link.relationship}</p>
@@ -61,7 +61,7 @@
 //               </div>
 
 //               <div className="flex flex-col gap-2">
-//                 <button onClick={() => setEditingLink(link)} className="text-blue-600 text-sm hover:underline">Edit</button>
+//                 <button onClick={() => setEditingLink(link)} className="text-primary-700 text-sm hover:underline">Edit</button>
 //                 <button onClick={() => handleRemove(link.id)} className="text-red-600 text-sm hover:underline">Remove</button>
 //               </div>
 //             </div>
@@ -131,7 +131,7 @@ export default function GuardiansSection({ studentId }: { studentId: string }) {
         {!showForm && (
           <button
             onClick={handleAddNew}
-            className="mt-6 sm:mt-0 inline-flex items-center gap-3 bg-gradient-to-r from-indigo-900 to-indigo-800 hover:from-indigo-800 hover:to-indigo-700 text-white font-bold py-4 px-8 rounded-xl shadow-xl transition transform hover:scale-105"
+            className="mt-6 sm:mt-0 inline-flex items-center gap-3 bg-gradient-to-r from-indigo-900 to-indigo-800 hover:from-indigo-800 hover:to-primary-800 text-white font-bold py-4 px-8 rounded-xl shadow-xl transition transform hover:scale-105"
           >
             <span className="text-xl">+</span>
             Add Guardian
@@ -171,7 +171,7 @@ export default function GuardiansSection({ studentId }: { studentId: string }) {
             </p>
             <button
               onClick={handleAddNew}
-              className="bg-gradient-to-r from-indigo-900 to-indigo-800 hover:from-indigo-800 hover:to-indigo-700 text-white font-bold py-4 px-10 rounded-xl shadow-xl transition transform hover:scale-105"
+              className="bg-gradient-to-r from-indigo-900 to-indigo-800 hover:from-indigo-800 hover:to-primary-800 text-white font-bold py-4 px-10 rounded-xl shadow-xl transition transform hover:scale-105"
             >
               + Add First Guardian
             </button>

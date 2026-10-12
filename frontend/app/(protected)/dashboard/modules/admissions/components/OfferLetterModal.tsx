@@ -246,8 +246,8 @@ export default function OfferLetterModal({
 
           <div className="grid gap-6 py-6">
             {/* Logic Step Tracker */}
-            <div className={`flex items-center gap-3 p-4 rounded-xl border ${hasGenerated ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
-              {hasGenerated ? <CheckCircle2 className="text-green-600 h-5 w-5" /> : <AlertCircle className="text-blue-600 h-5 w-5" />}
+            <div className={`flex items-center gap-3 p-4 rounded-xl border ${hasGenerated ? 'bg-secondary-50 border-secondary-200' : 'bg-primary-50 border-primary-200'}`}>
+              {hasGenerated ? <CheckCircle2 className="text-secondary-600 h-5 w-5" /> : <AlertCircle className="text-primary-700 h-5 w-5" />}
               <div className="text-sm">
                 <p className="font-bold">{hasGenerated ? "Step 1 Complete" : "Step 1: Preview & Share"}</p>
                 <p className="opacity-80">{hasGenerated ? "The student is ready to be marked as Offered." : "Download or share the letter via WhatsApp/Email first."}</p>

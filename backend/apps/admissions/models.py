@@ -427,7 +427,7 @@ class Application(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='admission_applications')
-    admission_number = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    admission_number = models.CharField(max_length=50, null=True, blank=True)
 
     # Personal Information
     first_name = models.CharField(max_length=50)
@@ -768,6 +768,14 @@ class Application(models.Model):
 
     class Meta:
         ordering = ['-submitted_at', 'last_name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'admission_number'],
+                name='unique_admission_number_per_school',
+                condition=models.Q(admission_number__isnull=False),
+            )
+        ]
+
 class ApplicationDocument(models.Model):
     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='documents')
     file = models.FileField(upload_to='admission_documents/')

@@ -184,7 +184,7 @@ export default function PaymentsPage() {
             <CardTitle className="text-sm font-medium">Recorded Today</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
+            <div className="text-2xl font-bold text-secondary-600">
               KES {stats.totalPaymentsToday.toLocaleString()}
             </div>
           </CardContent>
@@ -201,7 +201,7 @@ export default function PaymentsPage() {
       </div>
 
       {/* Record Payment Form */}
-      <Card className={showForm ? "border-2 border-blue-500" : ""}>
+      <Card className={showForm ? "border-2 border-primary" : ""}>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Record New Payment</CardTitle>
           {!showForm && (
@@ -236,7 +236,7 @@ export default function PaymentsPage() {
             </div>
 
             {selectedInvoice && (
-              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+              <div className="bg-primary-50 p-4 rounded-lg border border-primary-200">
                 {(() => {
                   const inv = invoices.find((i) => i.id === selectedInvoice);
                   return inv ? (
@@ -247,7 +247,7 @@ export default function PaymentsPage() {
                       </div>
                       <div>
                         <p className="text-muted-foreground">Already Paid</p>
-                        <p className="font-bold text-lg text-green-600">KES {inv.amount_paid.toLocaleString()}</p>
+                        <p className="font-bold text-lg text-secondary-600">KES {inv.amount_paid.toLocaleString()}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Remaining Balance</p>
@@ -419,7 +419,7 @@ export default function PaymentsPage() {
                       <td className="py-3 px-3 text-xs text-muted-foreground">
                         {payment.reference_number || "—"}
                       </td>
-                      <td className="py-3 px-3 text-right font-semibold text-green-600">
+                      <td className="py-3 px-3 text-right font-semibold text-secondary-600">
                         KES {payment.amount.toLocaleString()}
                       </td>
                       <td className="py-3 px-3 text-sm">{payment.paid_by || "System"}</td>

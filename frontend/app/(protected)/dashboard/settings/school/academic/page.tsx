@@ -326,7 +326,7 @@ export default function SchoolAcademicConfigPage() {
           style={{ background: colors.surface }}
         >
           {/* Header */}
-          <div className="px-8 py-10 bg-gradient-to-r from-[var(--primary)] to-indigo-900 text-white">
+          <div className="px-8 py-10 bg-gradient-to-r from-[var(--primary)] to-primary-900 text-white">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
                 <Calendar className="h-8 w-8" />

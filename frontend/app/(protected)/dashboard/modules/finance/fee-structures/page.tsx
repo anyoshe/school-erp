@@ -174,7 +174,7 @@ export default function FeeStructuresList() {
                               // Find the amount for this optional item from structure_items
                               const amt = fs.structure_items.find((si: any) => si.item === opt.id)?.amount;
                               return (
-                                <div key={opt.id} className="text-xs text-blue-600 italic flex items-center gap-1">
+                                <div key={opt.id} className="text-xs text-primary-700 italic flex items-center gap-1">
                                   <Plus className="h-3 w-3" /> {opt.name}: {currencySymbol} {Number(amt).toLocaleString()}
                                 </div>
                               );
@@ -194,7 +194,7 @@ export default function FeeStructuresList() {
 
                       <TableCell className="py-4">
                         <div className="flex flex-col">
-                          <span className="font-mono font-bold text-green-700 text-lg">
+                          <span className="font-mono font-bold text-secondary-700 text-lg">
                             {currencySymbol} {fs.mandatoryTotal.toLocaleString()}
                           </span>
                           <span className="text-[10px] text-slate-400 font-medium italic">
@@ -203,7 +203,7 @@ export default function FeeStructuresList() {
                         </div>
                       </TableCell>
 
-                      <TableCell className="font-mono font-bold text-green-700">
+                      <TableCell className="font-mono font-bold text-secondary-700">
                         {currencySymbol} {fs.total_amount.toLocaleString()}
                       </TableCell>
                       <TableCell>
@@ -219,7 +219,7 @@ export default function FeeStructuresList() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="h-8 gap-1 text-blue-600 border-blue-200"
+                            className="h-8 gap-1 text-primary-700 border-primary-200"
                             onClick={() => handleClone(fs.id)}
                           >
                             <Copy className="h-3.5 w-3.5" /> Clone

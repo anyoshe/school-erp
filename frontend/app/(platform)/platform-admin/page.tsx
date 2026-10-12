@@ -215,7 +215,7 @@ export default function PlatformAdminPage() {
             {schools.map((school) => (
               <article key={school.id} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
                 <div className="flex min-w-0 items-start gap-3">
-                  <span className="mt-1 rounded-lg bg-blue-50 p-2 text-blue-700"><Building2 className="h-5 w-5" /></span>
+                  <span className="mt-1 rounded-lg bg-primary-50 p-2 text-primary-800"><Building2 className="h-5 w-5" /></span>
                   <div className="min-w-0">
                     <h3 className="truncate font-semibold text-gray-900">{school.name}</h3>
                     <p className="text-sm text-gray-600">{[school.city, school.country].filter(Boolean).join(", ") || "Location not provided"}</p>
@@ -224,7 +224,7 @@ export default function PlatformAdminPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${school.setup_complete ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"}`}>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${school.setup_complete ? "bg-green-100 text-secondary-800" : "bg-gray-100 text-gray-700"}`}>
                     {school.setup_complete ? "Setup complete" : "Setup incomplete"}
                   </span>
                   <button type="button" disabled={working || !reason.trim()} onClick={() => enterSupport(school)} className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50">

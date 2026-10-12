@@ -195,7 +195,7 @@ export default function PostBalancesPage() {
                     </div>
                     <div>
                       <p className="text-muted-foreground">Paid So Far</p>
-                      <p className="font-semibold text-lg text-green-600">KES {inv.amount_paid.toLocaleString()}</p>
+                      <p className="font-semibold text-lg text-secondary-600">KES {inv.amount_paid.toLocaleString()}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Outstanding</p>

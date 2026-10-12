@@ -93,7 +93,7 @@ export default function Navbar({
             {/* School selector */}
             <div className="flex items-center gap-2">
               {/* School Avatar / Logo */}
-              <div className="relative w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white font-semibold text-sm bg-gradient-to-br from-blue-500 to-purple-500 shadow-sm">
+              <div className="relative w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white font-semibold text-sm bg-gradient-to-br from-primary-600 to-primary-800 shadow-sm">
                 {currentSchool?.logo ? (
                   <img
                     src={currentSchool.logo}  // ← Now full URL from ImageField
@@ -142,7 +142,7 @@ export default function Navbar({
               <input
                 type="search"
                 placeholder="Search students, reports, or actions..."
-                className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg focus:ring-2 focus:ring-blue-500 focus:bg-white text-sm"
+                className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg focus:ring-2 focus:ring-primary focus:bg-white text-sm"
               />
             </div>
           </div>
@@ -170,7 +170,7 @@ export default function Navbar({
               </div>
 
               {/* User Avatar / Initials */}
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+              <div className="w-8 h-8 bg-gradient-to-br from-primary-600 to-primary-800 rounded-full flex items-center justify-center text-white font-semibold text-sm">
                 {isLoadingUser ? "..." : initials}
               </div>
             </div>

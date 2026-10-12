@@ -64,13 +64,13 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  SUBMITTED: "bg-blue-100 text-blue-800 border-blue-200",
+  SUBMITTED: "bg-blue-100 text-primary-900 border-primary-200",
   UNDER_REVIEW: "bg-purple-100 text-purple-800 border-purple-200",
   TEST_SCHEDULED: "bg-amber-100 text-amber-800 border-amber-200",
   OFFERED: "bg-indigo-100 text-indigo-800 border-indigo-200",
   ACCEPTED: "bg-emerald-100 text-emerald-800 border-emerald-200",
   REJECTED: "bg-red-100 text-red-800 border-red-200",
-  ENROLLED: "bg-green-100 text-green-800 border-green-200 animate-pulse",
+  ENROLLED: "bg-green-100 text-secondary-800 border-secondary-200 animate-pulse",
 };
 
 export default function AdmissionActions({
@@ -309,7 +309,7 @@ Admissions Team
       return (
         <Button
           onClick={() => setIsInterviewDoneOpen(true)}
-          className="w-full h-12 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-lg"
+          className="w-full h-12 bg-secondary hover:bg-green-700 text-white rounded-xl shadow-lg"
         >
           <CheckCircle2 className="mr-2 h-5 w-5" />
           Mark Interview Done
@@ -362,9 +362,9 @@ Admissions Team
     if (status === "ENROLLED") {
       return (
         <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-center gap-3 py-4 px-6 bg-green-50 border border-green-200 rounded-2xl">
-            <CheckCircle2 className="h-6 w-6 text-green-600" />
-            <span className="font-semibold text-green-800">Student Enrolled Successfully!</span>
+          <div className="flex items-center justify-center gap-3 py-4 px-6 bg-secondary-50 border border-secondary-200 rounded-2xl">
+            <CheckCircle2 className="h-6 w-6 text-secondary-600" />
+            <span className="font-semibold text-secondary-800">Student Enrolled Successfully!</span>
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3">

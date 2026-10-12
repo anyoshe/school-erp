@@ -133,7 +133,7 @@ if (duplicates.length > 0) {
       {/* Header */}
       <div className="p-6 border-b border-gray-200">
         <div className={clsx("flex items-center gap-3 transition-all")}>
-          <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center text-white font-bold">
+          <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-gradient-to-br from-primary-700 to-primary-900 flex items-center justify-center text-white font-bold">
             {currentSchool?.logo ? (
               <img
                 src={currentSchool.logo}
@@ -167,7 +167,7 @@ if (duplicates.length > 0) {
                 className={clsx(
                   "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
                   pathname === "/platform-admin"
-                    ? "bg-blue-50 text-blue-600 font-medium"
+                    ? "bg-primary-50 text-primary-800 font-medium"
                     : "text-gray-700 hover:bg-gray-100"
                 )}
               >
@@ -184,7 +184,7 @@ if (duplicates.length > 0) {
               className={clsx(
                 "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
                 pathname === "/dashboard" && (!isPlatformAdmin || Boolean(currentSchool))
-                  ? "bg-blue-50 text-blue-600 font-medium"
+                  ? "bg-primary-50 text-primary-800 font-medium"
                   : "text-gray-700 hover:bg-gray-100"
               )}
             >
@@ -203,7 +203,7 @@ if (duplicates.length > 0) {
                   className={clsx(
                     "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
                     pathname.startsWith(item.href)
-                      ? "bg-blue-50 text-blue-600 font-medium"
+                      ? "bg-primary-50 text-primary-800 font-medium"
                       : "text-gray-700 hover:bg-gray-100"
                   )}
                 >
@@ -222,7 +222,7 @@ if (duplicates.length > 0) {
               className={clsx(
                 "flex items-center justify-between px-3 py-3 w-full rounded-lg text-sm transition-all",
                 pathname.startsWith("/dashboard/settings")
-                  ? "bg-blue-50 text-blue-600 font-medium"
+                  ? "bg-primary-50 text-primary-800 font-medium"
                   : "text-gray-700 hover:bg-gray-100"
               )}
             >
@@ -258,8 +258,8 @@ if (duplicates.length > 0) {
                       className={clsx(
                         "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
                         isActive
-                          ? "bg-blue-50 text-blue-600 font-medium"
-                          : "text-gray-600 hover:bg-gray-50 hover:text-blue-600"
+                          ? "bg-primary-50 text-primary-800 font-medium"
+                          : "text-gray-600 hover:bg-gray-50 hover:text-primary-700"
                       )}
                     >
                       <Icon className="w-4 h-4 flex-shrink-0" />
@@ -277,7 +277,7 @@ if (duplicates.length > 0) {
           <li>
             <button
               onClick={() => window.location.href = "/onboarding/setup?mode=new"}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-green-600 hover:bg-green-50 hover:text-green-700 transition-all"
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-secondary-600 hover:bg-secondary-50 hover:text-secondary-700 transition-all"
             >
               <Users className="w-4 h-4 flex-shrink-0" />
               {!isCollapsed && <span>Add School</span>}

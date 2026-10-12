@@ -151,7 +151,7 @@ export default function ModulesSettingsPage() {
               Active Modules
               <Badge 
                 variant="outline" 
-                className="bg-green-50 text-green-700 border-green-200 px-3 py-1 text-sm"
+                className="bg-secondary-50 text-secondary-700 border-secondary-200 px-3 py-1 text-sm"
               >
                 {enabledModules.length}
               </Badge>
@@ -176,7 +176,7 @@ export default function ModulesSettingsPage() {
                         <div className="p-3 rounded-lg bg-primary/10 text-primary">
                           {Icon}
                         </div>
-                        <Badge className="bg-green-600 text-white border-none px-3 py-1">
+                        <Badge className="bg-secondary text-white border-none px-3 py-1">
                           Active
                         </Badge>
                       </div>

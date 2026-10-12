@@ -81,15 +81,15 @@ export default function Home() {
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center gap-6 lg:gap-8">
-              <a href="#features" className="text-sm font-medium transition-colors hover:text-blue-600" 
+              <a href="#features" className="text-sm font-medium transition-colors hover:text-primary-700" 
                  style={{ color: colors.textMuted }}>
                 Features
               </a>
-              <a href="#" className="text-sm font-medium transition-colors hover:text-blue-600" 
+              <a href="#" className="text-sm font-medium transition-colors hover:text-primary-700" 
                  style={{ color: colors.textMuted }}>
                 Pricing
               </a>
-              <a href="#" className="text-sm font-medium transition-colors hover:text-blue-600" 
+              <a href="#" className="text-sm font-medium transition-colors hover:text-primary-700" 
                  style={{ color: colors.textMuted }}>
                 About
               </a>
@@ -492,19 +492,19 @@ export default function Home() {
             </div>
 
             <div className="flex flex-wrap justify-center gap-3 sm:gap-4 lg:gap-6">
-              <a href="#" className="text-xs sm:text-sm transition-colors hover:text-blue-600" 
+              <a href="#" className="text-xs sm:text-sm transition-colors hover:text-primary-700" 
                  style={{ color: colors.textMuted }}>
                 Privacy
               </a>
-              <a href="#" className="text-xs sm:text-sm transition-colors hover:text-blue-600" 
+              <a href="#" className="text-xs sm:text-sm transition-colors hover:text-primary-700" 
                  style={{ color: colors.textMuted }}>
                 Terms
               </a>
-              <a href="#" className="text-xs sm:text-sm transition-colors hover:text-blue-600" 
+              <a href="#" className="text-xs sm:text-sm transition-colors hover:text-primary-700" 
                  style={{ color: colors.textMuted }}>
                 Contact
               </a>
-              <a href="#" className="text-xs sm:text-sm transition-colors hover:text-blue-600" 
+              <a href="#" className="text-xs sm:text-sm transition-colors hover:text-primary-700" 
                  style={{ color: colors.textMuted }}>
                 Support
               </a>

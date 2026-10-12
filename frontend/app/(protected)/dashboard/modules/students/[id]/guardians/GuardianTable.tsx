@@ -75,7 +75,7 @@ export default function GuardianTable({
                 {/* Badges */}
                 <div className="flex gap-3 mt-4">
                   {link.isPrimary && (
-                    <span className="px-4 py-2 bg-blue-500 text-white text-sm font-bold rounded-full">
+                    <span className="px-4 py-2 bg-primary-500 text-white text-sm font-bold rounded-full">
                       Primary Guardian
                     </span>
                   )}
@@ -186,7 +186,7 @@ export default function GuardianTable({
                       <span className="text-xl font-bold text-slate-900">{g.fullName}</span>
                       <div className="flex gap-2">
                         {link.isPrimary && (
-                          <span className="px-4 py-2 bg-blue-500 text-white text-sm font-bold rounded-full">
+                          <span className="px-4 py-2 bg-primary-500 text-white text-sm font-bold rounded-full">
                             Primary
                           </span>
                         )}

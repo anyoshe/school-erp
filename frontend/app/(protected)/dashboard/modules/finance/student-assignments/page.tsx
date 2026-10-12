@@ -337,7 +337,7 @@ export default function StudentAssignmentsPage() {
                         {student.admission_number}
                       </div>
                       {hasAssignment && (
-                        <div className="text-xs text-green-600 mt-1">✓ Has assignment</div>
+                        <div className="text-xs text-secondary-600 mt-1">✓ Has assignment</div>
                       )}
                     </button>
                   );
@@ -380,7 +380,7 @@ export default function StudentAssignmentsPage() {
 
                 {/* Fee Structure Details */}
                 {currentFeeStructure && (
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="bg-primary-50 p-4 rounded-lg border border-primary-200">
                     <h4 className="font-semibold text-sm mb-2">Fee Structure Details</h4>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
@@ -526,7 +526,7 @@ export default function StudentAssignmentsPage() {
                         );
                       })}
                     </div>
-                    <div className="mt-4 rounded-lg bg-blue-50 p-4 text-sm text-slate-800">
+                    <div className="mt-4 rounded-lg bg-primary-50 p-4 text-sm text-slate-800">
                       <div className="font-semibold">Assignment preview total</div>
                       <div className="text-xl font-bold mt-1">KES {previewEffectiveTotal.toLocaleString()}</div>
                       <div className="text-xs text-muted-foreground mt-1">
@@ -613,7 +613,7 @@ export default function StudentAssignmentsPage() {
                       size="sm"
                       onClick={() => handleGenerateInvoices(assignment.id)}
                       disabled={generatingInvoices.has(assignment.id)}
-                      className="bg-blue-600 hover:bg-blue-700"
+                      className="bg-primary hover:bg-primary-700"
                     >
                       {generatingInvoices.has(assignment.id) ? (
                         <>

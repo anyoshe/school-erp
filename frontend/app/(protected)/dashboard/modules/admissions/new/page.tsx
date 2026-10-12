@@ -278,16 +278,16 @@ export default function NewApplicationPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-sm border">
-        <div className="px-6 py-4 border-b bg-blue-50 flex justify-between items-center">
-          <p className="text-blue-800 font-medium">
+        <div className="px-6 py-4 border-b bg-primary-50 flex justify-between items-center">
+          <p className="text-primary-900 font-medium">
             Applying to: <span className="font-semibold">{currentSchool.name}</span>
           </p>
         </div>
 
         {savedAppId && !isFinalSubmitted && (
-          <Alert className="mx-6 mt-4 bg-green-50 border-green-200">
-            <CheckCircle2 className="h-5 w-5 text-green-600" />
-            <AlertDescription className="text-green-800">
+          <Alert className="mx-6 mt-4 bg-secondary-50 border-secondary-200">
+            <CheckCircle2 className="h-5 w-5 text-secondary-600" />
+            <AlertDescription className="text-secondary-800">
               Draft saved (ID: <strong>{savedAppId}</strong>). Continue editing or submit when ready.
             </AlertDescription>
           </Alert>
@@ -295,8 +295,8 @@ export default function NewApplicationPage() {
 
         {isFinalSubmitted ? (
           <div className="p-12 text-center space-y-6">
-            <CheckCircle2 className="mx-auto h-16 w-16 text-green-600" />
-            <h2 className="text-2xl font-bold text-green-800">Thank You!</h2>
+            <CheckCircle2 className="mx-auto h-16 w-16 text-secondary-600" />
+            <h2 className="text-2xl font-bold text-secondary-800">Thank You!</h2>
             <p className="text-lg text-gray-700">
               Your application has been successfully submitted.
             </p>
@@ -567,7 +567,7 @@ export default function NewApplicationPage() {
                       <div className="mt-2">
                         {/* If there is already a photo (string URL from server or File object), show a preview or name */}
                         {value && (
-                          <p className="text-xs text-blue-600 mb-1">
+                          <p className="text-xs text-primary-700 mb-1">
                             Current: {value instanceof File ? value.name : "Saved Photo"}
                           </p>
                         )}
@@ -578,7 +578,7 @@ export default function NewApplicationPage() {
                             const file = e.target.files?.[0];
                             if (file) onChange(file);
                           }}
-                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-800 hover:file:bg-blue-100"
                         />
                       </div>
                     )}

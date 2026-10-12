@@ -25,7 +25,7 @@ export default function DashboardHome() {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto mb-4"></div>
           <p className="text-gray-600">Loading your school context...</p>
         </div>
       </div>
@@ -42,7 +42,7 @@ export default function DashboardHome() {
         <p className="text-gray-600 mb-6">
           Please use the school switcher in the top bar to select a school you manage.
         </p>
-        <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg">
+        <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary-50 text-primary-800 rounded-lg">
           <Target className="w-5 h-5" />
           <span className="font-medium">Select a school to begin</span>
         </div>
@@ -93,11 +93,11 @@ export default function DashboardHome() {
   const getColorClass = (color: string) => {
     const colors: Record<string, { bg: string; text: string; ring: string; hover: string; gradient: string }> = {
       blue: {
-        bg: "bg-blue-600",
-        text: "text-blue-600",
+        bg: "bg-primary",
+        text: "text-primary-700",
         ring: "ring-blue-200",
-        hover: "hover:bg-blue-50",
-        gradient: "from-blue-500 to-blue-600"
+        hover: "hover:bg-primary-50",
+        gradient: "from-primary-600 to-primary-700"
       },
       emerald: {
         bg: "bg-emerald-600",
@@ -132,7 +132,7 @@ export default function DashboardHome() {
         text: "text-indigo-600",
         ring: "ring-indigo-200",
         hover: "hover:bg-indigo-50",
-        gradient: "from-indigo-500 to-indigo-600"
+        gradient: "from-indigo-500 to-primary-800"
       },
       teal: {
         bg: "bg-teal-600",
@@ -155,7 +155,7 @@ export default function DashboardHome() {
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
               Welcome back,{" "}
-              <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-primary-700 to-primary-800 bg-clip-text text-transparent">
                 {userName}
               </span>
             </h1>
@@ -187,7 +187,7 @@ export default function DashboardHome() {
       <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Target className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500" />
+            <Target className="w-4 h-4 sm:w-5 sm:h-5 text-primary-600" />
             <span className="font-medium text-gray-900 text-sm sm:text-base">Analytics Period</span>
           </div>
           <div className="inline-flex bg-gray-100 rounded-lg p-0.5">
@@ -196,7 +196,7 @@ export default function DashboardHome() {
                 key={period}
                 onClick={() => setActiveFilter(period)}
                 className={`px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium rounded-md capitalize transition-all ${activeFilter === period
-                  ? "bg-white text-blue-600"
+                  ? "bg-white text-primary-700"
                   : "text-gray-600 hover:text-gray-900"
                   }`}
               >
@@ -242,7 +242,7 @@ export default function DashboardHome() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base sm:text-lg font-bold text-gray-900">Quick Actions</h2>
-          <button className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 font-medium">
+          <button className="text-xs sm:text-sm text-primary-700 hover:text-primary-800 font-medium">
             View all →
           </button>
         </div>
@@ -275,7 +275,7 @@ export default function DashboardHome() {
           </div>
           <div className="flex items-center gap-3 mt-3 lg:mt-0">
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 bg-blue-500 rounded-full" />
+              <div className="w-2.5 h-2.5 bg-primary-500 rounded-full" />
               <span className="text-xs sm:text-sm text-gray-700">Academic</span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -290,7 +290,7 @@ export default function DashboardHome() {
             <div key={item.month} className="flex-1 flex flex-col items-center">
               <div className="relative w-full flex justify-center gap-1 mb-2">
                 <div
-                  className="w-1/2 bg-blue-500 rounded-t hover:bg-blue-600 transition-colors"
+                  className="w-1/2 bg-primary-500 rounded-t hover:bg-primary transition-colors"
                   style={{ height: `${item.academic * 1.2}px` }}
                 />
                 <div
@@ -321,7 +321,7 @@ export default function DashboardHome() {
               return (
                 <div key={metric.name} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${(isGood ? "bg-emerald-500" : isHigh ? "bg-amber-500" : "bg-blue-500")}/20`}>
+                    <div className={`p-2 rounded-lg ${(isGood ? "bg-emerald-500" : isHigh ? "bg-amber-500" : "bg-primary-500")}/20`}>
                       <metric.icon className="w-4 h-4" />
                     </div>
                     <div>
@@ -342,7 +342,7 @@ export default function DashboardHome() {
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-bold text-gray-900">Recent Activity</h3>
-            <button className="text-xs text-blue-600 hover:text-blue-700 font-medium">
+            <button className="text-xs text-primary-700 hover:text-primary-800 font-medium">
               View all →
             </button>
           </div>
@@ -354,7 +354,7 @@ export default function DashboardHome() {
                     activity.type === "admin" ? "bg-purple-100" :
                       "bg-gray-100"
                   }`}>
-                  {activity.type === "academic" ? <BookOpen className="w-4 h-4 text-blue-600" /> :
+                  {activity.type === "academic" ? <BookOpen className="w-4 h-4 text-primary-700" /> :
                     activity.type === "finance" ? <DollarSign className="w-4 h-4 text-emerald-600" /> :
                       activity.type === "admin" ? <Users className="w-4 h-4 text-purple-600" /> :
                         <Activity className="w-4 h-4 text-gray-600" />}

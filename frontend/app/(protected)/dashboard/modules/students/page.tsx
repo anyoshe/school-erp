@@ -159,7 +159,7 @@ export default function StudentsPage() {
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Active</CardTitle></CardHeader>
-          <CardContent><div className="text-3xl font-bold text-green-600">{activeStudents}</div></CardContent>
+          <CardContent><div className="text-3xl font-bold text-secondary-600">{activeStudents}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Sections</CardTitle></CardHeader>

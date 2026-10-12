@@ -20,7 +20,7 @@ export default function AlumniPage() {
 
         {/* Coming Soon / Placeholder */}
         <Card className="bg-white/70 backdrop-blur-xl border border-white/30 rounded-3xl shadow-2xl overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-indigo-600 to-indigo-900 text-white">
+          <CardHeader className="bg-gradient-to-r from-indigo-600 to-primary-900 text-white">
             <div className="flex items-center gap-4">
               <Users2 className="h-8 w-8" />
               <CardTitle className="text-2xl">Alumni Network</CardTitle>

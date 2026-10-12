@@ -93,7 +93,7 @@ export default function DocumentUpload({
         onDragOver={handleDrag}
         onDrop={handleDrop}
         className={`relative rounded-lg border-2 border-dashed transition-colors ${
-          dragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:border-gray-400'
+          dragActive ? 'border-primary bg-primary-50' : 'border-gray-300 bg-gray-50 hover:border-gray-400'
         }`}
       >
         <input

@@ -23,7 +23,7 @@
 //   return (
 //     <div className="space-y-6">
 //       {/* HEADER */}
-//       <div className="flex items-center justify-between bg-blue-700 text-white px-5 py-3 rounded-xl shadow">
+//       <div className="flex items-center justify-between bg-primary-700 text-white px-5 py-3 rounded-xl shadow">
 //         <h3 className="text-lg font-semibold">Medical Records</h3>
 //         <span className="text-sm opacity-90">Student Health Profile</span>
 //       </div>
@@ -65,7 +65,7 @@
 //                 <div className="flex gap-2">
 //                   <button
 //                     onClick={() => onEdit(r)}
-//                     className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-blue-800 transition"
+//                     className="bg-primary text-white px-3 py-1.5 rounded-md text-sm hover:bg-blue-800 transition"
 //                   >
 //                     Edit
 //                   </button>
@@ -81,7 +81,7 @@
 //                   <button
 //                     key={doc.id}
 //                     onClick={() => handleDownload(doc.url, doc.name)}
-//                     className="text-blue-700 text-sm underline"
+//                     className="text-primary-800 text-sm underline"
 //                   >
 //                     Download: {doc.name}
 //                   </button>
@@ -95,7 +95,7 @@
 //       {/* DESKTOP VIEW */}
 //       <div className="hidden md:block bg-white rounded-xl shadow overflow-hidden">
 //         <table className="w-full text-sm table-auto border-collapse">
-//           <thead className="bg-blue-700 text-white">
+//           <thead className="bg-primary-700 text-white">
 //             <tr>
 //               <th className="px-4 py-2 text-left">Blood Group</th>
 //               <th className="px-4 py-2 text-left">Allergies</th>
@@ -115,7 +115,7 @@
 //                 key={r.id}
 //                 className={`border-t ${
 //                   idx % 2 === 0 ? "bg-gray-50" : "bg-white"
-//                 } hover:bg-blue-50 transition`}
+//                 } hover:bg-primary-50 transition`}
 //               >
 //                 <td className="px-4 py-2">{r.bloodGroup || "—"}</td>
 //                 <td className="px-4 py-2">{r.allergies || "None"}</td>
@@ -129,7 +129,7 @@
 //                     <button
 //                       key={doc.id}
 //                       onClick={() => handleDownload(doc.url, doc.name)}
-//                       className="text-blue-700 text-sm underline block mb-1"
+//                       className="text-primary-800 text-sm underline block mb-1"
 //                     >
 //                       {doc.name}
 //                     </button>
@@ -138,7 +138,7 @@
 //                 <td className="px-4 py-2 text-right flex gap-2 justify-end">
 //                   <button
 //                     onClick={() => onEdit(r)}
-//                     className="bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-800 transition"
+//                     className="bg-primary text-white px-3 py-1.5 rounded-md hover:bg-blue-800 transition"
 //                   >
 //                     Edit
 //                   </button>
@@ -214,7 +214,7 @@ export default function MedicalTable({ records, onEdit, onDelete, onDownload }: 
             className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-2xl transition-all duration-300"
           >
             {/* Card Header */}
-            <div className="bg-gradient-to-r from-indigo-500 to-blue-600 text-white px-6 py-5">
+            <div className="bg-gradient-to-r from-indigo-500 to-primary-700 text-white px-6 py-5">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-xl font-bold">{r.bloodGroup || "—"} Blood Group</p>
@@ -224,7 +224,7 @@ export default function MedicalTable({ records, onEdit, onDelete, onDownload }: 
                 </div>
                 <span
                   className={`px-4 py-2 rounded-full text-sm font-semibold ${r.immunizationStatus === "UP_TO_DATE"
-                    ? "bg-green-500 text-white"
+                    ? "bg-secondary-500 text-white"
                     : r.immunizationStatus === "PARTIAL"
                       ? "bg-amber-500 text-white"
                       : "bg-red-500 text-white"
@@ -346,7 +346,7 @@ export default function MedicalTable({ records, onEdit, onDelete, onDownload }: 
                   <td className="px-8 py-5">
                     <span
                       className={`inline-block px-4 py-2 rounded-full text-sm font-bold ${r.immunizationStatus === "UP_TO_DATE"
-                        ? "bg-green-100 text-green-800"
+                        ? "bg-green-100 text-secondary-800"
                         : r.immunizationStatus === "PARTIAL"
                           ? "bg-amber-100 text-amber-800"
                           : "bg-red-100 text-red-800"

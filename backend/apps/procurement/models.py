@@ -21,11 +21,19 @@ class Tender(models.Model):
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='tenders')
     title = models.CharField(max_length=255)
     description = models.TextField()
-    reference_number = models.CharField(max_length=100, unique=True)
+    reference_number = models.CharField(max_length=100)
     opening_date = models.DateField()
     closing_date = models.DateField()
     status = models.CharField(max_length=50, default='Open')  # Open, Closed, Awarded
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'reference_number'],
+                name='unique_tender_reference_per_school',
+            )
+        ]
 
     def __str__(self):
         return self.title
@@ -35,11 +43,19 @@ class PurchaseOrder(models.Model):
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name='purchase_orders')
     vendor = models.ForeignKey(Vendor, on_delete=models.SET_NULL, null=True)
     tender = models.ForeignKey(Tender, on_delete=models.SET_NULL, null=True, blank=True)
-    order_number = models.CharField(max_length=100, unique=True)
+    order_number = models.CharField(max_length=100)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
     order_date = models.DateField(auto_now_add=True)
     expected_delivery = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=50, default='Pending')  # Pending, Delivered, Cancelled
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['school', 'order_number'],
+                name='unique_po_number_per_school',
+            )
+        ]
 
     def __str__(self):
         return f"PO #{self.order_number}"

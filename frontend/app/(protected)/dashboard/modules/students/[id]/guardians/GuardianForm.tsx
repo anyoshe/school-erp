@@ -619,7 +619,7 @@ export default function GuardianForm({
           <div className="pt-6 border-t border-gray-200">
             <p className="text-sm font-semibold text-gray-700 mb-4">Permissions & Roles</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <label className="flex items-center gap-3 p-4 bg-blue-50 rounded-xl hover:bg-blue-100 transition cursor-pointer">
+              <label className="flex items-center gap-3 p-4 bg-primary-50 rounded-xl hover:bg-blue-100 transition cursor-pointer">
                 <input
                   type="checkbox"
                   name="isPrimary"
@@ -643,14 +643,14 @@ export default function GuardianForm({
                 <span className="font-medium text-gray-800">Emergency Contact</span>
               </label>
 
-              <label className="flex items-center gap-3 p-4 bg-green-50 rounded-xl hover:bg-green-100 transition cursor-pointer">
+              <label className="flex items-center gap-3 p-4 bg-secondary-50 rounded-xl hover:bg-green-100 transition cursor-pointer">
                 <input
                   type="checkbox"
                   name="hasPickupPermission"
                   checked={form.hasPickupPermission}
                   onChange={handleChange}
                   disabled={loading}
-                  className="w-5 h-5 text-green-600 rounded focus:ring-green-500"
+                  className="w-5 h-5 text-secondary-600 rounded focus:ring-green-500"
                 />
                 <span className="font-medium text-gray-800">Pickup Permission</span>
               </label>

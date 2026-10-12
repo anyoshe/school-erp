@@ -285,7 +285,7 @@ function StatusBadge({ status, hasPayment }: { status: string; hasPayment: boole
   const s = status.toUpperCase();
   const styles: Record<string, string> = {
     ENROLLED: "bg-emerald-50 text-emerald-600 border-emerald-100",
-    ACCEPTED: "bg-blue-50 text-blue-600 border-blue-100",
+    ACCEPTED: "bg-primary-50 text-primary-700 border-blue-100",
     REJECTED: "bg-red-50 text-red-600 border-red-100",
     OFFERED: "bg-purple-50 text-purple-600 border-purple-100",
     SUBMITTED: "bg-amber-50 text-amber-600 border-amber-100",

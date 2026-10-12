@@ -161,7 +161,7 @@ export default function InvoicesPage() {
             <CardTitle className="text-sm font-medium">Paid</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">KES {stats.paid.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-secondary-600">KES {stats.paid.toLocaleString()}</div>
           </CardContent>
         </Card>
 
@@ -297,11 +297,11 @@ export default function InvoicesPage() {
                         <td className="py-3 px-3 text-right font-medium">
                           KES {invoice.amount_due.toLocaleString()}
                         </td>
-                        <td className="py-3 px-3 text-right text-green-600 font-medium">
+                        <td className="py-3 px-3 text-right text-secondary-600 font-medium">
                           KES {invoice.amount_paid.toLocaleString()}
                         </td>
                         <td className="py-3 px-3 text-right font-medium">
-                          <span className={invoice.balance > 0 ? "text-amber-600" : "text-green-600"}>
+                          <span className={invoice.balance > 0 ? "text-amber-600" : "text-secondary-600"}>
                             KES {invoice.balance.toLocaleString()}
                           </span>
                         </td>
@@ -310,7 +310,7 @@ export default function InvoicesPage() {
                         </td>
                         <td className="py-3 px-3">
                           {invoice.is_paid ? (
-                            <Badge className="bg-green-100 text-green-800">Paid</Badge>
+                            <Badge className="bg-green-100 text-secondary-800">Paid</Badge>
                           ) : isOverdue ? (
                             <Badge className="bg-red-100 text-red-800">Overdue</Badge>
                           ) : (
@@ -338,8 +338,8 @@ export default function InvoicesPage() {
 
       {/* Invoice Details Modal */}
       {selectedInvoice && (
-        <Card className="border-2 border-blue-500">
-          <CardHeader className="bg-blue-50">
+        <Card className="border-2 border-primary">
+          <CardHeader className="bg-primary-50">
             <div className="flex justify-between items-start">
               <div>
                 <CardTitle>Invoice {selectedInvoice.invoice_number}</CardTitle>
@@ -387,7 +387,7 @@ export default function InvoicesPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Amount Paid:</span>
-                    <span className="font-medium text-green-600">KES {selectedInvoice.amount_paid.toLocaleString()}</span>
+                    <span className="font-medium text-secondary-600">KES {selectedInvoice.amount_paid.toLocaleString()}</span>
                   </div>
                   {selectedInvoice.late_fee_applied > 0 && (
                     <div className="flex justify-between">
@@ -397,7 +397,7 @@ export default function InvoicesPage() {
                   )}
                   <div className="border-t pt-2 mt-2 flex justify-between font-bold">
                     <span>Balance:</span>
-                    <span className={selectedInvoice.balance > 0 ? "text-red-600" : "text-green-600"}>
+                    <span className={selectedInvoice.balance > 0 ? "text-red-600" : "text-secondary-600"}>
                       KES {selectedInvoice.balance.toLocaleString()}
                     </span>
                   </div>
@@ -420,7 +420,7 @@ export default function InvoicesPage() {
                           {new Date(payment.paid_at).toLocaleDateString()} • {payment.reference_number}
                         </p>
                       </div>
-                      <p className="font-semibold text-green-600">+KES {payment.amount.toLocaleString()}</p>
+                      <p className="font-semibold text-secondary-600">+KES {payment.amount.toLocaleString()}</p>
                     </div>
                   ))}
                 </div>

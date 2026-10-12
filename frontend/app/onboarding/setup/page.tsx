@@ -467,7 +467,7 @@ function SetupWizardContent() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-red-600 text-center">
           <p>{error}</p>
-          <button onClick={() => router.push("/login")} className="mt-4 text-blue-600 underline">
+          <button onClick={() => router.push("/login")} className="mt-4 text-primary-700 underline">
             Back to Login
           </button>
         </div>
@@ -484,14 +484,14 @@ function SetupWizardContent() {
             {steps.map((step, index) => (
               <div key={step.id} className="flex items-center">
                 <div
-                  className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${index <= currentStep ? "bg-blue-600 text-white shadow-lg" : "bg-gray-200 text-gray-500"
+                  className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${index <= currentStep ? "bg-primary text-white shadow-lg" : "bg-gray-200 text-gray-500"
                     }`}
                 >
                   <step.icon className="w-6 h-6" />
                 </div>
                 {index < steps.length - 1 && (
                   <div
-                    className={`w-full h-1 mx-2 transition-all ${index < currentStep ? "bg-blue-600" : "bg-gray-300"
+                    className={`w-full h-1 mx-2 transition-all ${index < currentStep ? "bg-primary" : "bg-gray-300"
                       }`}
                     style={{ width: "80px" }}
                   />
@@ -509,7 +509,7 @@ function SetupWizardContent() {
 
           <div className="mt-4 bg-gray-200 rounded-full h-3 overflow-hidden">
             <motion.div
-              className="h-full bg-gradient-to-r from-blue-600 to-indigo-600"
+              className="h-full bg-gradient-to-r from-primary-700 to-primary-800"
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
               transition={{ duration: 0.5 }}
@@ -542,7 +542,7 @@ function SetupWizardContent() {
                       value={formData.schoolName}
                       onChange={(e) => updateForm("schoolName", e.target.value)}
                       placeholder="e.g. St. Mary's Secondary School"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent"
                       required
                     />
                   </div>
@@ -554,7 +554,7 @@ function SetupWizardContent() {
                       value={formData.shortName}
                       onChange={(e) => updateForm("shortName", e.target.value)}
                       placeholder="e.g. SMSS"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary"
                     />
                   </div>
 
@@ -567,7 +567,7 @@ function SetupWizardContent() {
                         value={formData.phone}
                         onChange={(e) => updateForm("phone", e.target.value)}
                         placeholder="+254 700 000 000"
-                        className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary"
                       />
                     </div>
                   </div>
@@ -581,7 +581,7 @@ function SetupWizardContent() {
                         value={formData.email}
                         onChange={(e) => updateForm("email", e.target.value)}
                         placeholder="admin@school.edu"
-                        className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary"
                       />
                     </div>
                   </div>
@@ -595,7 +595,7 @@ function SetupWizardContent() {
                         value={formData.address}
                         onChange={(e) => updateForm("address", e.target.value)}
                         placeholder="Malindi Complex, Along Malindi - Lamu Road, Malindi"
-                        className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                        className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary"
                       />
                     </div>
                   </div>
@@ -605,7 +605,7 @@ function SetupWizardContent() {
                     <select
                       value={formData.currency}
                       onChange={(e) => updateForm("currency", e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary"
                     >
                       <option value="KES">Kenyan Shilling (KES)</option>
                       <option value="USD">US Dollar (USD)</option>
@@ -647,7 +647,7 @@ function SetupWizardContent() {
                       value={formData.officialRegistrationNumber}
                       onChange={(e) => updateForm("officialRegistrationNumber", e.target.value)}
                       placeholder="e.g. MOE/12345/2023"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary"
                     />
                   </div>
 
@@ -658,7 +658,7 @@ function SetupWizardContent() {
                       value={formData.registrationAuthority}
                       onChange={(e) => updateForm("registrationAuthority", e.target.value)}
                       placeholder="e.g. Ministry of Education, KNEC"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary"
                     />
                   </div>
 
@@ -668,7 +668,7 @@ function SetupWizardContent() {
                       type="date"
                       value={formData.registrationDate}
                       onChange={(e) => updateForm("registrationDate", e.target.value)}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary"
                     />
                   </div>
 
@@ -681,7 +681,7 @@ function SetupWizardContent() {
                           <p className="text-sm text-gray-600">Click to upload logo</p>
                           <p className="text-xs text-gray-500 mt-2">PNG, JPG up to 5MB</p>
                           {formData.logo && (
-                            <p className="text-xs text-blue-600 mt-2">
+                            <p className="text-xs text-primary-700 mt-2">
                               Selected: {formData.logo.name} ({(formData.logo.size / 1024 / 1024).toFixed(2)} MB)
                             </p>
                           )}
@@ -725,7 +725,7 @@ function SetupWizardContent() {
                     <button
                       type="button"
                       onClick={() => updateForm("termSystem", "terms")}
-                      className={`p-6 rounded-xl border-2 transition-all ${formData.termSystem === "terms" ? "border-blue-600 bg-blue-50" : "border-gray-300 hover:border-gray-400"
+                      className={`p-6 rounded-xl border-2 transition-all ${formData.termSystem === "terms" ? "border-blue-600 bg-primary-50" : "border-gray-300 hover:border-gray-400"
                         }`}
                     >
                       <div className="font-semibold text-lg">Terms</div>
@@ -734,7 +734,7 @@ function SetupWizardContent() {
                     <button
                       type="button"
                       onClick={() => updateForm("termSystem", "semesters")}
-                      className={`p-6 rounded-xl border-2 transition-all ${formData.termSystem === "semesters" ? "border-blue-600 bg-blue-50" : "border-gray-300 hover:border-gray-400"
+                      className={`p-6 rounded-xl border-2 transition-all ${formData.termSystem === "semesters" ? "border-blue-600 bg-primary-50" : "border-gray-300 hover:border-gray-400"
                         }`}
                     >
                       <div className="font-semibold text-lg">Semesters</div>
@@ -748,7 +748,7 @@ function SetupWizardContent() {
                   <select
                     value={formData.gradingSystem}
                     onChange={(e) => updateForm("gradingSystem", e.target.value as "percentage" | "points" | "grades")}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary"
                   >
                     <option value="percentage">Percentage (0–100%)</option>
                     <option value="points">Mean Grade Points (A to E)</option>
@@ -784,7 +784,7 @@ function SetupWizardContent() {
                       key={template.id}
                       onClick={() => updateForm("selectedCurriculumId", template.id)}
                       className={`p-6 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${formData.selectedCurriculumId === template.id
-                        ? "border-blue-600 bg-blue-50 shadow-md"
+                        ? "border-blue-600 bg-primary-50 shadow-md"
                         : "border-gray-200 hover:border-blue-300"
                         }`}
                     >
@@ -807,13 +807,13 @@ function SetupWizardContent() {
 
                 {isLoading ? (
                   <div className="flex flex-col items-center py-12">
-                    <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
+                    <Loader2 className="w-10 h-10 animate-spin text-primary-700 mb-4" />
                     <p>Loading structure...</p>
                   </div>
                 ) : !formData.selectedCurriculumId ? (
                   <div className="text-center py-12 bg-gray-50 rounded-xl border">
                     <p>Please select a curriculum first</p>
-                    <button onClick={() => setCurrentStep(2)} className="mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg">
+                    <button onClick={() => setCurrentStep(2)} className="mt-4 px-6 py-2 bg-primary text-white rounded-lg">
                       Back to Curriculum
                     </button>
                   </div>
@@ -829,7 +829,7 @@ function SetupWizardContent() {
                               type="checkbox"
                               checked={formData.selectedGradeLevelIds.includes(level.id)}
                               onChange={() => toggleGradeLevel(level.id)}
-                              className="w-5 h-5 text-blue-600"
+                              className="w-5 h-5 text-primary-700"
                             />
                             <span className="font-medium">{level.name}</span>
                           </label>
@@ -847,7 +847,7 @@ function SetupWizardContent() {
                               type="checkbox"
                               checked={formData.selectedDepartmentIds.includes(dept.id)}
                               onChange={() => toggleDepartment(dept.id)}
-                              className="w-5 h-5 text-blue-600"
+                              className="w-5 h-5 text-primary-700"
                             />
                             <span className="font-medium">{dept.name}</span>
                           </label>
@@ -935,7 +935,7 @@ function SetupWizardContent() {
                     onClick={() => {
                       updateForm("pathways", [...formData.pathways, { name: "" }]);
                     }}
-                    className="mt-4 text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
+                    className="mt-4 text-primary-700 hover:text-primary-800 text-sm font-medium flex items-center gap-1"
                   >
                     + Add New Pathway
                   </button>
@@ -987,7 +987,7 @@ function SetupWizardContent() {
                             <label className="block text-sm font-medium mb-3">Streams / Classes</label>
                             <div className="flex flex-wrap gap-2 mb-3">
                               {(formData.streams[grade.id] || []).map((str, i) => (
-                                <Badge key={i} variant="secondary" className="bg-green-50 text-green-700">
+                                <Badge key={i} variant="secondary" className="bg-secondary-50 text-secondary-700">
                                   {str}
                                   <button onClick={() => {
                                     const newStreams = { ...formData.streams };
@@ -1095,7 +1095,7 @@ function SetupWizardContent() {
             {currentStep === 6 && (
               <div className="text-center py-12">
                 <div className="w-24 h-24 mx-auto mb-6 bg-green-100 rounded-full flex items-center justify-center">
-                  <CheckCircle className="w-16 h-16 text-green-600" />
+                  <CheckCircle className="w-16 h-16 text-secondary-600" />
                 </div>
                 <h3 className="text-3xl font-bold text-gray-900 mb-4">All Set! Your school is ready</h3>
                 <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-8">
@@ -1119,7 +1119,7 @@ function SetupWizardContent() {
                 <button
                   onClick={handleComplete}
                   disabled={isLoading}
-                  className="mt-10 px-10 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-70 transition-all flex items-center gap-3 mx-auto"
+                  className="mt-10 px-10 py-4 bg-gradient-to-r from-primary-700 to-primary-800 text-white text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-70 transition-all flex items-center gap-3 mx-auto"
                 >
                   {isLoading ? "Finalizing..." : "Go to Dashboard"}
                   <ChevronRight className="w-6 h-6" />
@@ -1144,7 +1144,7 @@ function SetupWizardContent() {
             <button
               onClick={nextStep}
               disabled={isLoading}
-              className="px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-70 flex items-center gap-2"
+              className="px-8 py-3 bg-gradient-to-r from-primary-700 to-primary-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl disabled:opacity-70 flex items-center gap-2"
             >
               {currentStep === steps.length - 2 ? "Review" : "Next"}
               <ChevronRight className="w-5 h-5" />

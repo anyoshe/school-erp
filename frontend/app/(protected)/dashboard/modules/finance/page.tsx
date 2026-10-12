@@ -114,13 +114,13 @@ export default function FinanceDashboard() {
       </div>
 
       {/* Total Revenue Collected So Far */}
-      <Card className="border-green-600 bg-green-50/80 dark:bg-green-950/50">
+      <Card className="border-green-600 bg-secondary-50/80 dark:bg-green-950/50">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-xl">Total Revenue Collected So Far</CardTitle>
-          <TrendingUp className="h-6 w-6 text-green-600" />
+          <TrendingUp className="h-6 w-6 text-secondary-600" />
         </CardHeader>
         <CardContent>
-          <div className="text-5xl font-bold text-green-600 tracking-tight">
+          <div className="text-5xl font-bold text-secondary-600 tracking-tight">
             {loading ? "..." : `KES ${stats.totalRevenue.toLocaleString()}`}
           </div>
           <p className="text-sm text-muted-foreground mt-2">
@@ -175,10 +175,10 @@ export default function FinanceDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Students With Balance</CardTitle>
-            <Users className="h-4 w-4 text-blue-600" />
+            <Users className="h-4 w-4 text-primary-700" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">
+            <div className="text-2xl font-bold text-primary-700">
               {loading ? "Loading..." : stats.studentsWithBalance}
             </div>
             <p className="text-xs text-muted-foreground mt-2">Students with outstanding balances</p>
@@ -228,9 +228,9 @@ export default function FinanceDashboard() {
               { label: `This Year (${detectedYear})`, value: revenueByPeriod.year },
               { label: "All Time", value: revenueByPeriod.all },
             ].map((period, i) => (
-              <div key={i} className="bg-green-50 dark:bg-green-950/70 p-5 rounded-xl border border-green-100 dark:border-green-900">
+              <div key={i} className="bg-secondary-50 dark:bg-green-950/70 p-5 rounded-xl border border-green-100 dark:border-green-900">
                 <p className="text-sm text-muted-foreground">{period.label}</p>
-                <p className="text-3xl font-bold mt-3 text-green-600">
+                <p className="text-3xl font-bold mt-3 text-secondary-600">
                   KES {period.value.toLocaleString()}
                 </p>
               </div>
@@ -263,7 +263,7 @@ export default function FinanceDashboard() {
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-muted-foreground">Collected Amount</p>
-                      <p className="text-lg font-semibold text-green-600">KES {item.allocated.toLocaleString()}</p>
+                      <p className="text-lg font-semibold text-secondary-600">KES {item.allocated.toLocaleString()}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-muted-foreground">Pending Balance</p>
@@ -284,7 +284,7 @@ export default function FinanceDashboard() {
           { href: "/dashboard/modules/finance/payment-plans", label: "Manage Payment Plans", variant: "default" as const, className: "bg-indigo-600 hover:bg-indigo-700" },
           { href: "/dashboard/modules/finance/student-assignments", label: "Assign Fees to Students", variant: "outline" as const },
           { href: "/dashboard/modules/finance/invoices", label: "View & Manage Invoices", variant: "outline" as const },
-          { href: "/dashboard/modules/finance/payments", label: "Record Payments", variant: "default" as const, className: "bg-green-600 hover:bg-green-700" },
+          { href: "/dashboard/modules/finance/payments", label: "Record Payments", variant: "default" as const, className: "bg-secondary hover:bg-green-700" },
           { href: "/dashboard/modules/finance/post-balances", label: "Post Balances", variant: "default" as const, className: "bg-emerald-600 hover:bg-emerald-700" },
           { href: "/dashboard/modules/finance/receipts", label: "Print Receipts", variant: "outline" as const },
           { href: "/dashboard/modules/finance/reports", label: "View Reports", variant: "outline" as const },
@@ -307,8 +307,8 @@ export default function FinanceDashboard() {
             <h4 className="font-semibold mb-4">Financial Health</h4>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Total Billed:</span><span>KES {stats.totalAssigned.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Admission Payments:</span><span className="text-blue-600">KES {stats.totalAdmissionPayments.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Received:</span><span className="text-green-600 font-medium">KES {stats.totalRevenue.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Admission Payments:</span><span className="text-primary-700">KES {stats.totalAdmissionPayments.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Received:</span><span className="text-secondary-600 font-medium">KES {stats.totalRevenue.toLocaleString()}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Outstanding:</span><span className="text-amber-600">KES {stats.totalOutstanding.toLocaleString()}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Overdue:</span><span className="text-red-600">KES {stats.overdueBalance.toLocaleString()}</span></div>
             </div>

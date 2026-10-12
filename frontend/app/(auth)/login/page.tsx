@@ -317,7 +317,7 @@ export default function Welcome() {
                           {/* Error Alert */}
                           {error && (
                             <div
-                              className={`mb-4 p-3 rounded-lg flex items-start gap-2 text-sm ${error.includes("successfully") ? "bg-green-100 text-green-800 border-green-200" : "bg-red-100 text-red-800 border-red-200"
+                              className={`mb-4 p-3 rounded-lg flex items-start gap-2 text-sm ${error.includes("successfully") ? "bg-green-100 text-secondary-800 border-secondary-200" : "bg-red-100 text-red-800 border-red-200"
                                 }`}
                             >
                               <Shield className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -349,7 +349,7 @@ export default function Welcome() {
                                   <input
                                     type="text"
                                     placeholder="John"
-                                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition text-sm sm:text-base"
+                                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none transition text-sm sm:text-base"
                                     style={{
                                       borderColor: colors.borderLight,
                                       backgroundColor: colors.lightBg,
@@ -367,7 +367,7 @@ export default function Welcome() {
                                   <input
                                     type="text"
                                     placeholder="Doe"
-                                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition text-sm sm:text-base"
+                                    className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none transition text-sm sm:text-base"
                                     style={{
                                       borderColor: colors.borderLight,
                                       backgroundColor: colors.lightBg,
@@ -395,7 +395,7 @@ export default function Welcome() {
                                 <input
                                   type="email"
                                   placeholder="you@school.edu"
-                                  className="w-full p-3 pl-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition text-sm sm:text-base"
+                                  className="w-full p-3 pl-10 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none transition text-sm sm:text-base"
                                   style={{
                                     borderColor: colors.borderLight,
                                     backgroundColor: colors.lightBg,
@@ -417,7 +417,7 @@ export default function Welcome() {
                                 <input
                                   type={showPassword ? "text" : "password"}
                                   placeholder="Enter a strong password"
-                                  className="w-full p-3 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition text-sm sm:text-base"
+                                  className="w-full p-3 pr-10 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none transition text-sm sm:text-base"
                                   style={{
                                     borderColor: colors.borderLight,
                                     backgroundColor: colors.lightBg,
@@ -447,7 +447,7 @@ export default function Welcome() {
                                 <input
                                   type="password"
                                   placeholder="Re-type your password"
-                                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition text-sm sm:text-base"
+                                  className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary focus:outline-none transition text-sm sm:text-base"
                                   style={{
                                     borderColor: colors.borderLight,
                                     backgroundColor: colors.lightBg,

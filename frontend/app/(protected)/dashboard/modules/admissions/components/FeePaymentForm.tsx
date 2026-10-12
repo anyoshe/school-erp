@@ -31,7 +31,7 @@ const FeePaymentForm = ({ payments, onPaymentsChange }: { payments: any[]; onPay
         placeholder="Method (e.g., Cash)"
         className="p-2 border rounded"
       />
-      <button type="button" onClick={addPayment} className="bg-blue-500 text-white px-2 py-1 rounded">Add</button>
+      <button type="button" onClick={addPayment} className="bg-primary-500 text-white px-2 py-1 rounded">Add</button>
       <ul>{payments.map((p, i) => <li key={i}>${p.amount} via {p.payment_method}</li>)}</ul>
     </div>
   );

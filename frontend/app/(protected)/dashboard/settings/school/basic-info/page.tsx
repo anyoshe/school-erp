@@ -202,7 +202,7 @@ export default function EditSchoolBasicInfoPage() {
           style={{ background: 'rgba(255, 255, 255, 0.65)' }}
         >
           {/* Header */}
-          <div className="px-8 py-10 bg-gradient-to-r from-[var(--primary)] to-indigo-900 text-white">
+          <div className="px-8 py-10 bg-gradient-to-r from-[var(--primary)] to-primary-900 text-white">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
                 <Building2 className="h-8 w-8" />
@@ -424,7 +424,7 @@ export default function EditSchoolBasicInfoPage() {
                 onClick={handleSave}
                 disabled={isSaving}
                 size="lg"
-                className="min-w-[200px] bg-gradient-to-r from-[var(--primary)] to-indigo-700 hover:from-indigo-800 hover:to-indigo-900 text-white shadow-lg shadow-indigo-200/50 transition-all duration-300"
+                className="min-w-[200px] bg-gradient-to-r from-[var(--primary)] to-primary-800 hover:from-indigo-800 hover:to-primary-900 text-white shadow-lg shadow-indigo-200/50 transition-all duration-300"
               >
                 {isSaving ? (
                   <>

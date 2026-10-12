@@ -393,7 +393,7 @@
 //             <section>
 //               <div className="flex justify-between items-center mb-4">
 //                 <h3 className="font-semibold">Items Breakdown</h3>
-//                 <div className="text-lg font-bold text-green-700">{currencySymbol} {totalAmount.toLocaleString()}</div>
+//                 <div className="text-lg font-bold text-secondary-700">{currencySymbol} {totalAmount.toLocaleString()}</div>
 //               </div>
 
 //               <div className="space-y-3">
@@ -848,7 +848,7 @@ export default function FeeStructureForm({
             <section>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-semibold">Items Breakdown</h3>
-                <div className="text-lg font-bold text-green-700">{currencySymbol} {totalAmount.toLocaleString()}</div>
+                <div className="text-lg font-bold text-secondary-700">{currencySymbol} {totalAmount.toLocaleString()}</div>
               </div>
 
               <div className="space-y-3">
@@ -878,7 +878,7 @@ export default function FeeStructureForm({
                                         checked={item.is_optional} 
                                         onCheckedChange={(v) => updateItemField(group.category.id, item.id, "is_optional", !!v)} 
                                     />
-                                    <Label htmlFor={`opt-${item.id}`} className="text-[10px] text-blue-600 font-bold uppercase">Optional Item</Label>
+                                    <Label htmlFor={`opt-${item.id}`} className="text-[10px] text-primary-700 font-bold uppercase">Optional Item</Label>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3">

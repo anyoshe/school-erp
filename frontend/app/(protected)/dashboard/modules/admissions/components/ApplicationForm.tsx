@@ -292,16 +292,16 @@ export default function ApplicationForm({
   return (
     <div className="bg-white rounded-xl shadow-sm border">
       {/* Header banner */}
-      <div className="bg-blue-50 border-b px-6 py-4">
+      <div className="bg-primary-50 border-b px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Info className="h-5 w-5 text-blue-600" />
-            <p className="text-sm font-medium text-blue-800">
+            <Info className="h-5 w-5 text-primary-700" />
+            <p className="text-sm font-medium text-primary-900">
               Enrolling to: <span className="font-semibold">{school?.name || "Selected School"}</span>
             </p>
           </div>
           {isDirectEnroll && (
-            <span className="text-xs bg-green-100 text-green-800 px-3 py-1 rounded-full">
+            <span className="text-xs bg-green-100 text-secondary-800 px-3 py-1 rounded-full">
               Direct Enrollment
             </span>
           )}
@@ -540,9 +540,9 @@ export default function ApplicationForm({
                 <>
                   <div className="md:col-span-3 mt-6">
                     <h3 className="text-lg font-medium mb-4">Senior Secondary Pathway</h3>
-                    <Alert className="mb-4 bg-blue-50 border-blue-200">
-                      <Info className="h-4 w-4 text-blue-600" />
-                      <AlertDescription className="text-blue-800">
+                    <Alert className="mb-4 bg-primary-50 border-primary-200">
+                      <Info className="h-4 w-4 text-primary-700" />
+                      <AlertDescription className="text-primary-900">
                         {isPathwayEditable
                           ? "Select the student's intended pathway (can be changed later if needed)."
                           : `Pathway already defined for this grade: ${pathwayFromGrade}`}

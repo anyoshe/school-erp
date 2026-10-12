@@ -375,9 +375,9 @@ export default function StudentProfilePage() {
       </div>
 
       {/* Deposit Paid */}
-      <div className="bg-green-50 p-4 rounded-xl border border-green-100">
-        <p className="text-sm text-green-600 font-medium">Deposit Paid</p>
-        <p className="text-3xl font-bold text-green-700 mt-1">
+      <div className="bg-secondary-50 p-4 rounded-xl border border-green-100">
+        <p className="text-sm text-secondary-600 font-medium">Deposit Paid</p>
+        <p className="text-3xl font-bold text-secondary-700 mt-1">
           {financeSummary
             ? `${financeSummary.currency} ${financeSummary.deposit_paid.toLocaleString()}`
             : "—"}
@@ -428,7 +428,7 @@ export default function StudentProfilePage() {
           </div>
           <div>
             <p className="text-muted-foreground">Waiver</p>
-            <p className="font-medium text-green-600">
+            <p className="font-medium text-secondary-600">
               - {financeSummary.currency} {financeSummary.fee_assignment.waiver_amount.toLocaleString()}
               {financeSummary.fee_assignment.waiver_reason && (
                 <span className="text-xs block">({financeSummary.fee_assignment.waiver_reason})</span>
@@ -445,14 +445,14 @@ export default function StudentProfilePage() {
         <h4 className="font-semibold mb-3">Admission Payments</h4>
         <div className="space-y-3">
           {financeSummary.admission_payments.map((payment, index) => (
-            <div key={payment.id} className="flex justify-between items-center bg-green-50 p-3 rounded-lg">
+            <div key={payment.id} className="flex justify-between items-center bg-secondary-50 p-3 rounded-lg">
               <div>
                 <p className="font-medium">Payment #{index + 1}</p>
                 <p className="text-sm text-muted-foreground">
                   {new Date(payment.payment_date).toLocaleDateString()} • {payment.receipt_number || payment.payment_method}
                 </p>
               </div>
-              <p className="font-semibold text-green-600">
+              <p className="font-semibold text-secondary-600">
                 {financeSummary.currency} {payment.amount.toLocaleString()}
               </p>
             </div>
@@ -693,7 +693,7 @@ export default function StudentProfilePage() {
                           <div className="col-span-2 pt-3 border-t mt-2">
                             <div className="flex justify-between items-center">
                               <p className="font-semibold">Current Balance After Deposit Credit</p>
-                              <p className={`text-xl font-bold ${displayedBalance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              <p className={`text-xl font-bold ${displayedBalance > 0 ? 'text-red-600' : 'text-secondary-600'}`}>
                                 {financeSummary.currency} {displayedBalance.toLocaleString()}
                               </p>
                             </div>
@@ -706,7 +706,7 @@ export default function StudentProfilePage() {
                         </div>
 
                         {financeSummary.deposit_paid > 0 && displayedBalance < invoice.amount_due && (
-                          <div className="mt-4 p-3 bg-blue-50 text-blue-700 text-xs rounded-lg">
+                          <div className="mt-4 p-3 bg-primary-50 text-primary-800 text-xs rounded-lg">
                             ✓ {financeSummary.currency} {financeSummary.deposit_paid.toLocaleString()} admission deposit credited
                           </div>
                         )}

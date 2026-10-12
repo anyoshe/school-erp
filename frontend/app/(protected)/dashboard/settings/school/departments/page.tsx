@@ -289,7 +289,7 @@ export default function DepartmentsPage() {
       </div>
 
       {/* Add Custom Department */}
-      <div className="space-y-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+      <div className="space-y-4 p-4 bg-primary-50 border border-primary-200 rounded-lg">
         <h2 className="text-xl font-bold">Add Custom Department</h2>
         <div className="space-y-3">
           <div>
@@ -333,7 +333,7 @@ export default function DepartmentsPage() {
 
       {/* Available from Template */}
       {availableDepartments.length > 0 && (
-        <div className="space-y-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+        <div className="space-y-4 p-4 bg-secondary-50 border border-secondary-200 rounded-lg">
           <h2 className="text-xl font-bold">Available from Template</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {availableDepartments.map((dept) => (
@@ -341,7 +341,7 @@ export default function DepartmentsPage() {
                 key={dept.id}
                 onClick={() => addFromTemplate(dept)}
                 disabled={loading}
-                className="p-3 bg-white border border-green-300 rounded-lg hover:bg-green-50 disabled:opacity-50 text-left transition"
+                className="p-3 bg-white border border-green-300 rounded-lg hover:bg-secondary-50 disabled:opacity-50 text-left transition"
               >
                 <p className="font-medium text-slate-700">{dept.name}</p>
                 {dept.code && <p className="text-sm text-slate-500">{dept.code}</p>}
@@ -356,7 +356,7 @@ export default function DepartmentsPage() {
         onClick={handleSave}
         disabled={loading}
         size="lg"
-        className="w-full bg-blue-600 hover:bg-blue-700"
+        className="w-full bg-primary hover:bg-primary-700"
       >
         {loading ? "Saving..." : "Save Departments"}
       </Button>

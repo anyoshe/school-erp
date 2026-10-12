@@ -96,7 +96,7 @@
 
 //       {/* Emergency Information */}
 //       <section className="space-y-4">
-//         <h3 className="text-xl font-semibold text-blue-700">Emergency Information</h3>
+//         <h3 className="text-xl font-semibold text-primary-800">Emergency Information</h3>
 //         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 //           <div>
 //             <label className="block font-medium mb-1">Blood Group</label>
@@ -129,7 +129,7 @@
 
 //       {/* Health Conditions */}
 //       <section className="space-y-4">
-//         <h3 className="text-xl font-semibold text-blue-700">Health Conditions</h3>
+//         <h3 className="text-xl font-semibold text-primary-800">Health Conditions</h3>
 //         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 //           <div className="md:col-span-2">
 //             <label className="block font-medium mb-1">Allergies</label>
@@ -156,7 +156,7 @@
 
 //       {/* Immunization */}
 //       <section className="space-y-4">
-//         <h3 className="text-xl font-semibold text-blue-700">Immunization</h3>
+//         <h3 className="text-xl font-semibold text-primary-800">Immunization</h3>
 //         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 //           <div>
 //             <label className="block font-medium mb-1">Status</label>
@@ -175,7 +175,7 @@
 
 //       {/* Consent & Legal */}
 //      <section className="space-y-4">
-//         <h3 className="text-xl font-semibold text-blue-700">Consent</h3>
+//         <h3 className="text-xl font-semibold text-primary-800">Consent</h3>
 //         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 //           <div>
 //             <label className="block font-medium mb-1">Consent Given By</label>
@@ -252,7 +252,7 @@
 //       )}
 //       {/* Upload Medical Documents */}
 //       <section className="space-y-4">
-//   <h3 className="text-xl font-semibold text-blue-700">Medical Documents</h3>
+//   <h3 className="text-xl font-semibold text-primary-800">Medical Documents</h3>
 
 //   {/* Show existing documents (when editing) */}
 //   {record?.documents && record.documents.length > 0 && (
@@ -264,14 +264,14 @@
 //             href={doc.url}
 //             target="_blank"
 //             rel="noopener noreferrer"
-//             className="text-blue-600 hover:underline break-all"
+//             className="text-primary-700 hover:underline break-all"
 //           >
 //             {doc.name}
 //           </a>
 //           <a
 //             href={doc.url}
 //             download={doc.name}
-//             className="text-sm text-green-600 hover:underline"
+//             className="text-sm text-secondary-600 hover:underline"
 //           >
 //             Download
 //           </a>
@@ -476,7 +476,7 @@ export default function MedicalForm({ studentId, record, onSaved, onClose }: Pro
 
       {/* Section: Immunization */}
       <section className="mb-12 bg-white rounded-xl shadow-sm p-8 border border-gray-100">
-        <h3 className="text-2xl font-semibold text-green-700 mb-6 flex items-center">
+        <h3 className="text-2xl font-semibold text-secondary-700 mb-6 flex items-center">
           <span className="mr-3 text-3xl">💉</span> Immunization Status
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -523,8 +523,8 @@ export default function MedicalForm({ studentId, record, onSaved, onClose }: Pro
             <input type="date" name="consentDate" value={form.consentDate} onChange={handleChange} className="w-full input" />
           </div>
           <div className="md:col-span-2 space-y-4 mt-4">
-            <label className="flex items-center gap-4 p-4 bg-blue-50 rounded-lg">
-              <input type="checkbox" name="consentToTreat" checked={form.consentToTreat} onChange={handleChange} className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500" />
+            <label className="flex items-center gap-4 p-4 bg-primary-50 rounded-lg">
+              <input type="checkbox" name="consentToTreat" checked={form.consentToTreat} onChange={handleChange} className="w-5 h-5 text-primary-700 rounded focus:ring-primary" />
               <span className="font-medium text-gray-800">I consent to emergency medical treatment if needed</span>
             </label>
             <label className="flex items-center gap-4 p-4 bg-indigo-50 rounded-lg">
@@ -550,12 +550,12 @@ export default function MedicalForm({ studentId, record, onSaved, onClose }: Pro
                 <div key={doc.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg border border-gray-200">
                   <span className="font-medium text-gray-800 truncate max-w-md">{doc.name}</span>
                   <div className="flex gap-3">
-                    <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 font-medium">
+                    <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-primary-700 hover:text-primary-900 font-medium">
                       View
                     </a>
                     <button
                       onClick={() => medicalService.downloadDocument(doc.url, doc.name)}
-                      className="text-green-600 hover:text-green-800 font-medium"
+                      className="text-secondary-600 hover:text-secondary-800 font-medium"
                     >
                       Download
                     </button>
@@ -579,9 +579,9 @@ export default function MedicalForm({ studentId, record, onSaved, onClose }: Pro
             className="block w-full text-sm text-gray-600 file:mr-4 file:py-3 file:px-6 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
           />
           {newDocuments.length > 0 && (
-            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-              <p className="font-medium text-green-800 mb-2">Ready to upload ({newDocuments.length}):</p>
-              <ul className="text-sm text-green-700 space-y-1">
+            <div className="mt-4 p-4 bg-secondary-50 border border-secondary-200 rounded-lg">
+              <p className="font-medium text-secondary-800 mb-2">Ready to upload ({newDocuments.length}):</p>
+              <ul className="text-sm text-secondary-700 space-y-1">
                 {newDocuments.map((file, i) => (
                   <li key={i}>• {file.name} ({(file.size / 1024).toFixed(1)} KB)</li>
                 ))}
@@ -593,10 +593,10 @@ export default function MedicalForm({ studentId, record, onSaved, onClose }: Pro
 
       {/* Last Reviewed */}
       {record && (
-        <div className="mb-10 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
-          <p className="text-sm font-semibold text-blue-800">Last Reviewed:</p>
+        <div className="mb-10 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-primary-200">
+          <p className="text-sm font-semibold text-primary-900">Last Reviewed:</p>
           <p className="text-lg font-medium text-indigo-900">{record.reviewDate || "Not yet reviewed"}</p>
-          <p className="text-xs text-blue-600 mt-1">Automatically updated when saved by staff</p>
+          <p className="text-xs text-primary-700 mt-1">Automatically updated when saved by staff</p>
         </div>
       )}
 

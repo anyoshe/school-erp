@@ -31,7 +31,7 @@ interface Module {
 }
 
 const colorMap = {
-  blue: { bg: "bg-blue-100", hover: "hover:bg-blue-200", selected: "bg-blue-600", ring: "ring-blue-500" },
+  blue: { bg: "bg-blue-100", hover: "hover:bg-blue-200", selected: "bg-primary", ring: "ring-blue-500" },
   indigo: { bg: "bg-indigo-100", hover: "hover:bg-indigo-200", selected: "bg-indigo-600", ring: "ring-indigo-500" },
   emerald: { bg: "bg-emerald-100", hover: "hover:bg-emerald-200", selected: "bg-emerald-600", ring: "ring-emerald-500" },
   purple: { bg: "bg-purple-100", hover: "hover:bg-purple-200", selected: "bg-purple-600", ring: "ring-purple-500" },
@@ -132,11 +132,11 @@ export default function SelectModulesPage() {
         <div className="mb-10 text-center">
           <div className="flex items-center justify-center gap-3 mb-6">
             <div className="flex items-center">
-              <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">1</div>
-              <div className="w-20 h-1 bg-blue-600"></div>
+              <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold">1</div>
+              <div className="w-20 h-1 bg-primary"></div>
             </div>
             <div className="flex items-center">
-              <div className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">2</div>
+              <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold">2</div>
               <div className="w-20 h-1 bg-gray-300"></div>
             </div>
             <div className="flex items-center">
@@ -187,7 +187,7 @@ export default function SelectModulesPage() {
               >
                 {isSelected && (
                   <div className="absolute top-4 right-4">
-                    <div className="w-8 h-8 rounded-full bg-white text-green-600 flex items-center justify-center shadow-sm">
+                    <div className="w-8 h-8 rounded-full bg-white text-secondary-600 flex items-center justify-center shadow-sm">
                       <Check className="w-5 h-5" />
                     </div>
                   </div>
@@ -227,10 +227,10 @@ export default function SelectModulesPage() {
             <button
               onClick={handleContinue}
               disabled={selectedModuleIds.length === 0 || isLoading}
-              className={`px-8 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 ${
+              className={`px-8 py-3 bg-gradient-to-r from-primary-700 to-primary-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 ${
                 selectedModuleIds.length === 0 || isLoading
                   ? "opacity-50 cursor-not-allowed"
-                  : "hover:from-blue-700 hover:to-indigo-700"
+                  : "hover:from-blue-700 hover:to-primary-800"
               }`}
             >
               {isLoading ? <>Processing...</> : <>

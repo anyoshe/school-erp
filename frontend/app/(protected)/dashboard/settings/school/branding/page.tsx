@@ -13,16 +13,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 // ────────────────────────────────────────────────────────────────
-// Color palette (consistent across your app)
+// Brand palette – single source of truth (matches globals.css + tailwind)
 const colors = {
-  primary: '#1E3A8A',      // Deep navy
-  secondary: '#10B981',    // Emerald green - success
-  accent: '#38BDF8',       // Sky blue - focus/hover
+  primary: '#1E3A8A',      // Deep Navy – trust & authority
+  secondary: '#10B981',    // Emerald – success & growth
+  accent: '#38BDF8',       // Sky – interactive focus
   background: '#F8FAFC',
-  surface: 'rgba(255, 255, 255, 0.75)', // Glass base
+  surface: '#FFFFFF',
   textPrimary: '#0F172A',
   textMuted: '#64748B',
-  border: 'rgba(226, 232, 240, 0.8)',
+  border: '#E2E8F0',
+  danger: '#EF4444',
+  warning: '#F59E0B',
 };
 
 export default function BrandingPage() {
@@ -117,15 +119,15 @@ export default function BrandingPage() {
           style={{ background: colors.surface }}
         >
           {/* Header with gradient */}
-          <div className="px-8 py-10 bg-gradient-to-r from-[var(--primary)] to-indigo-900 text-white">
+          <div className="px-8 py-10 bg-gradient-to-r from-primary-800 to-primary-900 text-white">
             <div className="flex items-center gap-4">
               <div className="p-3 bg-white/20 backdrop-blur-sm rounded-xl">
                 <ImageIcon className="h-8 w-8" />
               </div>
               <div>
                 <h1 className="text-3xl font-bold tracking-tight">School Branding</h1>
-                <p className="text-blue-100/90 mt-1.5 opacity-90">
-                  Make your school instantly recognizable with a beautiful logo
+                <p className="text-primary-100 mt-1.5 opacity-90">
+                  Make your school instantly recognizable with a beautiful logo and consistent brand colors
                 </p>
               </div>
             </div>
@@ -133,9 +135,35 @@ export default function BrandingPage() {
 
           {/* Content */}
           <div className="p-8 md:p-12 space-y-10">
+            {/* Brand Color Palette */}
+            <div className="space-y-4">
+              <h3 className="text-xl font-semibold text-slate-800">Brand Color Palette</h3>
+              <p className="text-slate-600 text-sm">
+                These colors are applied consistently across the entire ERP for a modern, professional look.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                {[
+                  { name: "Primary", hex: colors.primary, desc: "Deep Navy" },
+                  { name: "Secondary", hex: colors.secondary, desc: "Emerald" },
+                  { name: "Accent", hex: colors.accent, desc: "Sky Blue" },
+                  { name: "Background", hex: colors.background, desc: "Cool Slate" },
+                  { name: "Danger", hex: colors.danger, desc: "Alert Red" },
+                ].map((c) => (
+                  <div key={c.name} className="rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                    <div className="h-16 w-full" style={{ backgroundColor: c.hex }} />
+                    <div className="p-3 bg-white">
+                      <p className="font-medium text-sm text-slate-800">{c.name}</p>
+                      <p className="text-xs text-slate-500">{c.hex}</p>
+                      <p className="text-xs text-slate-400">{c.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-6">
               <h3 className="text-xl font-semibold text-slate-800 flex items-center gap-3">
-                <ImageIcon className="h-6 w-6 text-[var(--primary)]" />
+                <ImageIcon className="h-6 w-6 text-primary" />
                 School Logo
               </h3>
 
@@ -191,7 +219,7 @@ export default function BrandingPage() {
                       onClick={handleSave}
                       disabled={loading || !logoFile}
                       size="lg"
-                      className="min-w-[200px] bg-gradient-to-r from-[var(--primary)] to-indigo-700 hover:from-indigo-800 hover:to-indigo-900 text-white shadow-lg shadow-indigo-200/40 transition-all duration-300"
+                      className="min-w-[200px] bg-gradient-to-r from-primary-700 to-primary-900 hover:from-primary-800 hover:to-primary-950 text-white shadow-lg shadow-primary-200/40 transition-all duration-300"
                     >
                       {loading ? (
                         <>

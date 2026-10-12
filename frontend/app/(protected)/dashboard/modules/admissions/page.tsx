@@ -193,7 +193,7 @@ const AdmissionsPage = () => {
         {/* --- STATS GRID --- */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
           {[
-            { label: 'Total', value: counts.ALL, color: 'text-blue-600', icon: Users, bg: 'bg-blue-50' },
+            { label: 'Total', value: counts.ALL, color: 'text-primary-700', icon: Users, bg: 'bg-primary-50' },
             { label: 'Drafts', value: counts.DRAFT || 0, color: 'text-amber-600', icon: Clock, bg: 'bg-amber-50' },
             { label: 'Pending', value: counts.SUBMITTED || 0, color: 'text-purple-600', icon: CalendarCheck, bg: 'bg-purple-50' },
             { label: 'Enrolled', value: counts.ENROLLED || 0, color: 'text-emerald-600', icon: UserCheck, bg: 'bg-emerald-50' },
