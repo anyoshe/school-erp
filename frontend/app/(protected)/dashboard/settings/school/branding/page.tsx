@@ -13,18 +13,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 // ────────────────────────────────────────────────────────────────
-// Brand palette – single source of truth (matches globals.css + tailwind)
+// Brand palette – “Warm Authority” – single source of truth
 const colors = {
-  primary: '#1E3A8A',      // Deep Navy – trust & authority
-  secondary: '#10B981',    // Emerald – success & growth
-  accent: '#38BDF8',       // Sky – interactive focus
-  background: '#F8FAFC',
+  primary: '#0F766E',      // Deep Teal – trust & growth
+  secondary: '#D97706',    // Warm Amber / Gold – achievement
+  accent: '#EA580C',       // Soft Terracotta – energy
+  background: '#FAF7F2',   // Warm Cream
   surface: '#FFFFFF',
-  textPrimary: '#0F172A',
-  textMuted: '#64748B',
-  border: '#E2E8F0',
-  danger: '#EF4444',
-  warning: '#F59E0B',
+  textPrimary: '#1C1917',  // Warm Charcoal
+  textMuted: '#78716C',
+  border: '#E7E5E4',
+  danger: '#DC2626',
+  warning: '#D97706',
 };
 
 export default function BrandingPage() {
@@ -143,10 +143,10 @@ export default function BrandingPage() {
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
                 {[
-                  { name: "Primary", hex: colors.primary, desc: "Deep Navy" },
-                  { name: "Secondary", hex: colors.secondary, desc: "Emerald" },
-                  { name: "Accent", hex: colors.accent, desc: "Sky Blue" },
-                  { name: "Background", hex: colors.background, desc: "Cool Slate" },
+                  { name: "Primary", hex: colors.primary, desc: "Deep Teal" },
+                  { name: "Secondary", hex: colors.secondary, desc: "Warm Amber" },
+                  { name: "Accent", hex: colors.accent, desc: "Terracotta" },
+                  { name: "Background", hex: colors.background, desc: "Warm Cream" },
                   { name: "Danger", hex: colors.danger, desc: "Alert Red" },
                 ].map((c) => (
                   <div key={c.name} className="rounded-xl border border-slate-200 overflow-hidden shadow-sm">
