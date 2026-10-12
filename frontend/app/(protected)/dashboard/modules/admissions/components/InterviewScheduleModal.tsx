@@ -272,7 +272,7 @@ Admissions Team
           <Button
             onClick={handleSubmit}
             disabled={loading || !form.date || !form.time}
-            className="bg-indigo-600 hover:bg-indigo-700 w-full sm:w-auto min-w-[160px]"
+            className="bg-primary hover:bg-primary-700 w-full sm:w-auto min-w-[160px]"
           >
             {loading ? (
               <>

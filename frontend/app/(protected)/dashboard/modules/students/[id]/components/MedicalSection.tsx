@@ -143,7 +143,7 @@ export default function MedicalSection({ studentId }: Props) {
         {!showForm && (
           <button
             onClick={handleAddNew}
-            className="mt-4 sm:mt-0 inline-flex items-center gap-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition transform hover:scale-105"
+            className="mt-4 sm:mt-0 inline-flex items-center gap-3 bg-primary hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg transition transform hover:scale-105"
           >
             <span className="text-xl">+</span>
             Add Medical Record
@@ -154,7 +154,7 @@ export default function MedicalSection({ studentId }: Props) {
       {/* Loading State */}
       {loading && (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-indigo-600"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-primary"></div>
         </div>
       )}
 
@@ -183,7 +183,7 @@ export default function MedicalSection({ studentId }: Props) {
             </p>
             <button
               onClick={handleAddNew}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition transform hover:scale-105"
+              className="bg-primary hover:bg-primary-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg transition transform hover:scale-105"
             >
               + Add First Record
             </button>

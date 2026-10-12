@@ -521,7 +521,7 @@ export default function GuardianForm({
                 onChange={handleChange}
                 placeholder="e.g., Jane Doe"
                 disabled={loading}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition"
               />
             </div>
 
@@ -535,7 +535,7 @@ export default function GuardianForm({
                 onChange={handleChange}
                 placeholder="+1234567890"
                 disabled={loading}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition"
               />
             </div>
 
@@ -550,7 +550,7 @@ export default function GuardianForm({
                 onChange={handleChange}
                 placeholder="jane@example.com"
                 disabled={loading}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition"
               />
             </div>
 
@@ -564,7 +564,7 @@ export default function GuardianForm({
                 onChange={handleChange}
                 placeholder="123 Main St, City"
                 disabled={loading}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition"
               />
             </div>
 
@@ -577,7 +577,7 @@ export default function GuardianForm({
                 value={form.relationship}
                 onChange={handleChange}
                 disabled={loading}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition"
               >
                 {[
                   "MOTHER",
@@ -606,7 +606,7 @@ export default function GuardianForm({
                 value={form.preferredContactMethod}
                 onChange={handleChange}
                 disabled={loading}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition"
               >
                 <option value="PHONE">Phone Call</option>
                 <option value="EMAIL">Email</option>
@@ -619,14 +619,14 @@ export default function GuardianForm({
           <div className="pt-6 border-t border-gray-200">
             <p className="text-sm font-semibold text-gray-700 mb-4">Permissions & Roles</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <label className="flex items-center gap-3 p-4 bg-primary-50 rounded-xl hover:bg-blue-100 transition cursor-pointer">
+              <label className="flex items-center gap-3 p-4 bg-primary-50 rounded-xl hover:bg-primary-100 transition cursor-pointer">
                 <input
                   type="checkbox"
                   name="isPrimary"
                   checked={form.isPrimary}
                   onChange={handleChange}
                   disabled={loading}
-                  className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500"
+                  className="w-5 h-5 text-primary-600 rounded focus:ring-primary"
                 />
                 <span className="font-medium text-gray-800">Primary Guardian</span>
               </label>
@@ -643,26 +643,26 @@ export default function GuardianForm({
                 <span className="font-medium text-gray-800">Emergency Contact</span>
               </label>
 
-              <label className="flex items-center gap-3 p-4 bg-secondary-50 rounded-xl hover:bg-green-100 transition cursor-pointer">
+              <label className="flex items-center gap-3 p-4 bg-secondary-50 rounded-xl hover:bg-secondary-100 transition cursor-pointer">
                 <input
                   type="checkbox"
                   name="hasPickupPermission"
                   checked={form.hasPickupPermission}
                   onChange={handleChange}
                   disabled={loading}
-                  className="w-5 h-5 text-secondary-600 rounded focus:ring-green-500"
+                  className="w-5 h-5 text-secondary-600 rounded focus:ring-secondary"
                 />
                 <span className="font-medium text-gray-800">Pickup Permission</span>
               </label>
 
-              <label className="flex items-center gap-3 p-4 bg-purple-50 rounded-xl hover:bg-purple-100 transition cursor-pointer">
+              <label className="flex items-center gap-3 p-4 bg-primary-50 rounded-xl hover:bg-primary-100 transition cursor-pointer">
                 <input
                   type="checkbox"
                   name="hasLegalCustody"
                   checked={form.hasLegalCustody}
                   onChange={handleChange}
                   disabled={loading}
-                  className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
+                  className="w-5 h-5 text-primary-600 rounded focus:ring-primary"
                 />
                 <span className="font-medium text-gray-800">Legal Custody</span>
               </label>
@@ -674,7 +674,7 @@ export default function GuardianForm({
             <button
               onClick={handleSubmit}
               disabled={loading}
-              className="px-8 py-4 bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-700 hover:to-blue-800 text-white font-bold rounded-xl shadow-lg transition transform hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className="px-8 py-4 bg-gradient-to-r from-primary-600 to-primary-700 hover:from-primary-700 hover:to-primary-800 text-white font-bold rounded-xl shadow-lg transition transform hover:scale-105 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {loading ? "Saving..." : existingLink ? "Update Guardian" : "Add Guardian"}
             </button>
@@ -709,7 +709,7 @@ export default function GuardianForm({
               <button
                 onClick={handleLinkExisting}
                 disabled={loading}
-                className="w-full py-4 bg-gradient-to-r from-green-600 to-emerald-700 hover:from-green-700 hover:to-emerald-800 text-white font-bold rounded-xl shadow-lg transition transform hover:scale-105"
+                className="w-full py-4 bg-gradient-to-r from-secondary to-secondary-600 hover:from-secondary-600 hover:to-secondary-700 text-white font-bold rounded-xl shadow-lg transition transform hover:scale-105"
               >
                 {loading ? "Linking..." : "Link Existing Guardian"}
               </button>

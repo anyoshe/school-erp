@@ -78,10 +78,10 @@ export default function AuthResolvePage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50 to-blue-50">
-      <div className="w-14 h-14 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-6" />
-      <h2 className="text-xl font-semibold text-indigo-900 mb-2">Preparing your experience...</h2>
-      <p className="text-sm text-indigo-700">Just a moment while we set everything up.</p>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary-50 to-primary-50">
+      <div className="w-14 h-14 border-4 border-primary-200 border-t-primary rounded-full animate-spin mb-6" />
+      <h2 className="text-xl font-semibold text-primary-900 mb-2">Preparing your experience...</h2>
+      <p className="text-sm text-primary-700">Just a moment while we set everything up.</p>
     </div>
   );
 }

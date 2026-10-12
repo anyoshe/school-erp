@@ -326,7 +326,7 @@ export default function StudentAssignmentsPage() {
                       onClick={() => handleSelectStudent(student)}
                       className={`w-full text-left p-3 rounded-lg border transition ${
                         isSelected
-                          ? "bg-blue-100 border-blue-300"
+                          ? "bg-primary-100 border-primary-300"
                           : "bg-white border-gray-200 hover:bg-gray-50"
                       }`}
                     >

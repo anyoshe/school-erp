@@ -209,7 +209,7 @@ export default function FeeStructuresList() {
                       <TableCell>
                         <span className={cn(
                           "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
-                          fs.is_active ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                          fs.is_active ? "bg-secondary-100 text-secondary-700" : "bg-red-100 text-red-700"
                         )}>
                           {fs.is_active ? "Active" : "Inactive"}
                         </span>

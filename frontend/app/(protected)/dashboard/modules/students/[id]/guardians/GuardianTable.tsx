@@ -32,9 +32,9 @@ export default function GuardianTable({
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-900 to-indigo-800 text-white px-8 py-6 rounded-2xl shadow-lg">
+      <div className="bg-gradient-to-r from-primary-900 to-primary-800 text-white px-8 py-6 rounded-2xl shadow-lg">
         <h3 className="text-2xl font-bold">Guardians & Contacts</h3>
-        <p className="text-indigo-200 mt-1">Family members, emergency contacts, and communication preferences</p>
+        <p className="text-primary-200 mt-1">Family members, emergency contacts, and communication preferences</p>
       </div>
 
       {/* Mobile Cards - Emphasize Name & Contact */}
@@ -53,7 +53,7 @@ export default function GuardianTable({
               className="bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden hover:shadow-2xl transition-all duration-300"
             >
               {/* Card Header - Name & Preferred Contact Prominent */}
-              <div className="bg-gradient-to-r from-indigo-900 to-indigo-800 text-white px-6 py-6">
+              <div className="bg-gradient-to-r from-primary-900 to-primary-800 text-white px-6 py-6">
                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
                   <div>
                     <p className="text-2xl font-bold">{g.fullName}</p>
@@ -115,12 +115,12 @@ export default function GuardianTable({
                     <p className="font-semibold text-slate-700 mb-3">Special Permissions</p>
                     <div className="flex flex-wrap gap-3">
                       {link.hasPickupPermission && (
-                        <span className="px-5 py-2 bg-emerald-100 text-emerald-800 font-medium rounded-full">
+                        <span className="px-5 py-2 bg-secondary-100 text-secondary-800 font-medium rounded-full">
                           Pickup Allowed
                         </span>
                       )}
                       {link.hasLegalCustody && (
-                        <span className="px-5 py-2 bg-purple-100 text-purple-800 font-medium rounded-full">
+                        <span className="px-5 py-2 bg-primary-100 text-primary-800 font-medium rounded-full">
                           Legal Custody
                         </span>
                       )}
@@ -133,7 +133,7 @@ export default function GuardianTable({
                   {onEdit && (
                     <button
                       onClick={() => onEdit(link)}
-                      className="flex-1 bg-indigo-900 hover:bg-indigo-800 text-white font-bold py-4 rounded-xl shadow-lg transition transform hover:scale-105"
+                      className="flex-1 bg-primary-900 hover:bg-primary-800 text-white font-bold py-4 rounded-xl shadow-lg transition transform hover:scale-105"
                     >
                       Edit Guardian
                     </button>
@@ -154,7 +154,7 @@ export default function GuardianTable({
       {/* Desktop Table - Name & Contact Method Prominent */}
       <div className="hidden md:block overflow-x-auto rounded-2xl shadow-2xl border border-slate-200">
         <table className="w-full min-w-max">
-          <thead className="bg-gradient-to-r from-indigo-900 to-indigo-800 text-white">
+          <thead className="bg-gradient-to-r from-primary-900 to-primary-800 text-white">
             <tr>
               <th className="px-8 py-6 text-left font-bold text-lg">Guardian Name</th>
               <th className="px-8 py-6 text-left font-bold text-lg">Preferred Contact</th>
@@ -223,12 +223,12 @@ export default function GuardianTable({
                   <td className="px-8 py-6">
                     <div className="flex flex-wrap gap-3">
                       {link.hasPickupPermission && (
-                        <span className="px-5 py-2 bg-emerald-100 text-emerald-800 font-medium rounded-full">
+                        <span className="px-5 py-2 bg-secondary-100 text-secondary-800 font-medium rounded-full">
                           Pickup
                         </span>
                       )}
                       {link.hasLegalCustody && (
-                        <span className="px-5 py-2 bg-purple-100 text-purple-800 font-medium rounded-full">
+                        <span className="px-5 py-2 bg-primary-100 text-primary-800 font-medium rounded-full">
                           Legal Custody
                         </span>
                       )}
@@ -239,7 +239,7 @@ export default function GuardianTable({
                     {onEdit && (
                       <button
                         onClick={() => onEdit(link)}
-                        className="bg-indigo-900 hover:bg-indigo-800 text-white px-7 py-3 rounded-xl font-bold shadow-lg transition transform hover:scale-105"
+                        className="bg-primary-900 hover:bg-primary-800 text-white px-7 py-3 rounded-xl font-bold shadow-lg transition transform hover:scale-105"
                       >
                         Edit
                       </button>

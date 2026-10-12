@@ -31,10 +31,10 @@ interface Module {
 }
 
 const colorMap = {
-  blue: { bg: "bg-blue-100", hover: "hover:bg-blue-200", selected: "bg-primary", ring: "ring-blue-500" },
-  indigo: { bg: "bg-indigo-100", hover: "hover:bg-indigo-200", selected: "bg-indigo-600", ring: "ring-indigo-500" },
-  emerald: { bg: "bg-emerald-100", hover: "hover:bg-emerald-200", selected: "bg-emerald-600", ring: "ring-emerald-500" },
-  purple: { bg: "bg-purple-100", hover: "hover:bg-purple-200", selected: "bg-purple-600", ring: "ring-purple-500" },
+  blue: { bg: "bg-primary-100", hover: "hover:bg-primary-200", selected: "bg-primary", ring: "ring-primary" },
+  indigo: { bg: "bg-primary-100", hover: "hover:bg-primary-200", selected: "bg-primary", ring: "ring-primary" },
+  emerald: { bg: "bg-secondary-100", hover: "hover:bg-secondary-200", selected: "bg-secondary", ring: "ring-secondary" },
+  purple: { bg: "bg-primary-100", hover: "hover:bg-primary-200", selected: "bg-primary", ring: "ring-primary" },
   amber: { bg: "bg-amber-100", hover: "hover:bg-amber-200", selected: "bg-amber-500", ring: "ring-amber-500" },
   rose: { bg: "bg-rose-100", hover: "hover:bg-rose-200", selected: "bg-rose-600", ring: "ring-rose-500" },
   teal: { bg: "bg-teal-100", hover: "hover:bg-teal-200", selected: "bg-teal-600", ring: "ring-teal-500" },
@@ -126,7 +126,7 @@ export default function SelectModulesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-50">
       <div className="max-w-6xl mx-auto px-4 py-8 sm:py-12 lg:py-16">
         {/* Progress Indicator */}
         <div className="mb-10 text-center">
@@ -230,7 +230,7 @@ export default function SelectModulesPage() {
               className={`px-8 py-3 bg-gradient-to-r from-primary-700 to-primary-800 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-200 flex items-center gap-2 ${
                 selectedModuleIds.length === 0 || isLoading
                   ? "opacity-50 cursor-not-allowed"
-                  : "hover:from-blue-700 hover:to-primary-800"
+                  : "hover:from-primary-700 hover:to-primary-800"
               }`}
             >
               {isLoading ? <>Processing...</> : <>

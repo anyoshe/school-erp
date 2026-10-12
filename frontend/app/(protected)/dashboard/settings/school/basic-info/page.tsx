@@ -189,7 +189,7 @@ export default function EditSchoolBasicInfoPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50/50 via-slate-50 to-indigo-50/30 p-6 md:p-10">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50/50 via-slate-50 to-primary-50/30 p-6 md:p-10">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -209,7 +209,7 @@ export default function EditSchoolBasicInfoPage() {
               </div>
               <div>
                 <h1 className="text-3xl font-bold tracking-tight">Edit School Profile</h1>
-                <p className="text-blue-100/90 mt-1.5 opacity-90">
+                <p className="text-primary-100/90 mt-1.5 opacity-90">
                   Keep your school's information up-to-date and beautiful
                 </p>
               </div>
@@ -424,7 +424,7 @@ export default function EditSchoolBasicInfoPage() {
                 onClick={handleSave}
                 disabled={isSaving}
                 size="lg"
-                className="min-w-[200px] bg-gradient-to-r from-[var(--primary)] to-primary-800 hover:from-indigo-800 hover:to-primary-900 text-white shadow-lg shadow-indigo-200/50 transition-all duration-300"
+                className="min-w-[200px] bg-gradient-to-r from-[var(--primary)] to-primary-800 hover:from-primary-800 hover:to-primary-900 text-white shadow-lg shadow-primary-200/50 transition-all duration-300"
               >
                 {isSaving ? (
                   <>

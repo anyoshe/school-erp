@@ -45,7 +45,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
 
   const getStatusColor = (status: string) => {
     const s = status?.toUpperCase();
-    if (s === 'ADMITTED' || s === 'ENROLLED') return "bg-emerald-500/10 text-emerald-600 border-emerald-200";
+    if (s === 'ADMITTED' || s === 'ENROLLED') return "bg-secondary-500/10 text-secondary-600 border-secondary-200";
     if (s === 'OFFERED' || s === 'ACCEPTED') return "bg-primary-500/10 text-primary-700 border-primary-200";
     if (s === 'PENDING' || s === 'SUBMITTED') return "bg-amber-500/10 text-amber-600 border-amber-200";
     return "bg-slate-500/10 text-slate-600 border-slate-200";
@@ -56,7 +56,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     return (
       <div className="group p-3 rounded-xl transition-all duration-300 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-100">
         <div className="flex items-center gap-2 mb-1">
-          {Icon && <Icon className={`h-3 w-3 ${colorClass} group-hover:text-indigo-500 transition-colors`} />}
+          {Icon && <Icon className={`h-3 w-3 ${colorClass} group-hover:text-primary-500 transition-colors`} />}
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</span>
         </div>
         <div className="text-sm text-slate-900 font-semibold truncate">
@@ -69,7 +69,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   if (loading || schoolLoading) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
       <div className="flex flex-col items-center gap-4">
-        <div className="h-12 w-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+        <div className="h-12 w-12 border-4 border-primary-500/20 border-t-primary rounded-full animate-spin" />
         <p className="text-slate-500 font-medium animate-pulse">Decrypting Dossier...</p>
       </div>
     </div>
@@ -94,8 +94,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       {/* 1. FUTURISTIC NAV */}
       <div className="bg-white/80 backdrop-blur-md border-b sticky top-0 z-30 print:hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <Link href="/dashboard/modules/admissions" className="group flex items-center text-sm font-semibold text-slate-600 hover:text-indigo-600 transition-all">
-            <div className="mr-2 p-1.5 rounded-lg group-hover:bg-indigo-50 transition-colors">
+          <Link href="/dashboard/modules/admissions" className="group flex items-center text-sm font-semibold text-slate-600 hover:text-primary-600 transition-all">
+            <div className="mr-2 p-1.5 rounded-lg group-hover:bg-primary-50 transition-colors">
               <ArrowLeft className="h-4 w-4" />
             </div>
             Back to Pipeline
@@ -115,7 +115,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
 
         {/* 2. HERO COMPONENT */}
         <div className="relative overflow-hidden bg-white p-6 sm:p-8 rounded-[2rem] border border-slate-200 shadow-sm">
-          <div className="absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 bg-indigo-500/5 blur-[100px] rounded-full" />
+          <div className="absolute top-0 right-0 -mr-20 -mt-20 h-64 w-64 bg-primary-500/5 blur-[100px] rounded-full" />
 
           <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-8">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-left">
@@ -140,7 +140,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
               <div className="space-y-2">
                 <div className="flex items-center justify-center sm:justify-start gap-2">
                   <h1 className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight">
-                    {application.first_name} <span className="text-indigo-600">{application.last_name}</span>
+                    {application.first_name} <span className="text-primary-600">{application.last_name}</span>
                   </h1>
                 </div>
                 {application.preferred_name && (
@@ -149,7 +149,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                   </p>
                 )}
                 <div className="flex flex-wrap justify-center sm:justify-start gap-3 mt-2">
-                  <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 border-none font-bold py-1 px-3 rounded-lg">
+                  <Badge variant="secondary" className="bg-primary-50 text-primary-700 border-none font-bold py-1 px-3 rounded-lg">
                     {typeof application.class_applied === 'object' ? application.class_applied.name : application.class_applied}
                   </Badge>
                   <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-none font-mono py-1 px-3 rounded-lg">
@@ -186,7 +186,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             {/* Bio Information */}
             <Card className="rounded-[2.5rem] border-slate-200 shadow-sm overflow-hidden">
               <div className="bg-slate-50/50 px-8 py-4 border-b border-slate-100 flex items-center gap-2 font-black text-slate-400 text-[10px] uppercase tracking-[0.2em]">
-                <User className="h-4 w-4 text-indigo-500" /> Identity Matrix
+                <User className="h-4 w-4 text-primary-500" /> Identity Matrix
               </div>
               <CardContent className="p-8">
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
@@ -203,7 +203,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             {/* Guardian & Contact */}
             <Card className="rounded-[2.5rem] border-slate-200 shadow-sm overflow-hidden">
               <div className="bg-slate-50/50 px-8 py-4 border-b border-slate-100 flex items-center gap-2 font-black text-slate-400 text-[10px] uppercase tracking-[0.2em]">
-                <ShieldCheck className="h-4 w-4 text-emerald-500" /> Primary Guardian Secure Access
+                <ShieldCheck className="h-4 w-4 text-secondary-500" /> Primary Guardian Secure Access
               </div>
               <CardContent className="p-8 grid grid-cols-1 sm:grid-cols-2 gap-8">
                 <div className="space-y-6">
@@ -211,18 +211,18 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                   <DataField label="Relationship" value={application.primary_guardian_relationship} icon={Info} />
                   <DataField label="Guardian ID" value={application.primary_guardian_id_number} icon={Hash} />
                 </div>
-                <div className="bg-indigo-600 rounded-[2rem] p-6 text-white space-y-5 shadow-lg shadow-indigo-100">
+                <div className="bg-primary rounded-[2rem] p-6 text-white space-y-5 shadow-lg shadow-primary-100">
                   <div className="flex items-center gap-4">
                     <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-md"><Phone className="h-5 w-5" /></div>
                     <div>
-                      <p className="text-[10px] font-black text-indigo-200 uppercase tracking-tighter">Phone Line</p>
+                      <p className="text-[10px] font-black text-primary-200 uppercase tracking-tighter">Phone Line</p>
                       <p className="text-base font-black">{application.primary_guardian_phone}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center backdrop-blur-md"><Mail className="h-5 w-5" /></div>
                     <div className="min-w-0">
-                      <p className="text-[10px] font-black text-indigo-200 uppercase tracking-tighter">Digital Node</p>
+                      <p className="text-[10px] font-black text-primary-200 uppercase tracking-tighter">Digital Node</p>
                       <p className="text-sm font-black truncate">{application.primary_guardian_email}</p>
                     </div>
                   </div>
@@ -303,14 +303,14 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] px-4">Files Vault</h3>
               <div className="space-y-3">
                 {application.documents?.map((doc: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-3xl hover:border-indigo-500 transition-all group">
+                  <div key={i} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-3xl hover:border-primary-500 transition-all group">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 bg-indigo-50 group-hover:bg-indigo-500 rounded-xl flex items-center justify-center text-indigo-500 group-hover:text-white transition-colors">
+                      <div className="h-10 w-10 bg-primary-50 group-hover:bg-primary-500 rounded-xl flex items-center justify-center text-primary-500 group-hover:text-white transition-colors">
                         <FileText className="h-5 w-5" />
                       </div>
                       <p className="text-xs font-black text-slate-700 truncate w-32">{doc.file_name || "Attachment " + (i + 1)}</p>
                     </div>
-                    <a href={doc.file} target="_blank" className="p-2 text-slate-400 hover:text-indigo-600"><Eye className="h-4 w-4" /></a>
+                    <a href={doc.file} target="_blank" className="p-2 text-slate-400 hover:text-primary-600"><Eye className="h-4 w-4" /></a>
                   </div>
                 ))}
               </div>

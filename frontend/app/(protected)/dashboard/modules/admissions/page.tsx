@@ -78,7 +78,7 @@ const AdmissionsPage = () => {
   if (userLoading || schoolLoading) {
     return (
       <div className="flex h-[80vh] w-full flex-col items-center justify-center gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+        <Loader2 className="h-10 w-10 animate-spin text-primary-600" />
         <p className="text-sm font-bold uppercase tracking-widest text-slate-400">
           Verifying access...
         </p>
@@ -133,7 +133,7 @@ const AdmissionsPage = () => {
   if (schoolLoading) {
     return (
       <div className="flex h-[80vh] w-full flex-col items-center justify-center gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-indigo-600" />
+        <Loader2 className="h-10 w-10 animate-spin text-primary-600" />
         <p className="text-sm font-bold uppercase tracking-widest text-slate-400">Loading Environment</p>
       </div>
     );
@@ -161,10 +161,10 @@ const AdmissionsPage = () => {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <div className="bg-indigo-600 p-1 rounded-md">
+                <div className="bg-primary p-1 rounded-md">
                   <Sparkles className="h-3 w-3 text-white" />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-600">Admission Portal</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-primary-600">Admission Portal</span>
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 truncate">
                 {currentSchool.name}
@@ -173,13 +173,13 @@ const AdmissionsPage = () => {
 
             <div className="flex items-center gap-2 sm:gap-3">
               {readyToEnrollCount > 0 && (
-                <Badge className="hidden sm:flex bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 py-1.5 px-3 rounded-xl gap-2 transition-all cursor-default">
-                  <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <Badge className="hidden sm:flex bg-secondary-50 text-secondary-700 hover:bg-secondary-100 border-secondary-200 py-1.5 px-3 rounded-xl gap-2 transition-all cursor-default">
+                  <div className="h-2 w-2 rounded-full bg-secondary-500 animate-pulse" />
                   {readyToEnrollCount} Ready to Enroll
                 </Badge>
               )}
               <Link href="/dashboard/modules/admissions/new" className="flex-1 sm:flex-none">
-                <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-100 py-5 sm:py-2">
+                <Button className="w-full bg-primary hover:bg-primary-700 text-white rounded-xl shadow-lg shadow-primary-100 py-5 sm:py-2">
                   <Plus className="mr-2 h-4 w-4" />
                   <span className="text-sm font-bold">New Application</span>
                 </Button>
@@ -195,8 +195,8 @@ const AdmissionsPage = () => {
           {[
             { label: 'Total', value: counts.ALL, color: 'text-primary-700', icon: Users, bg: 'bg-primary-50' },
             { label: 'Drafts', value: counts.DRAFT || 0, color: 'text-amber-600', icon: Clock, bg: 'bg-amber-50' },
-            { label: 'Pending', value: counts.SUBMITTED || 0, color: 'text-purple-600', icon: CalendarCheck, bg: 'bg-purple-50' },
-            { label: 'Enrolled', value: counts.ENROLLED || 0, color: 'text-emerald-600', icon: UserCheck, bg: 'bg-emerald-50' },
+            { label: 'Pending', value: counts.SUBMITTED || 0, color: 'text-primary-600', icon: CalendarCheck, bg: 'bg-primary-50' },
+            { label: 'Enrolled', value: counts.ENROLLED || 0, color: 'text-secondary-600', icon: UserCheck, bg: 'bg-secondary-50' },
           ].map((stat, i) => (
             <div key={i} className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 transition-transform hover:scale-[1.02]">
               <div className={cn("h-10 w-10 shrink-0 rounded-2xl flex items-center justify-center", stat.bg)}>
@@ -239,12 +239,12 @@ const AdmissionsPage = () => {
 
           {/* Search Box */}
           <div className="relative group lg:w-80">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-indigo-600 transition-colors" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-primary-600 transition-colors" />
             <Input
               placeholder="Quick search..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-11 rounded-2xl border-slate-200 bg-white h-11 focus-visible:ring-indigo-600 focus-visible:ring-offset-0 shadow-sm"
+              className="pl-11 rounded-2xl border-slate-200 bg-white h-11 focus-visible:ring-primary focus-visible:ring-offset-0 shadow-sm"
             />
           </div>
         </div>
@@ -280,7 +280,7 @@ const AdmissionsPage = () => {
       <div className="md:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-40">
         {readyToEnrollCount > 0 && activeTab === 'ALL' && (
            <div className="mb-4 text-center">
-              <Badge className="bg-emerald-600 text-white shadow-xl py-2 px-4 rounded-full border-none">
+              <Badge className="bg-secondary text-white shadow-xl py-2 px-4 rounded-full border-none">
                 {readyToEnrollCount} Ready to Enroll
               </Badge>
            </div>

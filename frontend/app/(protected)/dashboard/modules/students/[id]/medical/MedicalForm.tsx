@@ -415,7 +415,7 @@ export default function MedicalForm({ studentId, record, onSaved, onClose }: Pro
 
       {/* Section: Emergency Information */}
       <section className="mb-12 bg-white rounded-xl shadow-sm p-8 border border-gray-100">
-        <h3 className="text-2xl font-semibold text-indigo-700 mb-6 flex items-center">
+        <h3 className="text-2xl font-semibold text-primary-700 mb-6 flex items-center">
           <span className="mr-3 text-3xl">🚨</span> Emergency Information
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -497,7 +497,7 @@ export default function MedicalForm({ studentId, record, onSaved, onClose }: Pro
 
       {/* Section: Consent */}
       <section className="mb-12 bg-white rounded-xl shadow-sm p-8 border border-gray-100">
-        <h3 className="text-2xl font-semibold text-purple-700 mb-6 flex items-center">
+        <h3 className="text-2xl font-semibold text-primary-700 mb-6 flex items-center">
           <span className="mr-3 text-3xl">✍️</span> Parental Consent
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -527,8 +527,8 @@ export default function MedicalForm({ studentId, record, onSaved, onClose }: Pro
               <input type="checkbox" name="consentToTreat" checked={form.consentToTreat} onChange={handleChange} className="w-5 h-5 text-primary-700 rounded focus:ring-primary" />
               <span className="font-medium text-gray-800">I consent to emergency medical treatment if needed</span>
             </label>
-            <label className="flex items-center gap-4 p-4 bg-indigo-50 rounded-lg">
-              <input type="checkbox" name="medicalDisclosureAllowed" checked={form.medicalDisclosureAllowed} onChange={handleChange} className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500" />
+            <label className="flex items-center gap-4 p-4 bg-primary-50 rounded-lg">
+              <input type="checkbox" name="medicalDisclosureAllowed" checked={form.medicalDisclosureAllowed} onChange={handleChange} className="w-5 h-5 text-primary-600 rounded focus:ring-primary" />
               <span className="font-medium text-gray-800">I allow disclosure of medical information to school staff</span>
             </label>
           </div>
@@ -576,7 +576,7 @@ export default function MedicalForm({ studentId, record, onSaved, onClose }: Pro
             multiple
             accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
             onChange={handleFileChange}
-            className="block w-full text-sm text-gray-600 file:mr-4 file:py-3 file:px-6 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 cursor-pointer"
+            className="block w-full text-sm text-gray-600 file:mr-4 file:py-3 file:px-6 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 cursor-pointer"
           />
           {newDocuments.length > 0 && (
             <div className="mt-4 p-4 bg-secondary-50 border border-secondary-200 rounded-lg">
@@ -593,9 +593,9 @@ export default function MedicalForm({ studentId, record, onSaved, onClose }: Pro
 
       {/* Last Reviewed */}
       {record && (
-        <div className="mb-10 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-primary-200">
+        <div className="mb-10 p-6 bg-gradient-to-r from-primary-50 to-primary-50 rounded-xl border border-primary-200">
           <p className="text-sm font-semibold text-primary-900">Last Reviewed:</p>
-          <p className="text-lg font-medium text-indigo-900">{record.reviewDate || "Not yet reviewed"}</p>
+          <p className="text-lg font-medium text-primary-900">{record.reviewDate || "Not yet reviewed"}</p>
           <p className="text-xs text-primary-700 mt-1">Automatically updated when saved by staff</p>
         </div>
       )}

@@ -915,7 +915,7 @@ export default function EnrollmentWizardModal({
               {/* File input – always show, but change label if photo exists */}
               <div className={cn(
                 "border-2 border-dashed rounded-lg p-4 text-center",
-                applicationData.photo ? "border-slate-300 bg-slate-50" : "border-indigo-300 bg-indigo-50/30"
+                applicationData.photo ? "border-slate-300 bg-slate-50" : "border-primary-300 bg-primary-50/30"
               )}>
                 <Input
                   type="file"
@@ -936,12 +936,12 @@ export default function EnrollmentWizardModal({
                   htmlFor="profile-photo-upload"
                   className="cursor-pointer flex flex-col items-center gap-2"
                 >
-                  <div className="p-3 bg-indigo-100 rounded-full">
-                    <svg className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <div className="p-3 bg-primary-100 rounded-full">
+                    <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                     </svg>
                   </div>
-                  <span className="text-sm font-medium text-indigo-700">
+                  <span className="text-sm font-medium text-primary-700">
                     {applicationData.photo ? "Replace Photo" : "Upload New Photo"}
                   </span>
                   <span className="text-xs text-slate-500">
@@ -1406,8 +1406,8 @@ export default function EnrollmentWizardModal({
                 {/* Optional Services */}
                 {/* 2. Optional Services – FIXED */}
                 <section className="space-y-3">
-                  <Label className="text-sm font-bold flex items-center gap-2 text-indigo-600">
-                    <span className="w-6 h-6 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px]">2</span>
+                  <Label className="text-sm font-bold flex items-center gap-2 text-primary-600">
+                    <span className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-[10px]">2</span>
                     Add Optional Services
                   </Label>
 
@@ -1425,8 +1425,8 @@ export default function EnrollmentWizardModal({
                             className={cn(
                               "flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all",
                               isChecked
-                                ? "bg-indigo-50 border-indigo-300 ring-1 ring-indigo-200"
-                                : "bg-white border-slate-200 hover:border-indigo-300"
+                                ? "bg-primary-50 border-primary-300 ring-1 ring-primary-200"
+                                : "bg-white border-slate-200 hover:border-primary-300"
                             )}
                             onClick={() => {
                               let nextIds: string[];
@@ -1456,7 +1456,7 @@ export default function EnrollmentWizardModal({
                             <div className="text-right min-w-[100px]">
                               <span className={cn(
                                 "font-mono font-bold text-sm",
-                                isChecked ? "text-indigo-600" : "text-slate-500"
+                                isChecked ? "text-primary-600" : "text-slate-500"
                               )}>
                                 + {amount.toLocaleString()} {currencySymbol}
                               </span>
@@ -1475,7 +1475,7 @@ export default function EnrollmentWizardModal({
 
                   {/* Quick summary of selected optional total */}
                   {optionalTotal > 0 && (
-                    <div className="text-right text-sm font-medium text-indigo-700 pt-2">
+                    <div className="text-right text-sm font-medium text-primary-700 pt-2">
                       Selected optional total: +{optionalTotal.toLocaleString()} {currencySymbol}
                     </div>
                   )}
@@ -1538,9 +1538,9 @@ export default function EnrollmentWizardModal({
 
                     <div className="space-y-3">
                       {/* Initial Payment */}
-                      <div className="grid grid-cols-3 gap-4 bg-emerald-50 p-4 rounded-xl">
+                      <div className="grid grid-cols-3 gap-4 bg-secondary-50 p-4 rounded-xl">
                         <div className="font-medium">Initial Payment</div>
-                        <div className="text-right font-bold text-emerald-700">
+                        <div className="text-right font-bold text-secondary-700">
                           {currencySymbol} {paymentBreakdown.initialPayment.toLocaleString()}
                         </div>
                         <div className="text-right">Today</div>
@@ -1695,14 +1695,14 @@ export default function EnrollmentWizardModal({
                         <span>{currencySymbol} {netAdmission.toLocaleString()}</span>
                       </div>
                       {optionalTotal > 0 && (
-                        <div className="flex justify-between text-indigo-700">
+                        <div className="flex justify-between text-primary-700">
                           <span>Optional Services</span>
                           <span>+ {currencySymbol} {optionalTotal.toLocaleString()}</span>
                         </div>
                       )}
                       <div className="flex justify-between font-bold text-lg border-t pt-2">
                         <span>Total Due Now</span>
-                        <span className="text-indigo-700">{currencySymbol} {totalDueNow.toLocaleString()}</span>
+                        <span className="text-primary-700">{currencySymbol} {totalDueNow.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span>Initial Payment</span>
@@ -1759,7 +1759,7 @@ export default function EnrollmentWizardModal({
               {/* RIGHT COLUMN – Invoice Preview */}
               <div className="lg:col-span-2">
                 <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-2xl sticky top-0">
-                  <h4 className="text-sm font-black uppercase tracking-wider text-indigo-400 mb-4">
+                  <h4 className="text-sm font-black uppercase tracking-wider text-primary-400 mb-4">
                     Enrollment Cost Summary
                   </h4>
                   <div className="space-y-4">
@@ -1769,7 +1769,7 @@ export default function EnrollmentWizardModal({
                     </div>
 
                     {optionalTotal > 0 && (
-                      <div className="flex justify-between text-sm text-indigo-300">
+                      <div className="flex justify-between text-sm text-primary-300">
                         <span>Optional Services</span>
                         <span>+{currencySymbol} {optionalTotal.toLocaleString()}</span>
                       </div>
@@ -1781,7 +1781,7 @@ export default function EnrollmentWizardModal({
                     </div>
 
                     {/* This is the missing link that makes the math work */}
-                    <div className="flex justify-between text-green-400 text-sm">
+                    <div className="flex justify-between text-secondary-400 text-sm">
                       <span>Initial Deposit</span>
                       <span>- {currencySymbol} {depositPaid.toLocaleString()}</span>
                     </div>
@@ -1797,7 +1797,7 @@ export default function EnrollmentWizardModal({
                       </div>
                       <div className="text-right">
                         <p className="text-xs text-slate-400 uppercase font-bold">Remaining</p>
-                        <p className="text-lg font-semibold text-indigo-400">
+                        <p className="text-lg font-semibold text-primary-400">
                           {currencySymbol} {balanceDue.toLocaleString()}
                         </p>
                       </div>
@@ -1846,7 +1846,7 @@ export default function EnrollmentWizardModal({
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2.5">
             <div
-              className="bg-indigo-600 h-2.5 rounded-full transition-all duration-500"
+              className="bg-primary h-2.5 rounded-full transition-all duration-500"
               style={{ width: `${(currentStep / totalSteps) * 100}%` }}
             />
           </div>
@@ -1881,7 +1881,7 @@ export default function EnrollmentWizardModal({
               <Button
                 onClick={handleSubmit}
                 disabled={loading || !validateStep(currentStep)}
-                className="bg-secondary hover:bg-green-700 min-w-[180px]"
+                className="bg-secondary hover:bg-secondary-700 min-w-[180px]"
               >
                 {loading ? (
                   <>

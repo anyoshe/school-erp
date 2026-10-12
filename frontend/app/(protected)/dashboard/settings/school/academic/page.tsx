@@ -314,7 +314,7 @@ export default function SchoolAcademicConfigPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50/50 via-slate-50 to-indigo-50/30 p-6 md:p-10">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50/50 via-slate-50 to-primary-50/30 p-6 md:p-10">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -333,7 +333,7 @@ export default function SchoolAcademicConfigPage() {
               </div>
               <div>
                 <h1 className="text-3xl font-bold tracking-tight">Academic Configuration</h1>
-                <p className="text-blue-100/90 mt-1.5 opacity-90">
+                <p className="text-primary-100/90 mt-1.5 opacity-90">
                   Manage calendar, grading, and grade levels
                 </p>
               </div>
@@ -537,7 +537,7 @@ export default function SchoolAcademicConfigPage() {
                     type="button"
                     onClick={addCustomGrade}
                     disabled={!newGradeName.trim() || loading}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[140px]"
+                    className="bg-secondary hover:bg-secondary-700 text-white min-w-[140px]"
                   >
                     <Plus className="h-5 w-5 mr-2" />
                     Add Custom
@@ -586,7 +586,7 @@ export default function SchoolAcademicConfigPage() {
                 type="submit"
                 disabled={loading}
                 size="lg"
-                className="min-w-[240px] bg-gradient-to-r from-indigo-800 to-indigo-950 hover:from-indigo-900 hover:to-black text-white shadow-lg transition-all"
+                className="min-w-[240px] bg-gradient-to-r from-primary-800 to-primary-950 hover:from-primary-900 hover:to-black text-white shadow-lg transition-all"
               >
                 {loading ? (
                   <>

@@ -375,14 +375,14 @@ export default function StudentProfilePage() {
       </div>
 
       {/* Deposit Paid */}
-      <div className="bg-secondary-50 p-4 rounded-xl border border-green-100">
+      <div className="bg-secondary-50 p-4 rounded-xl border border-secondary-100">
         <p className="text-sm text-secondary-600 font-medium">Deposit Paid</p>
         <p className="text-3xl font-bold text-secondary-700 mt-1">
           {financeSummary
             ? `${financeSummary.currency} ${financeSummary.deposit_paid.toLocaleString()}`
             : "—"}
         </p>
-        <p className="text-xs text-green-500 mt-1">Initial enrollment payment</p>
+        <p className="text-xs text-secondary-500 mt-1">Initial enrollment payment</p>
       </div>
 
       {/* Remaining Balance - Most Important */}

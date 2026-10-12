@@ -37,7 +37,7 @@ export default function SchoolBillingPage() {
       <div className="max-w-5xl mx-auto space-y-8">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-3">
-            <DollarSign className="h-8 w-8 text-emerald-600" />
+            <DollarSign className="h-8 w-8 text-secondary-600" />
             My School Subscription
           </h1>
           <p className="text-gray-600 mt-2">
@@ -46,11 +46,11 @@ export default function SchoolBillingPage() {
         </div>
 
         {/* Current Plan Card */}
-        <Card className="border-emerald-200 bg-emerald-50/30">
+        <Card className="border-secondary-200 bg-secondary-50/30">
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-2xl">Current Plan: {subscription.plan}</CardTitle>
-              <Badge variant="outline" className="bg-emerald-100 text-emerald-800 px-4 py-1">
+              <Badge variant="outline" className="bg-secondary-100 text-secondary-800 px-4 py-1">
                 Active
               </Badge>
             </div>
@@ -72,7 +72,7 @@ export default function SchoolBillingPage() {
             <Separator />
 
             <div className="flex gap-4">
-              <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700">
+              <Button size="lg" className="bg-secondary hover:bg-secondary-700">
                 Upgrade Plan
               </Button>
               <Button variant="outline" size="lg">

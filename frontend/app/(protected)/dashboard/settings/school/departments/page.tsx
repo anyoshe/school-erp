@@ -341,7 +341,7 @@ export default function DepartmentsPage() {
                 key={dept.id}
                 onClick={() => addFromTemplate(dept)}
                 disabled={loading}
-                className="p-3 bg-white border border-green-300 rounded-lg hover:bg-secondary-50 disabled:opacity-50 text-left transition"
+                className="p-3 bg-white border border-secondary-300 rounded-lg hover:bg-secondary-50 disabled:opacity-50 text-left transition"
               >
                 <p className="font-medium text-slate-700">{dept.name}</p>
                 {dept.code && <p className="text-sm text-slate-500">{dept.code}</p>}

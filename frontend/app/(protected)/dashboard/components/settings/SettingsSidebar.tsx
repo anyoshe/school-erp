@@ -30,7 +30,7 @@ export default function SettingsSidebar() {
               href={link.href}
               className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
                 isActive
-                  ? "bg-primary-50 border-l-4 border-blue-600 text-primary-800 font-medium"
+                  ? "bg-primary-50 border-l-4 border-primary text-primary-800 font-medium"
                   : "text-gray-700 hover:bg-gray-50 hover:text-primary-800"
               }`}
             >

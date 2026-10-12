@@ -56,7 +56,7 @@ function ChangePasswordForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-blue-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-primary-50 px-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
         <h2 className="text-2xl font-bold text-center mb-2 text-gray-800">
           {isFirstTime ? "Set Your First Password" : "Change Password"}
@@ -77,7 +77,7 @@ function ChangePasswordForm() {
                 type="password"
                 value={oldPassword}
                 onChange={(e) => setOldPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary-500 outline-none transition"
                 placeholder="••••••••"
                 required={!isFirstTime}
               />
@@ -92,7 +92,7 @@ function ChangePasswordForm() {
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary-500 outline-none transition"
               placeholder="••••••••"
               required
             />
@@ -107,7 +107,7 @@ function ChangePasswordForm() {
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary-500 outline-none transition"
               placeholder="••••••••"
               required
             />
@@ -118,8 +118,8 @@ function ChangePasswordForm() {
             disabled={loading}
             className={`w-full py-3 px-4 rounded-lg font-medium text-white transition-all ${
               loading
-                ? "bg-indigo-400 cursor-not-allowed"
-                : "bg-indigo-600 hover:bg-indigo-700 shadow-md hover:shadow-lg"
+                ? "bg-primary-400 cursor-not-allowed"
+                : "bg-primary hover:bg-primary-700 shadow-md hover:shadow-lg"
             }`}
           >
             {loading ? (

@@ -8,7 +8,7 @@ export default function ProcurementPage() {
   const { currentSchool } = useCurrentSchool();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50/50 via-slate-50 to-indigo-50/30 p-6 md:p-10">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50/50 via-slate-50 to-primary-50/30 p-6 md:p-10">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-10">
@@ -20,7 +20,7 @@ export default function ProcurementPage() {
 
         {/* Coming Soon / Placeholder */}
         <Card className="bg-white/70 backdrop-blur-xl border border-white/30 rounded-3xl shadow-2xl overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-indigo-600 to-primary-900 text-white">
+          <CardHeader className="bg-gradient-to-r from-primary-600 to-primary-900 text-white">
             <div className="flex items-center gap-4">
               <ShoppingCart className="h-8 w-8" />
               <CardTitle className="text-2xl">Procurement System</CardTitle>

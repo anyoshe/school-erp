@@ -225,7 +225,7 @@ export default function UsersSettingsPage() {
       console.log("TYPE OF TEMP PASS:", typeof tempPass);
 
       toast.success(
-        <div className="bg-white border-4 border-green-500 rounded-xl p-6 shadow-2xl max-w-md mx-auto">
+        <div className="bg-white border-4 border-secondary rounded-xl p-6 shadow-2xl max-w-md mx-auto">
           <div className="text-2xl font-bold text-secondary-700 mb-4 flex items-center gap-3">
             <Check className="h-8 w-8" /> SUCCESS!
           </div>
@@ -242,7 +242,7 @@ export default function UsersSettingsPage() {
               </code>
               <Button
                 size="lg"
-                className="bg-secondary hover:bg-green-700"
+                className="bg-secondary hover:bg-secondary-700"
                 onClick={() => {
                   if (tempPass) {
                     navigator.clipboard.writeText(tempPass);

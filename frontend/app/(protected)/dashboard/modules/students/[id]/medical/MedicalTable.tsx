@@ -33,7 +33,7 @@
 //         {records.map((r) => (
 //           <div
 //             key={r.id}
-//             className="bg-white rounded-xl shadow border-l-4 border-blue-600 p-4 space-y-3"
+//             className="bg-white rounded-xl shadow border-l-4 border-primary p-4 space-y-3"
 //           >
 //             <div className="flex justify-between">
 //               <span className="font-semibold text-textMuted">Blood Group:</span>
@@ -201,9 +201,9 @@ export default function MedicalTable({ records, onEdit, onDelete, onDownload }: 
   return (
     <div className="space-y-8 animate-fadeIn">
       {/* Header - Matching MedicalSection */}
-      <div className="bg-gradient-to-r from-indigo-600 to-blue-700 text-white px-8 py-6 rounded-2xl shadow-lg">
+      <div className="bg-gradient-to-r from-primary-600 to-primary-700 text-white px-8 py-6 rounded-2xl shadow-lg">
         <h3 className="text-2xl font-bold">Medical Records</h3>
-        <p className="text-indigo-100 mt-1">Complete health profile and history</p>
+        <p className="text-primary-100 mt-1">Complete health profile and history</p>
       </div>
 
       {/* Mobile Cards */}
@@ -214,7 +214,7 @@ export default function MedicalTable({ records, onEdit, onDelete, onDownload }: 
             className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-2xl transition-all duration-300"
           >
             {/* Card Header */}
-            <div className="bg-gradient-to-r from-indigo-500 to-primary-700 text-white px-6 py-5">
+            <div className="bg-gradient-to-r from-primary-500 to-primary-700 text-white px-6 py-5">
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-xl font-bold">{r.bloodGroup || "—"} Blood Group</p>
@@ -265,14 +265,14 @@ export default function MedicalTable({ records, onEdit, onDelete, onDownload }: 
                     {r.documents.map((doc) => (
                       <div
                         key={doc.id}
-                        className="flex items-center justify-between bg-gradient-to-r from-indigo-50 to-blue-50 p-4 rounded-xl border border-indigo-100"
+                        className="flex items-center justify-between bg-gradient-to-r from-primary-50 to-primary-50 p-4 rounded-xl border border-primary-100"
                       >
                         <span className="font-medium text-gray-800 truncate max-w-xs">
                           📄 {doc.name}
                         </span>
                         <button
                           onClick={() => handleDownload(doc.url, doc.name)}
-                          className="text-indigo-700 hover:text-indigo-900 font-semibold text-sm"
+                          className="text-primary-700 hover:text-primary-900 font-semibold text-sm"
                         >
                           Download
                         </button>
@@ -286,7 +286,7 @@ export default function MedicalTable({ records, onEdit, onDelete, onDownload }: 
               <div className="flex gap-4 pt-5 border-t border-gray-200">
                 <button
                   onClick={() => onEdit(r)}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl shadow transition transform hover:scale-105"
+                  className="flex-1 bg-primary hover:bg-primary-700 text-white font-semibold py-3 rounded-xl shadow transition transform hover:scale-105"
                 >
                   Edit Record
                 </button>
@@ -308,7 +308,7 @@ export default function MedicalTable({ records, onEdit, onDelete, onDownload }: 
         <div className="overflow-x-auto rounded-2xl shadow-2xl border border-gray-200">
           {/* ← Move comment here, outside the table */}
           <table className="w-full min-w-max table-auto">
-            <thead className="bg-gradient-to-r from-indigo-600 to-blue-700 text-white">
+            <thead className="bg-gradient-to-r from-primary-600 to-primary-700 text-white">
               <tr>
                 <th className="px-8 py-5 text-left font-bold text-lg whitespace-nowrap">Blood Group</th>
                 <th className="px-8 py-5 text-left font-bold text-lg whitespace-nowrap">Allergies</th>
@@ -325,7 +325,7 @@ export default function MedicalTable({ records, onEdit, onDelete, onDownload }: 
               {records.map((r, idx) => (
                 <tr
                   key={r.id}
-                  className={`transition-all hover:bg-indigo-50 hover:shadow-md ${idx % 2 === 0 ? "bg-gray-50" : "bg-white"
+                  className={`transition-all hover:bg-primary-50 hover:shadow-md ${idx % 2 === 0 ? "bg-gray-50" : "bg-white"
                     }`}
                 >
                   <td className="px-8 py-5 font-semibold text-gray-900 whitespace-nowrap">
@@ -346,7 +346,7 @@ export default function MedicalTable({ records, onEdit, onDelete, onDownload }: 
                   <td className="px-8 py-5">
                     <span
                       className={`inline-block px-4 py-2 rounded-full text-sm font-bold ${r.immunizationStatus === "UP_TO_DATE"
-                        ? "bg-green-100 text-secondary-800"
+                        ? "bg-secondary-100 text-secondary-800"
                         : r.immunizationStatus === "PARTIAL"
                           ? "bg-amber-100 text-amber-800"
                           : "bg-red-100 text-red-800"
@@ -365,7 +365,7 @@ export default function MedicalTable({ records, onEdit, onDelete, onDownload }: 
                           <button
                             key={doc.id}
                             onClick={() => handleDownload(doc.url, doc.name)}
-                            className="flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium text-sm group"
+                            className="flex items-center gap-2 text-primary-600 hover:text-primary-800 font-medium text-sm group"
                           >
                             <span>📄</span>
                             <span className="underline group-hover:no-underline truncate max-w-48">
@@ -381,7 +381,7 @@ export default function MedicalTable({ records, onEdit, onDelete, onDownload }: 
                   <td className="px-8 py-5 text-right space-x-4 whitespace-nowrap">
                     <button
                       onClick={() => onEdit(r)}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl font-semibold shadow transition transform hover:scale-105"
+                      className="bg-primary hover:bg-primary-700 text-white px-6 py-3 rounded-xl font-semibold shadow transition transform hover:scale-105"
                     >
                       Edit
                     </button>

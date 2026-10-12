@@ -145,10 +145,10 @@ export default function ApplicationTable({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filtered.map((app) => (
-              <tr key={app.id} className="group hover:bg-indigo-50/30 transition-colors">
+              <tr key={app.id} className="group hover:bg-primary-50/30 transition-colors">
                 <td className="p-4">
                   <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 shrink-0 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs shadow-inner">
+                    <div className="h-9 w-9 shrink-0 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-xs shadow-inner">
                       {app.first_name?.[0] || "?"}
                       {app.last_name?.[0] || ""}
                     </div>
@@ -206,7 +206,7 @@ export default function ApplicationTable({
           >
             <div className="flex items-start justify-between gap-3 mb-4">
               <div className="flex items-center gap-3 min-w-0 flex-1">
-                <div className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-base shadow-md">
+                <div className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-primary-500 to-primary-800 flex items-center justify-center text-white font-bold text-base shadow-md">
                   {app.first_name?.[0] || <User className="h-4 w-4" />}
                 </div>
                 <div className="min-w-0">
@@ -255,7 +255,7 @@ export default function ApplicationTable({
                 <Button
                   onClick={() => handleEnroll(app.id)}
                   disabled={enrollingId === app.id}
-                  className="bg-indigo-600 h-10 px-4 rounded-xl shadow-md"
+                  className="bg-primary h-10 px-4 rounded-xl shadow-md"
                 >
                   <UserPlus className="h-4 w-4 text-white" />
                 </Button>
@@ -284,10 +284,10 @@ export default function ApplicationTable({
 function StatusBadge({ status, hasPayment }: { status: string; hasPayment: boolean }) {
   const s = status.toUpperCase();
   const styles: Record<string, string> = {
-    ENROLLED: "bg-emerald-50 text-emerald-600 border-emerald-100",
-    ACCEPTED: "bg-primary-50 text-primary-700 border-blue-100",
+    ENROLLED: "bg-secondary-50 text-secondary-600 border-secondary-100",
+    ACCEPTED: "bg-primary-50 text-primary-700 border-primary-100",
     REJECTED: "bg-red-50 text-red-600 border-red-100",
-    OFFERED: "bg-purple-50 text-purple-600 border-purple-100",
+    OFFERED: "bg-primary-50 text-primary-600 border-primary-100",
     SUBMITTED: "bg-amber-50 text-amber-600 border-amber-100",
     DRAFT: "bg-slate-100 text-slate-500 border-slate-200",
   };
@@ -303,7 +303,7 @@ function StatusBadge({ status, hasPayment }: { status: string; hasPayment: boole
         {s}
       </Badge>
       {s === "ACCEPTED" && hasPayment && (
-        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+        <div className="h-1.5 w-1.5 rounded-full bg-secondary-500 animate-pulse shrink-0" />
       )}
     </div>
   );
@@ -353,7 +353,7 @@ function ActionMenu({
           Options
         </DropdownMenuLabel>
 
-        <DropdownMenuItem className="rounded-xl focus:bg-indigo-50 cursor-pointer text-sm">
+        <DropdownMenuItem className="rounded-xl focus:bg-primary-50 cursor-pointer text-sm">
           <CreditCard className="h-4 w-4 mr-2 text-slate-400" />
           Payments
         </DropdownMenuItem>
@@ -364,7 +364,7 @@ function ActionMenu({
             <DropdownMenuItem
               onClick={() => onEnroll(app.id)}
               disabled={loadingEnroll}
-              className="rounded-xl bg-emerald-50 text-emerald-700 focus:bg-emerald-100 focus:text-emerald-800 font-bold cursor-pointer text-sm"
+              className="rounded-xl bg-secondary-50 text-secondary-700 focus:bg-secondary-100 focus:text-secondary-800 font-bold cursor-pointer text-sm"
             >
               <UserPlus className="h-4 w-4 mr-2" />
               {loadingEnroll ? "Enrolling..." : "Enroll Now"}

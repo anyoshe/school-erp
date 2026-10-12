@@ -114,7 +114,7 @@ export default function FinanceDashboard() {
       </div>
 
       {/* Total Revenue Collected So Far */}
-      <Card className="border-green-600 bg-secondary-50/80 dark:bg-green-950/50">
+      <Card className="border-secondary bg-secondary-50/80 dark:bg-secondary-950/50">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-xl">Total Revenue Collected So Far</CardTitle>
           <TrendingUp className="h-6 w-6 text-secondary-600" />
@@ -162,10 +162,10 @@ export default function FinanceDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Collection Rate</CardTitle>
-            <TrendingUp className="h-4 w-4 text-purple-600" />
+            <TrendingUp className="h-4 w-4 text-primary-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-600">
+            <div className="text-2xl font-bold text-primary-600">
               {loading ? "Loading..." : `${collectionRate()}%`}
             </div>
             <p className="text-xs text-muted-foreground mt-2">Of total invoiced</p>
@@ -188,10 +188,10 @@ export default function FinanceDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Invoiced</CardTitle>
-            <BarChart2 className="h-4 w-4 text-indigo-600" />
+            <BarChart2 className="h-4 w-4 text-primary-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-indigo-600">
+            <div className="text-2xl font-bold text-primary-600">
               {loading ? "Loading..." : `KES ${stats.totalInvoiced.toLocaleString()}`}
             </div>
             <p className="text-xs text-muted-foreground mt-2">Total billing amount</p>
@@ -228,7 +228,7 @@ export default function FinanceDashboard() {
               { label: `This Year (${detectedYear})`, value: revenueByPeriod.year },
               { label: "All Time", value: revenueByPeriod.all },
             ].map((period, i) => (
-              <div key={i} className="bg-secondary-50 dark:bg-green-950/70 p-5 rounded-xl border border-green-100 dark:border-green-900">
+              <div key={i} className="bg-secondary-50 dark:bg-secondary-950/70 p-5 rounded-xl border border-secondary-100 dark:border-secondary-900">
                 <p className="text-sm text-muted-foreground">{period.label}</p>
                 <p className="text-3xl font-bold mt-3 text-secondary-600">
                   KES {period.value.toLocaleString()}
@@ -281,11 +281,11 @@ export default function FinanceDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {[
           { href: "/dashboard/modules/finance/fee-structures", label: "Manage Fee Structures", variant: "outline" as const },
-          { href: "/dashboard/modules/finance/payment-plans", label: "Manage Payment Plans", variant: "default" as const, className: "bg-indigo-600 hover:bg-indigo-700" },
+          { href: "/dashboard/modules/finance/payment-plans", label: "Manage Payment Plans", variant: "default" as const, className: "bg-primary hover:bg-primary-700" },
           { href: "/dashboard/modules/finance/student-assignments", label: "Assign Fees to Students", variant: "outline" as const },
           { href: "/dashboard/modules/finance/invoices", label: "View & Manage Invoices", variant: "outline" as const },
-          { href: "/dashboard/modules/finance/payments", label: "Record Payments", variant: "default" as const, className: "bg-secondary hover:bg-green-700" },
-          { href: "/dashboard/modules/finance/post-balances", label: "Post Balances", variant: "default" as const, className: "bg-emerald-600 hover:bg-emerald-700" },
+          { href: "/dashboard/modules/finance/payments", label: "Record Payments", variant: "default" as const, className: "bg-secondary hover:bg-secondary-700" },
+          { href: "/dashboard/modules/finance/post-balances", label: "Post Balances", variant: "default" as const, className: "bg-secondary hover:bg-secondary-700" },
           { href: "/dashboard/modules/finance/receipts", label: "Print Receipts", variant: "outline" as const },
           { href: "/dashboard/modules/finance/reports", label: "View Reports", variant: "outline" as const },
         ].map((btn, i) => (
@@ -325,7 +325,7 @@ export default function FinanceDashboard() {
                 "Payments tracked"
               ].map((item, i) => (
                 <label key={i} className="flex items-center gap-2">
-                  <input type="checkbox" disabled checked className="accent-green-600" />
+                  <input type="checkbox" disabled checked className="accent-secondary" />
                   <span>✓ {item}</span>
                 </label>
               ))}

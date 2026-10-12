@@ -142,11 +142,11 @@ export default function PlatformAdminPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50/50">
+    <main className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-primary-50/50">
       <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
         <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="mb-2 inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-sm font-medium text-indigo-700">
+            <p className="mb-2 inline-flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1 text-sm font-medium text-primary-700">
               <ShieldCheck className="h-4 w-4" />
               Platform administration
             </p>
@@ -189,7 +189,7 @@ export default function PlatformAdminPage() {
             maxLength={500}
             rows={2}
             placeholder="Describe the support request. This reason will be retained in the access audit trail."
-            className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
           />
           <p className="mt-1 text-xs text-gray-500">Support access is read-only. API authorization is verified on the server for every school-scoped request.</p>
         </section>
@@ -201,10 +201,10 @@ export default function PlatformAdminPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by school, email, city, or country"
-              className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              className="w-full rounded-lg border border-gray-300 bg-white py-2.5 pl-10 pr-3 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-200"
             />
           </div>
-          <button type="submit" className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700">Search</button>
+          <button type="submit" className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:bg-primary-700">Search</button>
         </form>
 
         <section className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
@@ -224,10 +224,10 @@ export default function PlatformAdminPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${school.setup_complete ? "bg-green-100 text-secondary-800" : "bg-gray-100 text-gray-700"}`}>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${school.setup_complete ? "bg-secondary-100 text-secondary-800" : "bg-gray-100 text-gray-700"}`}>
                     {school.setup_complete ? "Setup complete" : "Setup incomplete"}
                   </span>
-                  <button type="button" disabled={working || !reason.trim()} onClick={() => enterSupport(school)} className="rounded-lg border border-indigo-200 px-3 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50">
+                  <button type="button" disabled={working || !reason.trim()} onClick={() => enterSupport(school)} className="rounded-lg border border-primary-200 px-3 py-2 text-sm font-semibold text-primary-700 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-50">
                     Enter support context
                   </button>
                 </div>

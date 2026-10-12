@@ -22,7 +22,7 @@ export default function OnboardButton({ applicationId, onSuccess }: Props) {
   return (
     <button
       onClick={handleEnroll}
-      className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg"
+      className="bg-primary hover:bg-primary-700 text-white font-bold py-3 px-6 rounded-lg"
     >
       Enroll as Student
     </button>

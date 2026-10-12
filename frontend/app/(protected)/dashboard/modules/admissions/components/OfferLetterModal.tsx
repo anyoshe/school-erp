@@ -255,14 +255,14 @@ export default function OfferLetterModal({
             </div>
 
             <div className="bg-slate-900 text-white p-6 rounded-xl shadow-inner max-h-64 overflow-y-auto">
-              <h4 className="text-indigo-400 text-xs font-bold uppercase tracking-widest mb-4">Structure Breakdown</h4>
+              <h4 className="text-primary-400 text-xs font-bold uppercase tracking-widest mb-4">Structure Breakdown</h4>
               {feeLoading ? <Loader2 className="animate-spin h-5 w-5" /> : (
                 <div className="space-y-6">
                   {feeStructures.map(fs => (
                     <div key={fs.id} className="border-l-2 border-slate-700 pl-4">
                       <div className="flex justify-between items-center mb-1">
                         <span className="text-xs font-bold text-slate-400 uppercase">{fs.period_details?.name || fs.period_name || "Period"}</span>
-                        <span className="font-mono text-green-400">KES {Number(fs.total_amount).toLocaleString()}</span>
+                        <span className="font-mono text-secondary-400">KES {Number(fs.total_amount).toLocaleString()}</span>
                       </div>
                       <p className="text-sm font-semibold mb-2">{fs.name}</p>
                       {fs.structure_items?.map((si: any) => (
@@ -301,7 +301,7 @@ export default function OfferLetterModal({
           <Button 
             onClick={handleFinalize} 
             disabled={!hasGenerated || isUpdating}
-            className={`px-8 ${hasGenerated ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-300'}`}
+            className={`px-8 ${hasGenerated ? 'bg-primary hover:bg-primary-700' : 'bg-slate-300'}`}
           >
             {isUpdating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
             Finalize Offer

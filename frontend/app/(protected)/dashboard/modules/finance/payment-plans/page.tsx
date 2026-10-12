@@ -132,7 +132,7 @@ export default function PaymentPlansPage() {
         <Card className="lg:col-span-1 border-slate-200 shadow-sm">
           <CardHeader className="bg-slate-50/50 border-b">
             <CardTitle className="text-lg flex items-center gap-2">
-              <CalendarClock className="w-5 h-5 text-indigo-600" />
+              <CalendarClock className="w-5 h-5 text-primary-600" />
               Configure New Plan
             </CardTitle>
           </CardHeader>
@@ -190,7 +190,7 @@ export default function PaymentPlansPage() {
                 />
               </div>
 
-              <Button className="w-full bg-indigo-600 hover:bg-indigo-700" disabled={isSubmitting}>
+              <Button className="w-full bg-primary hover:bg-primary-700" disabled={isSubmitting}>
                 {isSubmitting ? (
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
                 ) : (
@@ -230,7 +230,7 @@ export default function PaymentPlansPage() {
                         <TableCell className="font-medium">{plan.name}</TableCell>
                         <TableCell>{plan.number_of_installments} payments</TableCell>
                         <TableCell>
-                          <span className="px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-bold uppercase tracking-wider">
+                          <span className="px-2 py-1 rounded-full bg-primary-50 text-primary-700 text-[10px] font-bold uppercase tracking-wider">
                             {plan.frequency}
                           </span>
                         </TableCell>

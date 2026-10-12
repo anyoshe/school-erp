@@ -310,7 +310,7 @@ export default function InvoicesPage() {
                         </td>
                         <td className="py-3 px-3">
                           {invoice.is_paid ? (
-                            <Badge className="bg-green-100 text-secondary-800">Paid</Badge>
+                            <Badge className="bg-secondary-100 text-secondary-800">Paid</Badge>
                           ) : isOverdue ? (
                             <Badge className="bg-red-100 text-red-800">Overdue</Badge>
                           ) : (

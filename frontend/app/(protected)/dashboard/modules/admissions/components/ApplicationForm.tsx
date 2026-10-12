@@ -301,7 +301,7 @@ export default function ApplicationForm({
             </p>
           </div>
           {isDirectEnroll && (
-            <span className="text-xs bg-green-100 text-secondary-800 px-3 py-1 rounded-full">
+            <span className="text-xs bg-secondary-100 text-secondary-800 px-3 py-1 rounded-full">
               Direct Enrollment
             </span>
           )}

@@ -317,7 +317,7 @@ export default function Welcome() {
                           {/* Error Alert */}
                           {error && (
                             <div
-                              className={`mb-4 p-3 rounded-lg flex items-start gap-2 text-sm ${error.includes("successfully") ? "bg-green-100 text-secondary-800 border-secondary-200" : "bg-red-100 text-red-800 border-red-200"
+                              className={`mb-4 p-3 rounded-lg flex items-start gap-2 text-sm ${error.includes("successfully") ? "bg-secondary-100 text-secondary-800 border-secondary-200" : "bg-red-100 text-red-800 border-red-200"
                                 }`}
                             >
                               <Shield className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -330,12 +330,12 @@ export default function Welcome() {
 
 
                             {activeTab === "signup" && (
-                              <div className="mb-6 p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+                              <div className="mb-6 p-4 bg-primary-50 rounded-xl border border-primary-100">
                                 <div className="flex items-center gap-3 mb-2">
-                                  <BookOpen className="h-5 w-5 text-indigo-600" />
-                                  <h3 className="font-semibold text-indigo-800">Create Your School Account</h3>
+                                  <BookOpen className="h-5 w-5 text-primary-600" />
+                                  <h3 className="font-semibold text-primary-800">Create Your School Account</h3>
                                 </div>
-                                <p className="text-sm text-indigo-700">
+                                <p className="text-sm text-primary-700">
                                   Sign up to set up your school on AxeEDU. You'll become the administrator and can invite teachers, staff and parents later.
                                 </p>
                               </div>

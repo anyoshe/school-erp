@@ -188,7 +188,7 @@ export default function InterviewCompletedModal({
           <Button
             onClick={handleSubmit}
             disabled={loading || !form.completedDate || !form.outcome}
-            className="bg-secondary hover:bg-green-700"
+            className="bg-secondary hover:bg-secondary-700"
           >
             {loading ? (
               <>

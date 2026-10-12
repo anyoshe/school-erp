@@ -66,7 +66,7 @@ export default function StudentTable({ students, onEdit, onDelete }: Props) {
             <td className="p-3">
               <span
                 className={`px-2 py-1 rounded text-sm ${s.status === "ACTIVE"
-                  ? "bg-green-100 text-secondary-700"
+                  ? "bg-secondary-100 text-secondary-700"
                   : "bg-gray-200 text-gray-700"
                   }`}
               >

@@ -476,7 +476,7 @@ function SetupWizardContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-50">
       <div className="max-w-5xl mx-auto px-4 py-8 sm:py-12">
         {/* Progress Bar */}
         <div className="mb-12">
@@ -725,7 +725,7 @@ function SetupWizardContent() {
                     <button
                       type="button"
                       onClick={() => updateForm("termSystem", "terms")}
-                      className={`p-6 rounded-xl border-2 transition-all ${formData.termSystem === "terms" ? "border-blue-600 bg-primary-50" : "border-gray-300 hover:border-gray-400"
+                      className={`p-6 rounded-xl border-2 transition-all ${formData.termSystem === "terms" ? "border-primary bg-primary-50" : "border-gray-300 hover:border-gray-400"
                         }`}
                     >
                       <div className="font-semibold text-lg">Terms</div>
@@ -734,7 +734,7 @@ function SetupWizardContent() {
                     <button
                       type="button"
                       onClick={() => updateForm("termSystem", "semesters")}
-                      className={`p-6 rounded-xl border-2 transition-all ${formData.termSystem === "semesters" ? "border-blue-600 bg-primary-50" : "border-gray-300 hover:border-gray-400"
+                      className={`p-6 rounded-xl border-2 transition-all ${formData.termSystem === "semesters" ? "border-primary bg-primary-50" : "border-gray-300 hover:border-gray-400"
                         }`}
                     >
                       <div className="font-semibold text-lg">Semesters</div>
@@ -784,8 +784,8 @@ function SetupWizardContent() {
                       key={template.id}
                       onClick={() => updateForm("selectedCurriculumId", template.id)}
                       className={`p-6 border-2 rounded-xl cursor-pointer transition-all hover:shadow-md ${formData.selectedCurriculumId === template.id
-                        ? "border-blue-600 bg-primary-50 shadow-md"
-                        : "border-gray-200 hover:border-blue-300"
+                        ? "border-primary bg-primary-50 shadow-md"
+                        : "border-gray-200 hover:border-primary-300"
                         }`}
                     >
                       <h4 className="text-lg font-semibold">{template.name}</h4>
@@ -893,7 +893,7 @@ function SetupWizardContent() {
                         }} className="text-red-500 text-xl">×</button>
                       </div>
 
-                      <div className="pl-4 border-l-2 border-purple-300">
+                      <div className="pl-4 border-l-2 border-primary-300">
                         <p className="text-sm text-gray-500 mb-2">Tracks under this pathway:</p>
                         <div className="flex flex-wrap gap-2 mb-3">
                           {(formData.tracks[pathway.name] || []).map((track, tIndex) => (
@@ -1094,7 +1094,7 @@ function SetupWizardContent() {
             {/* Step 7: Review & Complete */}
             {currentStep === 6 && (
               <div className="text-center py-12">
-                <div className="w-24 h-24 mx-auto mb-6 bg-green-100 rounded-full flex items-center justify-center">
+                <div className="w-24 h-24 mx-auto mb-6 bg-secondary-100 rounded-full flex items-center justify-center">
                   <CheckCircle className="w-16 h-16 text-secondary-600" />
                 </div>
                 <h3 className="text-3xl font-bold text-gray-900 mb-4">All Set! Your school is ready</h3>

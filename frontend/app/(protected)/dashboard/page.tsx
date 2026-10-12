@@ -95,16 +95,16 @@ export default function DashboardHome() {
       blue: {
         bg: "bg-primary",
         text: "text-primary-700",
-        ring: "ring-blue-200",
+        ring: "ring-primary-200",
         hover: "hover:bg-primary-50",
         gradient: "from-primary-600 to-primary-700"
       },
       emerald: {
-        bg: "bg-emerald-600",
-        text: "text-emerald-600",
-        ring: "ring-emerald-200",
-        hover: "hover:bg-emerald-50",
-        gradient: "from-emerald-500 to-emerald-600"
+        bg: "bg-secondary",
+        text: "text-secondary-600",
+        ring: "ring-secondary-200",
+        hover: "hover:bg-secondary-50",
+        gradient: "from-secondary-500 to-secondary"
       },
       amber: {
         bg: "bg-amber-500",
@@ -114,11 +114,11 @@ export default function DashboardHome() {
         gradient: "from-amber-400 to-amber-500"
       },
       purple: {
-        bg: "bg-purple-600",
-        text: "text-purple-600",
-        ring: "ring-purple-200",
-        hover: "hover:bg-purple-50",
-        gradient: "from-purple-500 to-purple-600"
+        bg: "bg-primary",
+        text: "text-primary-600",
+        ring: "ring-primary-200",
+        hover: "hover:bg-primary-50",
+        gradient: "from-primary-600 to-primary-800"
       },
       rose: {
         bg: "bg-rose-600",
@@ -128,11 +128,11 @@ export default function DashboardHome() {
         gradient: "from-rose-500 to-rose-600"
       },
       indigo: {
-        bg: "bg-indigo-600",
-        text: "text-indigo-600",
-        ring: "ring-indigo-200",
-        hover: "hover:bg-indigo-50",
-        gradient: "from-indigo-500 to-primary-800"
+        bg: "bg-primary",
+        text: "text-primary-600",
+        ring: "ring-primary-200",
+        hover: "hover:bg-primary-50",
+        gradient: "from-primary-500 to-primary-800"
       },
       teal: {
         bg: "bg-teal-600",
@@ -150,7 +150,7 @@ export default function DashboardHome() {
   return (
     <div className="space-y-4 sm:space-y-5">
       {/* Welcome Header – now school-aware */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 sm:p-5 border border-blue-100">
+      <div className="bg-gradient-to-r from-primary-50 to-primary-50 rounded-xl p-4 sm:p-5 border border-primary-100">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
@@ -220,7 +220,7 @@ export default function DashboardHome() {
                 <div className={`p-2.5 rounded-lg bg-gradient-to-br ${colors.gradient} bg-opacity-10`}>
                   <stat.icon className={`w-5 h-5 ${colors.text}`} />
                 </div>
-                <span className="flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">
+                <span className="flex items-center gap-1 text-xs font-bold text-secondary-600 bg-secondary-50 px-2 py-1 rounded-full">
                   <TrendingUp className="w-3 h-3" />
                   {stat.change}
                 </span>
@@ -279,7 +279,7 @@ export default function DashboardHome() {
               <span className="text-xs sm:text-sm text-gray-700">Academic</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 bg-emerald-500 rounded-full" />
+              <div className="w-2.5 h-2.5 bg-secondary-500 rounded-full" />
               <span className="text-xs sm:text-sm text-gray-700">Attendance</span>
             </div>
           </div>
@@ -294,7 +294,7 @@ export default function DashboardHome() {
                   style={{ height: `${item.academic * 1.2}px` }}
                 />
                 <div
-                  className="w-1/2 bg-emerald-500 rounded-t hover:bg-emerald-600 transition-colors"
+                  className="w-1/2 bg-secondary-500 rounded-t hover:bg-secondary transition-colors"
                   style={{ height: `${item.attendance * 1.2}px` }}
                 />
               </div>
@@ -310,7 +310,7 @@ export default function DashboardHome() {
         <div className="bg-gradient-to-br from-gray-800 to-gray-900 rounded-xl p-4 text-white">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-base font-bold">System Status</h3>
-            <span className="text-xs bg-emerald-500/30 text-emerald-300 px-2.5 py-1 rounded-full font-medium">
+            <span className="text-xs bg-secondary-500/30 text-secondary-300 px-2.5 py-1 rounded-full font-medium">
               Operational
             </span>
           </div>
@@ -321,7 +321,7 @@ export default function DashboardHome() {
               return (
                 <div key={metric.name} className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${(isGood ? "bg-emerald-500" : isHigh ? "bg-amber-500" : "bg-primary-500")}/20`}>
+                    <div className={`p-2 rounded-lg ${(isGood ? "bg-secondary-500" : isHigh ? "bg-amber-500" : "bg-primary-500")}/20`}>
                       <metric.icon className="w-4 h-4" />
                     </div>
                     <div>
@@ -349,14 +349,14 @@ export default function DashboardHome() {
           <div className="space-y-3">
             {recentActivities.map((activity, i) => (
               <div key={i} className="flex items-start gap-3">
-                <div className={`p-2 rounded-lg ${activity.type === "academic" ? "bg-blue-100" :
-                  activity.type === "finance" ? "bg-emerald-100" :
-                    activity.type === "admin" ? "bg-purple-100" :
+                <div className={`p-2 rounded-lg ${activity.type === "academic" ? "bg-primary-100" :
+                  activity.type === "finance" ? "bg-secondary-100" :
+                    activity.type === "admin" ? "bg-primary-100" :
                       "bg-gray-100"
                   }`}>
                   {activity.type === "academic" ? <BookOpen className="w-4 h-4 text-primary-700" /> :
-                    activity.type === "finance" ? <DollarSign className="w-4 h-4 text-emerald-600" /> :
-                      activity.type === "admin" ? <Users className="w-4 h-4 text-purple-600" /> :
+                    activity.type === "finance" ? <DollarSign className="w-4 h-4 text-secondary-600" /> :
+                      activity.type === "admin" ? <Users className="w-4 h-4 text-primary-600" /> :
                         <Activity className="w-4 h-4 text-gray-600" />}
                 </div>
                 <div className="flex-1 min-w-0">
@@ -386,7 +386,7 @@ export default function DashboardHome() {
             <div key={i} className="text-center p-3 rounded-lg bg-gray-50">
               <div className="text-lg font-bold text-gray-900 mb-1">{item.value}</div>
               <p className="text-xs text-gray-600 mb-2 truncate">{item.label}</p>
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-1 rounded">
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-secondary-700 bg-secondary-100 px-2 py-1 rounded">
                 <CheckCircle className="w-3 h-3" />
                 {item.status}
               </span>

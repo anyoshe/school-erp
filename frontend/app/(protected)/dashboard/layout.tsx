@@ -22,9 +22,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   // Loading state: show spinner while checking auth
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-blue-50/50">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-primary-50/50">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin mb-6 mx-auto" />
+          <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin mb-6 mx-auto" />
           <p className="text-lg font-medium text-gray-700">Loading dashboard...</p>
           <p className="text-sm text-gray-500 mt-2">Preparing your space</p>
         </div>
@@ -51,7 +51,7 @@ function InnerDashboardLayout({ children }: { children: ReactNode }) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-gray-50 via-white to-blue-50/50 overflow-hidden">
+    <div className="flex h-screen bg-gradient-to-br from-gray-50 via-white to-primary-50/50 overflow-hidden">
       {/* Desktop Sidebar */}
       <aside
         className={`
