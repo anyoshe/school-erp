@@ -76,7 +76,20 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
   const { currentSchool, loading, isPlatformAdmin } = useCurrentSchool();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  if (loading) return <div className="p-6 text-gray-400">Loading modules...</div>;
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full bg-white">
+        <div className="p-6 border-b border-border">
+          <div className="h-10 w-10 rounded-xl bg-primary-100 animate-pulse" />
+        </div>
+        <div className="flex-1 p-4 space-y-3">
+          {[1,2,3,4,5].map((i) => (
+            <div key={i} className="h-10 rounded-lg bg-stone-100 animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   const enabledModules = currentSchool?.modules || [];
 // Build unique items by code first (already deduplicated)

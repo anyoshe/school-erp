@@ -114,6 +114,8 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
       }
 
       removeSchoolSupportSessionId();
+      // my-schools already returns full SchoolSerializer (incl. modules)
+      // — skip redundant detail request so dashboard mounts faster
       const schoolsResponse = await api.get("/schools/my-schools/");
       const fetchedSchools: School[] = schoolsResponse.data;
       setSchools(fetchedSchools);
@@ -130,8 +132,7 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
           new Date(b.updated_at || b.created_at || 0).getTime()
           - new Date(a.updated_at || a.created_at || 0).getTime()
         )[0];
-      const detailResponse = await api.get(`/schools/${selected.id}/`);
-      setCurrentSchoolState(detailResponse.data as School);
+      setCurrentSchoolState(selected);
       persistActiveSchool(selected.id);
     } catch (err: any) {
       console.error("[Context] Failed to load schools:", err);

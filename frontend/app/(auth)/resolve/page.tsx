@@ -2,20 +2,24 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { getCurrentUser } from "@/utils/api";
+import { setActiveSchool, getActiveSchoolId } from "@/utils/auth";
 
 export default function AuthResolvePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
-    console.log("=== AuthResolvePage MOUNTED ===");
-    console.log("Starting user redirection resolution...");
+    let cancelled = false;
 
     async function resolveUserFlow() {
       try {
-        console.log("Fetching current user...");
         const user = await getCurrentUser(true);
-        console.log("User data:", JSON.stringify(user, null, 2));
+        if (cancelled) return;
+
+        // Seed react-query cache so dashboard does not refetch immediately
+        queryClient.setQueryData(["currentUser"], user);
 
         if (user.force_change_password) {
           router.replace("/change-password?first=true");
@@ -28,60 +32,48 @@ export default function AuthResolvePage() {
         }
 
         if (!user.schools || user.schools.length === 0) {
-          console.log("→ No schools → /onboarding/setup");
           router.replace("/onboarding/setup");
           return;
         }
 
-        const activeSchool = user.active_school || user.schools[0];
-        console.log("Active school:", JSON.stringify(activeSchool, null, 2));
+        const savedId = getActiveSchoolId();
+        const activeSchool =
+          user.schools.find((s: { id: string }) => s.id === savedId) ||
+          user.active_school ||
+          user.schools[0];
+
+        if (activeSchool?.id) {
+          setActiveSchool(activeSchool.id);
+        }
 
         if (!activeSchool?.setup_complete) {
-          console.log("→ Setup incomplete → /onboarding/setup");
           router.replace("/onboarding/setup");
           return;
         }
 
         const modules = activeSchool.modules || [];
         if (modules.length === 0) {
-          console.log("→ No modules → /onboarding/select-modules");
           router.replace("/onboarding/select-modules");
           return;
         }
 
-        console.log("→ All good → /dashboard");
-        await new Promise((r) => setTimeout(r, 400));
         router.replace("/dashboard");
-
-      } catch (error: any) {  // ← type as any
-        console.error("Auth resolution failed:", error);
-
-        // Safely check status
-        const axiosError = error as { response?: { status?: number } };
-        if (axiosError?.response?.status === 401 || axiosError?.response?.status === 403) {
-          console.log("Unauthorized → redirect to /login");
-          router.replace("/login");
-        } else {
-          console.log("Other error → fallback to /login");
-          router.replace("/login");
-        }
-      } finally {
-        console.log("=== AuthResolvePage FINISHED ===");
+      } catch {
+        router.replace("/login");
       }
     }
 
     resolveUserFlow();
-
     return () => {
-      console.log("=== AuthResolvePage UNMOUNTED ===");
+      cancelled = true;
     };
-  }, [router]);
+  }, [router, queryClient]);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-primary-50 to-primary-50">
-      <div className="w-14 h-14 border-4 border-primary-200 border-t-primary rounded-full animate-spin mb-6" />
-      <h2 className="text-xl font-semibold text-primary-900 mb-2">Preparing your experience...</h2>
-      <p className="text-sm text-primary-700">Just a moment while we set everything up.</p>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background">
+      <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mb-5" />
+      <h2 className="text-lg font-semibold text-textPrimary mb-1">Signing you in…</h2>
+      <p className="text-sm text-textMuted">Almost there</p>
     </div>
   );
 }

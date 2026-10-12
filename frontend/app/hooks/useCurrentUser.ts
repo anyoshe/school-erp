@@ -1,30 +1,3 @@
-// // app/hooks/useCurrentUser.ts
-// "use client";
-
-// import { useEffect, useState } from "react";
-// import { getCurrentUser } from "@/utils/api";
-
-// export interface CurrentUser {
-//   id: string;
-//   email: string;
-//   role: string;
-// }
-
-// export function useCurrentUser() {
-//   const [user, setUser] = useState<CurrentUser | null>(null);
-//   const [loading, setLoading] = useState(true);
-
-//   useEffect(() => {
-//     getCurrentUser()
-//       .then(setUser)
-//       .catch(() => setUser(null))
-//       .finally(() => setLoading(false));
-//   }, []);
-
-//   return { user, loading };
-// }
-
-// app/hooks/useCurrentUser.ts
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
@@ -43,19 +16,32 @@ export interface CurrentUser {
   schools: Array<{
     id: string;
     name: string;
+    setup_complete?: boolean;
+    modules?: Array<{ id: number; name: string; code: string }>;
   }>;
+  active_school?: {
+    id: string;
+    name: string;
+    setup_complete?: boolean;
+    modules?: Array<{ id: number; name: string; code: string }>;
+  };
 }
 
 export function useCurrentUser() {
-  const { data: user = null, isLoading, error } = useQuery<CurrentUser>({
+  const { data: user = null, isLoading, isFetching, error } = useQuery<CurrentUser>({
     queryKey: ["currentUser"],
     queryFn: () => getCurrentUser(),
-    staleTime: 60_000,
+    staleTime: 5 * 60_000, // 5 minutes – avoid refetch on every navigation
+    gcTime: 30 * 60_000,
+    retry: 1,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false, // use cache seeded by /resolve when available
   });
 
   return {
     user,
-    loading: isLoading,
+    loading: isLoading && !user,
+    fetching: isFetching,
     error: error ? "Failed to load user information" : null,
   };
 }

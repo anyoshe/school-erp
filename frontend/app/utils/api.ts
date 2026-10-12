@@ -1,4 +1,3 @@
-
 // app/utils/api.ts
 import axios from "axios";
 import {
@@ -14,7 +13,6 @@ const api = axios.create({
   baseURL: API_BASE_URL,
 });
 
-// Attach interceptors only in browser
 if (typeof window !== "undefined") {
   api.interceptors.request.use((config) => {
     const token = getToken();
@@ -25,10 +23,6 @@ if (typeof window !== "undefined") {
       url.includes("/schools/support-context/") ||
       url.includes("/schools/start-support-context/");
     const schoolId = isPlatformRequest ? null : getActiveSchoolId();
-    
-    console.log("[API] Making request to:", config.url);
-    console.log("[API] Token present:", !!token);
-    console.log("[API] School ID:", schoolId);
 
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -36,14 +30,12 @@ if (typeof window !== "undefined") {
 
     if (schoolId && config.headers) {
       config.headers["X-School-ID"] = schoolId;
-      console.log("[API] Added X-School-ID header:", schoolId);
       const supportSessionId = getSchoolSupportSessionId();
       if (supportSessionId) {
         config.headers["X-School-Support-ID"] = supportSessionId;
       }
     }
 
-    // Handle FormData properly
     if (config.data instanceof FormData && config.headers) {
       delete config.headers["Content-Type"];
     }
@@ -52,10 +44,10 @@ if (typeof window !== "undefined") {
   });
 }
 
-// ✅ Add helper method
 export const getCurrentUser = async (forceFresh: boolean = false) => {
   const params = forceFresh ? { t: Date.now() } : {};
   const res = await api.get("/accounts/me/", { params });
   return res.data;
 };
+
 export default api;
