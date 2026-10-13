@@ -336,3 +336,134 @@ class SchoolAcademicStatusView(APIView):
             })
         except Exception as e:
             return Response({"detail": str(e)}, status=400)
+
+# ---------------------------------------------------------------------------
+# Academic Year / Term / Section / Stream / Subject
+# ---------------------------------------------------------------------------
+from rest_framework import status
+from .serializers import (
+    AcademicYearSerializer,
+    AcademicYearCreateUpdateSerializer,
+    TermSerializer,
+    TermCreateUpdateSerializer,
+    SectionSerializer,
+    StreamSerializer,
+    SubjectSerializer,
+    SubjectCreateUpdateSerializer,
+)
+from .models import AcademicYear, Term, Section, Stream, Subject
+
+
+class AcademicYearViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action in ("create", "update", "partial_update"):
+            return AcademicYearCreateUpdateSerializer
+        return AcademicYearSerializer
+
+    def get_queryset(self):
+        return AcademicYear.objects.filter(
+            school_id__in=accessible_school_ids(self.request)
+        ).prefetch_related("terms").order_by("-start_date")
+
+    def perform_create(self, serializer):
+        school = selected_school(self.request)
+        instance = serializer.save(school=school)
+        # Ensure only one active year per school when activating
+        if instance.is_active:
+            AcademicYear.objects.filter(school=school, is_active=True).exclude(pk=instance.pk).update(is_active=False)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        if instance.is_active and instance.school_id:
+            AcademicYear.objects.filter(
+                school_id=instance.school_id, is_active=True
+            ).exclude(pk=instance.pk).update(is_active=False)
+
+    @action(detail=True, methods=["post"])
+    def activate(self, request, pk=None):
+        year = self.get_object()
+        AcademicYear.objects.filter(school=year.school, is_active=True).update(is_active=False)
+        year.is_active = True
+        year.save(update_fields=["is_active"])
+        return Response(AcademicYearSerializer(year).data)
+
+    @action(detail=True, methods=["post"])
+    def add_term(self, request, pk=None):
+        year = self.get_object()
+        ser = TermCreateUpdateSerializer(data={**request.data, "academic_year": year.pk})
+        ser.is_valid(raise_exception=True)
+        term = ser.save()
+        return Response(TermSerializer(term).data, status=status.HTTP_201_CREATED)
+
+
+class TermViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = TermSerializer
+
+    def get_serializer_class(self):
+        if self.action in ("create", "update", "partial_update"):
+            return TermCreateUpdateSerializer
+        return TermSerializer
+
+    def get_queryset(self):
+        qs = Term.objects.filter(
+            academic_year__school_id__in=accessible_school_ids(self.request)
+        ).select_related("academic_year")
+        year_id = self.request.query_params.get("academic_year")
+        if year_id:
+            qs = qs.filter(academic_year_id=year_id)
+        return qs.order_by("order")
+
+
+class SectionViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = SectionSerializer
+
+    def get_queryset(self):
+        qs = Section.objects.filter(
+            grade_level__school_id__in=accessible_school_ids(self.request)
+        ).select_related("grade_level")
+        grade_id = self.request.query_params.get("grade_level")
+        if grade_id:
+            qs = qs.filter(grade_level_id=grade_id)
+        return qs
+
+    def perform_create(self, serializer):
+        grade = serializer.validated_data["grade_level"]
+        if grade.school_id not in set(accessible_school_ids(self.request)):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Invalid grade level for this school.")
+        serializer.save()
+
+
+class StreamViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = StreamSerializer
+
+    def get_queryset(self):
+        qs = Stream.objects.filter(
+            grade_level__school_id__in=accessible_school_ids(self.request)
+        ).select_related("grade_level")
+        grade_id = self.request.query_params.get("grade_level")
+        if grade_id:
+            qs = qs.filter(grade_level_id=grade_id)
+        return qs
+
+
+class SubjectViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_class(self):
+        if self.action in ("create", "update", "partial_update"):
+            return SubjectCreateUpdateSerializer
+        return SubjectSerializer
+
+    def get_queryset(self):
+        return Subject.objects.filter(
+            school_id__in=accessible_school_ids(self.request)
+        ).select_related("department")
+
+    def perform_create(self, serializer):
+        serializer.save(school=selected_school(self.request))

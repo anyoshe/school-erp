@@ -19,7 +19,7 @@ from .serializers import (
 from .module_seed import seed_default_modules
 from apps.core.permissions import IsAssociatedWithSchool
 from .permissions import IsPlatformSuperuser
-from .support import active_support_session, accessible_school_ids, close_support_sessions
+from .support import active_support_session, accessible_school_ids, close_support_sessions, selected_school
 
 class ModuleViewSet(ModelViewSet):
     queryset = Module.objects.all()
@@ -169,3 +169,150 @@ class SchoolViewSet(ModelViewSet):
             "started_at": support_session.started_at,
             "read_only": True,
         })
+
+
+    @action(detail=False, methods=["get"], url_path="pulse")
+    def pulse(self, request):
+        """
+        Owner decision pulse — live KPIs for the selected school.
+        One request powers the dashboard instead of many module digs.
+        """
+        from django.utils import timezone
+        from django.db.models import Sum, Count, Q
+        from decimal import Decimal
+        from apps.students.models import Student
+        from apps.academics.models import AcademicYear, Term, GradeLevel, Section, Subject, Curriculum
+        from apps.admissions.models import Application
+
+        school = selected_school(request)
+        today = timezone.now().date()
+        month_start = today.replace(day=1)
+
+        # Students
+        students_qs = Student.objects.filter(school=school)
+        students_active = students_qs.filter(status="ACTIVE").count()
+        students_total = students_qs.count()
+        by_class = list(
+            students_qs.filter(status="ACTIVE", current_class__isnull=False)
+            .values("current_class__name")
+            .annotate(count=Count("id"))
+            .order_by("current_class__order", "current_class__name")[:12]
+        )
+
+        # Admissions pipeline
+        apps = Application.objects.filter(school=school)
+        admissions = {
+            "draft": apps.filter(status="DRAFT").count(),
+            "submitted": apps.filter(status="SUBMITTED").count(),
+            "under_review": apps.filter(status="UNDER_REVIEW").count(),
+            "accepted": apps.filter(status="ACCEPTED").count(),
+            "enrolled": apps.filter(status="ENROLLED").count(),
+            "this_month": apps.filter(submitted_at__gte=month_start).count() if hasattr(Application, "submitted_at") else apps.filter(created_at__gte=month_start).count() if hasattr(Application, "created_at") else 0,
+        }
+
+        # Finance (best-effort)
+        finance = {
+            "outstanding": "0.00",
+            "collected_month": "0.00",
+            "overdue_invoices": 0,
+            "invoices_unpaid": 0,
+        }
+        try:
+            from apps.finance.models import Invoice, Payment
+            inv = Invoice.objects.filter(Q(school=school) | Q(student__school=school))
+            outstanding = inv.filter(is_paid=False).aggregate(t=Sum("balance"))["t"] or Decimal("0")
+            overdue = inv.filter(is_paid=False, due_date__lt=today).count()
+            unpaid = inv.filter(is_paid=False).count()
+            collected = (
+                Payment.objects.filter(Q(school=school) | Q(invoice__student__school=school), paid_at__date__gte=month_start)
+                .aggregate(t=Sum("amount"))["t"]
+                or Decimal("0")
+            )
+            finance = {
+                "outstanding": f"{outstanding:.2f}",
+                "collected_month": f"{collected:.2f}",
+                "overdue_invoices": overdue,
+                "invoices_unpaid": unpaid,
+            }
+        except Exception:
+            pass
+
+        # Academics structure
+        years = AcademicYear.objects.filter(school=school)
+        active_year = years.filter(is_active=True).first()
+        current_term = None
+        if active_year:
+            current_term = (
+                Term.objects.filter(academic_year=active_year, start_date__lte=today, end_date__gte=today)
+                .order_by("order")
+                .first()
+            )
+        grades = GradeLevel.objects.filter(school=school)
+        sections = Section.objects.filter(grade_level__school=school, is_active=True)
+        subjects = Subject.objects.filter(school=school, is_active=True)
+        curricula = Curriculum.objects.filter(school=school, is_active=True)
+
+        # Readiness score (unique ERP angle) — setup completeness 0-100
+        checks = [
+            curricula.exists(),
+            grades.exists(),
+            sections.exists(),
+            years.exists(),
+            active_year is not None,
+            subjects.exists(),
+            students_active > 0,
+        ]
+        score = int(round(100 * sum(1 for c in checks if c) / len(checks)))
+        gaps = []
+        if not curricula.exists():
+            gaps.append({"code": "curriculum", "label": "Add a curriculum", "href": "/dashboard/modules/academics"})
+        if not grades.exists():
+            gaps.append({"code": "grades", "label": "Define grade levels", "href": "/dashboard/modules/academics"})
+        if not sections.exists():
+            gaps.append({"code": "sections", "label": "Create class sections", "href": "/dashboard/modules/academics"})
+        if not active_year:
+            gaps.append({"code": "year", "label": "Activate an academic year", "href": "/dashboard/modules/academics"})
+        if not subjects.exists():
+            gaps.append({"code": "subjects", "label": "Add subjects", "href": "/dashboard/modules/academics"})
+
+        return Response({
+            "school": {"id": str(school.id), "name": school.name, "currency_symbol": getattr(school, "currency_symbol", None) or school.currency},
+            "as_of": today.isoformat(),
+            "readiness_score": score,
+            "gaps": gaps,
+            "students": {
+                "active": students_active,
+                "total": students_total,
+                "by_class": [
+                    {"name": r["current_class__name"], "count": r["count"]} for r in by_class
+                ],
+            },
+            "admissions": admissions,
+            "finance": finance,
+            "academics": {
+                "curricula": curricula.count(),
+                "grade_levels": grades.count(),
+                "sections": sections.count(),
+                "subjects": subjects.count(),
+                "academic_years": years.count(),
+                "active_year": AcademicYearSerializerLite(active_year).data if active_year else None,
+                "current_term": {
+                    "id": current_term.id,
+                    "name": current_term.name,
+                    "start_date": current_term.start_date,
+                    "end_date": current_term.end_date,
+                } if current_term else None,
+            },
+        })
+
+
+def AcademicYearSerializerLite(year):
+    if not year:
+        return None
+    return {
+        "id": year.id,
+        "name": year.name,
+        "start_date": year.start_date,
+        "end_date": year.end_date,
+        "is_active": year.is_active,
+    }
