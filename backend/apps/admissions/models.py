@@ -624,11 +624,51 @@ class Application(models.Model):
             except Exception:
                 fee_structure_obj = None
 
-        # Clean placement fields
-        cleaned_section = str(wd.get('section', '') or self.section or '').strip()[:100]
-        cleaned_pathway = str(wd.get('pathway', '')).strip()[:50]
-        cleaned_track   = str(wd.get('track', '')).strip()[:100]
-        cleaned_stream  = str(wd.get('stream', '')).strip()[:100]
+        # Resolve placement FKs (Application stores labels; Student uses model FKs)
+        from apps.academics.models import Section, Pathway, Track, Stream
+
+        def _resolve_fk(model, value, **filters):
+            if value in (None, ""):
+                return None
+            qs = model.objects.filter(**filters)
+            try:
+                if str(value).isdigit():
+                    obj = qs.filter(pk=int(value)).first()
+                    if obj:
+                        return obj
+            except Exception:
+                pass
+            # UUID pk
+            try:
+                obj = qs.filter(pk=value).first()
+                if obj:
+                    return obj
+            except Exception:
+                pass
+            return qs.filter(name__iexact=str(value).strip()).first()
+
+        grade = self.class_applied
+        section_obj = _resolve_fk(
+            Section,
+            wd.get("section") or self.section,
+            grade_level=grade,
+        ) if grade else None
+        pathway_obj = _resolve_fk(
+            Pathway,
+            wd.get("pathway") or self.pathway,
+            school=self.school,
+        )
+        track_val = wd.get("track")
+        track_obj = (
+            _resolve_fk(Track, track_val, pathway=pathway_obj)
+            if pathway_obj and track_val
+            else None
+        )
+        stream_obj = _resolve_fk(
+            Stream,
+            wd.get("stream") or self.stream,
+            grade_level=grade,
+        ) if grade else None
 
         # Create Student - Build on existing data
         student = Student.objects.create(
@@ -676,11 +716,11 @@ class Application(models.Model):
             sponsor_name=wd.get("sponsor_name", ""),
             notes=wd.get('notes', self.notes or ""),
 
-            # ── NEW: Placement Hierarchy ──
-            section=cleaned_section,
-            pathway=cleaned_pathway,
-            track=cleaned_track,
-            stream=cleaned_stream,
+            # Placement hierarchy (resolved FK objects)
+            section=section_obj,
+            pathway=pathway_obj,
+            track=track_obj,
+            stream=stream_obj,
             house=wd.get('house', ''),
             dorm_room=wd.get('dorm_room', ''),
             vaccination_status=wd.get('vaccination_status', 'UNKNOWN'),

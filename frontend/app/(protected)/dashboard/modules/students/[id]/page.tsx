@@ -306,25 +306,72 @@ export default function StudentProfilePage() {
     );
   }
 
+  const balanceDue = financeSummary
+    ? Math.max(0, Number(financeSummary.outstanding_balance ?? financeSummary.balance_due ?? 0))
+    : null;
+  const classLabel = student.current_class
+    ? (student.current_class.name || student.current_class.short_name || "Class")
+    : "Not placed";
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-6">
       <Button variant="ghost" onClick={() => router.back()} className="w-fit gap-2">
         <ArrowLeft className="h-4 w-4" /> Back
       </Button>
 
-      <Card>
-        <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      {/* Student hub banner */}
+      <div
+        className="rounded-3xl p-6 text-white shadow-lg overflow-hidden relative"
+        style={{ background: "linear-gradient(135deg, #0F766E 0%, #115E59 50%, #D97706 150%)" }}
+      >
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <CardTitle className="text-2xl">
+            <p className="text-sm font-semibold" style={{ color: "#CCFBF1" }}>Student hub</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white mt-1">
               {student.full_name || `${student.first_name} ${student.last_name}`}
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">Admission No: {student.admission_number || "N/A"}</p>
+            </h1>
+            <p className="text-sm mt-1" style={{ color: "#E7E5E4" }}>
+              Adm. {student.admission_number || "—"}
+              {student.gender ? ` · ${student.gender}` : ""}
+            </p>
+            <div className="flex flex-wrap gap-2 mt-3">
+              <span className="rounded-full px-3 py-1 text-xs font-bold uppercase bg-white/20">
+                {student.status || "UNKNOWN"}
+              </span>
+              <span className="rounded-full px-3 py-1 text-xs font-semibold bg-white/15">
+                {classLabel}
+              </span>
+              {student.boarding_status && (
+                <span className="rounded-full px-3 py-1 text-xs font-semibold bg-white/15">
+                  {student.boarding_status}
+                </span>
+              )}
+            </div>
           </div>
-          <Badge className="uppercase">{student.status || "UNKNOWN"}</Badge>
+          <div className="grid grid-cols-2 gap-3 min-w-[240px]">
+            <div className="rounded-2xl bg-white/15 backdrop-blur px-4 py-3">
+              <p className="text-[10px] uppercase font-bold tracking-wide" style={{ color: "#CCFBF1" }}>Class</p>
+              <p className="text-lg font-bold text-white mt-0.5">{classLabel}</p>
+            </div>
+            <div className="rounded-2xl bg-white/15 backdrop-blur px-4 py-3">
+              <p className="text-[10px] uppercase font-bold tracking-wide" style={{ color: "#FDE68A" }}>Balance due</p>
+              <p className="text-lg font-bold text-white mt-0.5">
+                {financeSummary
+                  ? `${financeSummary.currency} ${Number(balanceDue || 0).toLocaleString()}`
+                  : "…"}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Personal & placement</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
+            <div className="space-y-2 text-sm">
               <p><strong>Gender:</strong> {student.gender || "N/A"}</p>
               <p><strong>Date of Birth:</strong> {student.date_of_birth || "N/A"}</p>
               <p><strong>Nationality:</strong> {student.nationality || "N/A"}</p>
@@ -340,11 +387,11 @@ export default function StudentProfilePage() {
               </p>
             </div>
 
-            <div className="space-y-2">
-              <p><strong>Class:</strong> {student.current_class ? student.current_class.name || student.current_class.short_name || "N/A" : "N/A"}</p>
-              <p><strong>Stream:</strong> {student.stream || "N/A"}</p>
+            <div className="space-y-2 text-sm">
+              <p><strong>Class:</strong> {classLabel}</p>
+              <p><strong>Stream:</strong> {typeof student.stream === "object" && student.stream ? (student.stream as any).name : (student.stream || "N/A")}</p>
               <p><strong>Boarding:</strong> {student.boarding_status || "N/A"}</p>
-              <p><strong>Special Needs:</strong> {student.special_needs || "None"}</p>
+              <p><strong>Special Needs:</strong> {(student as any).special_needs || "None"}</p>
               <p><strong>Admission Date:</strong> {student.admission_date || "N/A"}</p>
             </div>
           </div>

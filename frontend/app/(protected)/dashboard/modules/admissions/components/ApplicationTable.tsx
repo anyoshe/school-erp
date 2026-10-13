@@ -326,6 +326,7 @@ function ActionMenu({
   loadingEnroll,
   loadingDelete,
 }: ActionMenuProps) {
+  const router = useRouter();
   const canEnroll =
     app.status === "ACCEPTED" &&
     (app.fee_payments?.length ?? 0) > 0 &&
@@ -352,6 +353,16 @@ function ActionMenu({
         <DropdownMenuLabel className="text-[10px] font-black uppercase text-slate-400 px-2 py-1.5">
           Options
         </DropdownMenuLabel>
+
+        {app.student?.id && (
+          <DropdownMenuItem
+            className="rounded-xl focus:bg-secondary-50 cursor-pointer text-sm font-semibold text-secondary-800"
+            onClick={() => router.push(`/dashboard/modules/students/${app.student!.id}`)}
+          >
+            <User className="h-4 w-4 mr-2" />
+            View student profile
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuItem className="rounded-xl focus:bg-primary-50 cursor-pointer text-sm">
           <CreditCard className="h-4 w-4 mr-2 text-slate-400" />
