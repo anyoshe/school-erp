@@ -126,3 +126,24 @@ export async function fetchCurricula() {
   return (data.results ?? data) as Curriculum[];
 }
 
+
+export type CurriculumTemplate = {
+  id: number;
+  name: string;
+  short_code?: string;
+  description?: string;
+  is_active: boolean;
+};
+
+export async function fetchCurriculumTemplates() {
+  const { data } = await api.get("/academics/curriculum-templates/");
+  return (data.results ?? data) as CurriculumTemplate[];
+}
+
+/** Clone a global template (CBC, 8-4-4, etc.) into this school with its grade levels */
+export async function adoptCurriculumTemplate(templateId: number) {
+  const { data } = await api.post("/academics/copy-template/", {
+    template_id: templateId,
+  });
+  return data;
+}

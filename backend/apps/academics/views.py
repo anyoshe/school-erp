@@ -20,12 +20,29 @@ from apps.school.support import accessible_school_ids, selected_school
 
 class CurriculumTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    Public endpoint for setup wizard to list available curriculum templates
+    List global curriculum templates (CBC, 8-4-4, Cambridge, ...).
+    If none exist (e.g. fixture never loaded), attempt to seed from fixture once.
     """
-    queryset = Curriculum.objects.filter(is_template=True, is_active=True)
     serializer_class = CurriculumTemplateSerializer
     permission_classes = [AllowAny]
     pagination_class = None
+
+    def get_queryset(self):
+        qs = Curriculum.objects.filter(is_template=True, is_active=True)
+        if not qs.exists():
+            try:
+                from django.core.management import call_command
+                from django.conf import settings
+                import os
+                fixture_path = os.path.join(
+                    settings.BASE_DIR, "apps", "academics", "fixtures", "initial_templates.json"
+                )
+                if os.path.exists(fixture_path):
+                    call_command("loaddata", fixture_path, verbosity=0, ignorenonexistent=True)
+                    qs = Curriculum.objects.filter(is_template=True, is_active=True)
+            except Exception as e:
+                print(f"[templates] auto-seed failed: {e}")
+        return qs
 
 
 class CurriculumViewSet(viewsets.ModelViewSet):

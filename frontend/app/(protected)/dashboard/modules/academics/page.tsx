@@ -6,7 +6,7 @@ import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import { toast } from "sonner";
 import {
   BookOpen, CalendarRange, Layers, GraduationCap, Plus, Sparkles,
-  CheckCircle2, Circle, ChevronRight, Users,
+  CheckCircle2, Circle, ChevronRight, Users, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,8 @@ import {
   fetchAcademicYears, createAcademicYear, activateAcademicYear, addTerm,
   fetchGradeLevels, createGradeLevel, createSection,
   fetchSubjects, createSubject, fetchCurricula,
-  type AcademicYear, type GradeLevel,
+  fetchCurriculumTemplates, adoptCurriculumTemplate,
+  type AcademicYear, type GradeLevel, type CurriculumTemplate,
 } from "./services";
 
 type Tab = "overview" | "years" | "classes" | "subjects";
@@ -34,12 +35,18 @@ export default function AcademicsPage() {
   const gradesQ = useQuery({ queryKey: ["grade-levels"], queryFn: fetchGradeLevels });
   const subjectsQ = useQuery({ queryKey: ["subjects"], queryFn: fetchSubjects });
   const curriculaQ = useQuery({ queryKey: ["curricula"], queryFn: fetchCurricula });
+  const templatesQ = useQuery({
+    queryKey: ["curriculum-templates"],
+    queryFn: fetchCurriculumTemplates,
+  });
 
   const years = yearsQ.data ?? [];
   const grades = gradesQ.data ?? [];
   const subjects = subjectsQ.data ?? [];
   const curricula = curriculaQ.data ?? [];
+  const templates = templatesQ.data ?? [];
   const activeYear = years.find((y) => y.is_active) ?? years[0];
+  const needsCurriculum = !curriculaQ.isLoading && curricula.length === 0;
 
   const readiness = useMemo(() => {
     const checks = [
@@ -79,6 +86,18 @@ export default function AcademicsPage() {
         </div>
         <ReadinessRing score={readiness.score} />
       </div>
+
+      {needsCurriculum && (
+        <AdoptCurriculumPanel
+          templates={templates}
+          loading={templatesQ.isLoading}
+          onAdopted={() => {
+            qc.invalidateQueries({ queryKey: ["curricula"] });
+            qc.invalidateQueries({ queryKey: ["grade-levels"] });
+            qc.invalidateQueries({ queryKey: ["school-pulse"] });
+          }}
+        />
+      )}
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-2 border-b border-border pb-2">
@@ -177,7 +196,7 @@ function OverviewPanel({
         <CardContent className="p-5">
           {grades.length === 0 ? (
             <div className="text-center py-10">
-              <p className="text-textMuted mb-4">No grade levels yet — this is the first brick.</p>
+              <p className="text-textMuted mb-4">No grade levels yet — adopt CBC, 8-4-4 or another system above to load them.</p>
               <Button onClick={() => onJump("classes")} className="bg-primary hover:bg-primary-700">
                 <Plus className="h-4 w-4 mr-2" /> Add grade levels
               </Button>
@@ -511,7 +530,7 @@ function ClassesPanel({
       {loading ? (
         <div className="h-32 animate-pulse bg-stone-100 rounded-2xl" />
       ) : grades.length === 0 ? (
-        <Empty hint="e.g. Grade 1, Grade 2… or Form 1–4" />
+        <Empty hint="Adopt an academic system first (CBC / 8-4-4) — grades load automatically" />
       ) : (
         <div className="grid md:grid-cols-2 gap-3">
           {grades.slice().sort((a, b) => a.order - b.order).map((g) => (
@@ -682,6 +701,113 @@ function SubjectsPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+
+function AdoptCurriculumPanel({
+  templates,
+  loading,
+  onAdopted,
+}: {
+  templates: CurriculumTemplate[];
+  loading: boolean;
+  onAdopted: () => void;
+}) {
+  const [selected, setSelected] = useState<number | null>(null);
+  const mut = useMutation({
+    mutationFn: () => adoptCurriculumTemplate(selected!),
+    onSuccess: () => {
+      toast.success("Academic system loaded — grade levels are ready");
+      onAdopted();
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error || err?.response?.data?.detail || "Could not adopt system";
+      toast.error(msg);
+    },
+  });
+
+  return (
+    <div
+      className="rounded-2xl border-2 border-dashed p-5 sm:p-6"
+      style={{ borderColor: "#0F766E55", background: "linear-gradient(135deg, #F0FDFA, #FFFBEB)" }}
+    >
+      <div className="flex flex-col sm:flex-row sm:items-start gap-4 justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-bold text-stone-900 flex items-center gap-2">
+            <GraduationCap className="h-5 w-5" style={{ color: "#0F766E" }} />
+            Choose your academic system
+          </h2>
+          <p className="text-sm text-stone-600 mt-1 max-w-2xl">
+            CBC, 8-4-4, Cambridge and others are pre-seeded. Pick one and we load the matching
+            grade levels automatically — you should not type PP1–Grade 12 by hand.
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 text-stone-500 text-sm py-6">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading systems…
+        </div>
+      ) : templates.length === 0 ? (
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+          No curriculum templates in the database yet. On the server run{" "}
+          <code className="text-xs bg-white px-1 rounded">python manage.py migrate</code>
+          {" "}(templates seed after migrate) or load{" "}
+          <code className="text-xs bg-white px-1 rounded">apps/academics/fixtures/initial_templates.json</code>.
+        </p>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {templates.map((t) => {
+            const active = selected === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setSelected(t.id)}
+                className="text-left rounded-xl border-2 p-4 transition-all bg-white"
+                style={{
+                  borderColor: active ? "#0F766E" : "#E7E5E4",
+                  boxShadow: active ? "0 0 0 3px #0F766E22" : undefined,
+                }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-semibold text-stone-900 text-sm leading-snug">{t.name}</p>
+                  {active && <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: "#0F766E" }} />}
+                </div>
+                {t.short_code && (
+                  <span className="inline-block mt-2 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                    style={{ background: "#CCFBF1", color: "#115E59" }}>
+                    {t.short_code}
+                  </span>
+                )}
+                {t.description && (
+                  <p className="text-xs text-stone-500 mt-2 line-clamp-3">{t.description}</p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Button
+          className="text-white"
+          style={{ background: "#0F766E" }}
+          disabled={!selected || mut.isPending}
+          onClick={() => mut.mutate()}
+        >
+          {mut.isPending ? (
+            <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Loading system…</>
+          ) : (
+            <>Load selected system &amp; classes</>
+          )}
+        </Button>
+        <p className="text-xs text-stone-500">
+          You can still add extra sections (A, B, Blue…) after grades are loaded.
+        </p>
+      </div>
     </div>
   );
 }
