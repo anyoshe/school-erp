@@ -14,6 +14,7 @@ import {
 import api from "@/utils/api";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 
 interface FeeItemTotal {
   groupKey: string;
@@ -52,6 +53,8 @@ interface DashboardSummaryResponse {
 }
 
 export default function FinanceDashboard() {
+  const { currentSchool } = useCurrentSchool();
+  const currency = currentSchool?.currency_symbol || currentSchool?.currency || "KES";
   const [stats, setStats] = useState<Stats>({
     totalOutstanding: 0,
     totalAssigned: 0,
@@ -105,29 +108,37 @@ export default function FinanceDashboard() {
   }, [stats.totalRevenue, stats.totalAssigned]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Finance Dashboard</h1>
-        <p className="text-muted-foreground mt-2">
-          Real-time overview of all school revenue and financial health
-        </p>
-      </div>
-
-      {/* Total Revenue Collected So Far */}
-      <Card className="border-secondary bg-secondary-50/80 dark:bg-secondary-950/50">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-xl">Total Revenue Collected So Far</CardTitle>
-          <TrendingUp className="h-6 w-6 text-secondary-600" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-5xl font-bold text-secondary-600 tracking-tight">
-            {loading ? "..." : `KES ${stats.totalRevenue.toLocaleString()}`}
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* Owner-facing hero */}
+      <div
+        className="rounded-3xl p-6 sm:p-8 text-white shadow-lg relative overflow-hidden"
+        style={{ background: "linear-gradient(135deg, #0F766E 0%, #115E59 40%, #D97706 130%)" }}
+      >
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+          <div>
+            <p className="text-sm font-semibold" style={{ color: "#CCFBF1" }}>Money pulse</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white mt-1 tracking-tight">Finance</h1>
+            <p className="text-sm mt-2 max-w-xl" style={{ color: "#E7E5E4" }}>
+              {currentSchool?.name || "Your school"} — collected vs outstanding at a glance.
+              Assign fees, generate invoices, and record payments without digging.
+            </p>
           </div>
-          <p className="text-sm text-muted-foreground mt-2">
-            All payments received (fees + admission fees)
-          </p>
-        </CardContent>
-      </Card>
+          <div className="grid grid-cols-2 gap-3 min-w-[260px]">
+            <div className="rounded-2xl bg-white/15 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: "#FDE68A" }}>Collected</p>
+              <p className="text-xl font-bold text-white mt-1">
+                {loading ? "…" : `${currency} ${stats.totalRevenue.toLocaleString()}`}
+              </p>
+            </div>
+            <div className="rounded-2xl bg-white/15 px-4 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: "#CCFBF1" }}>Collection rate</p>
+              <p className="text-xl font-bold text-white mt-1">
+                {loading ? "…" : `${collectionRate()}%`}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Main Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -138,7 +149,7 @@ export default function FinanceDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-amber-600">
-              {loading ? "Loading..." : `KES ${stats.totalOutstanding.toLocaleString()}`}
+              {loading ? "Loading..." : `${currency} ${stats.totalOutstanding.toLocaleString()}`}
             </div>
             <p className="text-xs text-muted-foreground mt-2">
               {stats.pendingInvoices} pending invoices
@@ -153,7 +164,7 @@ export default function FinanceDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              {loading ? "Loading..." : `KES ${stats.overdueBalance.toLocaleString()}`}
+              {loading ? "Loading..." : `${currency} ${stats.overdueBalance.toLocaleString()}`}
             </div>
             <p className="text-xs text-muted-foreground mt-2">Past due date</p>
           </CardContent>
@@ -192,7 +203,7 @@ export default function FinanceDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-primary-600">
-              {loading ? "Loading..." : `KES ${stats.totalInvoiced.toLocaleString()}`}
+              {loading ? "Loading..." : `${currency} ${stats.totalInvoiced.toLocaleString()}`}
             </div>
             <p className="text-xs text-muted-foreground mt-2">Total billing amount</p>
           </CardContent>
@@ -205,7 +216,7 @@ export default function FinanceDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-sky-600">
-              {loading ? "Loading..." : `KES ${stats.totalAdmissionPayments.toLocaleString()}`}
+              {loading ? "Loading..." : `${currency} ${stats.totalAdmissionPayments.toLocaleString()}`}
             </div>
             <p className="text-xs text-muted-foreground mt-2">Included in total revenue</p>
           </CardContent>
@@ -231,7 +242,7 @@ export default function FinanceDashboard() {
               <div key={i} className="bg-secondary-50 dark:bg-secondary-950/70 p-5 rounded-xl border border-secondary-100 dark:border-secondary-900">
                 <p className="text-sm text-muted-foreground">{period.label}</p>
                 <p className="text-3xl font-bold mt-3 text-secondary-600">
-                  KES {period.value.toLocaleString()}
+                  {currency} {period.value.toLocaleString()}
                 </p>
               </div>
             ))}
@@ -263,11 +274,11 @@ export default function FinanceDashboard() {
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-muted-foreground">Collected Amount</p>
-                      <p className="text-lg font-semibold text-secondary-600">KES {item.allocated.toLocaleString()}</p>
+                      <p className="text-lg font-semibold text-secondary-600">{currency} {item.allocated.toLocaleString()}</p>
                     </div>
                     <div className="text-right">
                       <p className="text-sm text-muted-foreground">Pending Balance</p>
-                      <p className="text-lg font-semibold text-amber-600">KES {item.pending.toLocaleString()}</p>
+                      <p className="text-lg font-semibold text-amber-600">{currency} {item.pending.toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
@@ -306,11 +317,11 @@ export default function FinanceDashboard() {
           <div>
             <h4 className="font-semibold mb-4">Financial Health</h4>
             <div className="space-y-3 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Total Billed:</span><span>KES {stats.totalAssigned.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Admission Payments:</span><span className="text-primary-700">KES {stats.totalAdmissionPayments.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Received:</span><span className="text-secondary-600 font-medium">KES {stats.totalRevenue.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Outstanding:</span><span className="text-amber-600">KES {stats.totalOutstanding.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Overdue:</span><span className="text-red-600">KES {stats.overdueBalance.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Total Billed:</span><span>{currency} {stats.totalAssigned.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Admission Payments:</span><span className="text-primary-700">{currency} {stats.totalAdmissionPayments.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Received:</span><span className="text-secondary-600 font-medium">{currency} {stats.totalRevenue.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Outstanding:</span><span className="text-amber-600">{currency} {stats.totalOutstanding.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Overdue:</span><span className="text-red-600">{currency} {stats.overdueBalance.toLocaleString()}</span></div>
             </div>
           </div>
 
