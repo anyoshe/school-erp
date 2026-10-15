@@ -80,12 +80,17 @@ export default function ApplicationTable({
     queryKey: ["applications"],
     queryFn: async () => {
       const res = await api.get("/admissions/applications/");
-      return res.data;
+      const data = res.data;
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data?.results)) return data.results;
+      if (Array.isArray(data?.data)) return data.data;
+      return [];
     },
     enabled: !providedApplications,
   });
 
-  const applications = providedApplications ?? fetched;
+  const rawApps = providedApplications ?? fetched;
+  const applications = Array.isArray(rawApps) ? rawApps : [];
 
   const handleEnroll = async (id: string) => {
     try {
