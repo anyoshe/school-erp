@@ -75,19 +75,90 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         new_status = serializer.validated_data.get('status')
 
         if new_status:
-            # Only set timestamp if status is actually changing to this value
+            new_status = str(new_status).upper()
+            if new_status == Application.Status.ENROLLED:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError(
+                    {"status": "Cannot set ENROLLED via update. Use the Enroll action after ACCEPTED."}
+                )
+            if not instance.can_transition_to(new_status):
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError(
+                    {
+                        "status": (
+                            f"Invalid transition from {instance.status} to {new_status}. "
+                            "Follow the admissions pipeline."
+                        )
+                    }
+                )
             if new_status == Application.Status.OFFERED and instance.status != Application.Status.OFFERED:
                 serializer.validated_data['offer_issued_at'] = timezone.now()
-                # Optional: if frontend sends offer_method
-                if 'offer_method' in serializer.validated_data:
-                    serializer.validated_data['offer_method'] = serializer.validated_data['offer_method']
-
             if new_status == Application.Status.ACCEPTED and instance.status != Application.Status.ACCEPTED:
                 serializer.validated_data['accepted_at'] = timezone.now()
 
         serializer.save(school=school)
 
         
+    @action(detail=True, methods=['get'], url_path='enroll-readiness')
+    def enroll_readiness(self, request, pk=None):
+        """Checklist before creating a Student record."""
+        application = self.get_object()
+        school = application.school
+        paid = sum(
+            (p.amount for p in application.fee_payments.all()),
+            start=__import__('decimal').Decimal('0'),
+        )
+        required_fee = getattr(school, 'admission_fee', None) or 0
+        try:
+            required_fee = __import__('decimal').Decimal(str(required_fee or 0))
+        except Exception:
+            required_fee = __import__('decimal').Decimal('0')
+        require_fee = bool(getattr(school, 'require_admission_fee_before_enroll', False))
+        fee_ok = (not require_fee) or (required_fee <= 0) or (paid >= required_fee)
+        checks = [
+            {
+                "code": "status",
+                "label": "Application is Accepted",
+                "ok": application.status == Application.Status.ACCEPTED,
+                "detail": application.status,
+            },
+            {
+                "code": "class",
+                "label": "Class / grade assigned",
+                "ok": bool(application.class_applied_id),
+                "detail": getattr(application.class_applied, 'name', None) if application.class_applied_id else None,
+            },
+            {
+                "code": "guardian",
+                "label": "Primary guardian name & phone",
+                "ok": bool(application.primary_guardian_name and application.primary_guardian_phone),
+                "detail": None,
+            },
+            {
+                "code": "fee",
+                "label": "Admission fee requirement met",
+                "ok": fee_ok,
+                "detail": f"Paid {paid} / required {required_fee}" if require_fee else "Fee not required before enroll",
+            },
+            {
+                "code": "not_enrolled",
+                "label": "Not already enrolled",
+                "ok": application.student_id is None,
+                "detail": str(application.student_id) if application.student_id else None,
+            },
+        ]
+        ready = all(c["ok"] for c in checks)
+        return Response({
+            "ready": ready,
+            "checks": checks,
+            "admission_number_preview": None if application.admission_number else "Assigned on enroll",
+            "admission_number": application.admission_number,
+            "pipeline": [
+                "DRAFT", "SUBMITTED", "UNDER_REVIEW", "OFFERED", "ACCEPTED", "ENROLLED"
+            ],
+            "current_status": application.status,
+        })
+
     @action(detail=True, methods=['post'], url_path='enroll')
     @transaction.atomic
     def enroll(self, request, pk=None):

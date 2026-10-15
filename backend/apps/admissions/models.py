@@ -25,7 +25,30 @@
 #         ENROLLED = "ENROLLED", "Enrolled"
 #         INTERVIEW_COMPLETED = "INTERVIEW_COMPLETED", "Interview Completed"
 
-#     class PlacementType(models.TextChoices):
+# 
+    # Strict pipeline: only these status moves are allowed via PATCH.
+    # ENROLLED is set only by the enroll action.
+    ALLOWED_TRANSITIONS = {
+        "DRAFT": {"SUBMITTED", "DRAFT"},
+        "SUBMITTED": {"UNDER_REVIEW", "REJECTED", "DRAFT"},
+        "UNDER_REVIEW": {"TEST_SCHEDULED", "OFFERED", "REJECTED", "UNDER_REVIEW"},
+        "TEST_SCHEDULED": {"INTERVIEW_COMPLETED", "UNDER_REVIEW", "REJECTED", "TEST_SCHEDULED"},
+        "INTERVIEW_COMPLETED": {"OFFERED", "REJECTED", "UNDER_REVIEW", "INTERVIEW_COMPLETED"},
+        "OFFERED": {"ACCEPTED", "REJECTED", "OFFERED"},
+        "ACCEPTED": {"ACCEPTED"},  # ENROLLED only via enroll endpoint
+        "ENROLLED": {"ENROLLED"},
+        "REJECTED": {"UNDER_REVIEW", "REJECTED"},
+    }
+
+    def can_transition_to(self, new_status: str) -> bool:
+        current = (self.status or "").upper()
+        target = (new_status or "").upper()
+        if current == target:
+            return True
+        allowed = self.ALLOWED_TRANSITIONS.get(current, set())
+        return target in allowed
+
+    class PlacementType(models.TextChoices):
 #         SELF = "SELF", "Self / Parent Application"
 #         PUBLIC = "PUBLIC", "Government / Public Authority Placement"
 #         TRANSFER = "TRANSFER", "Transfer from Another School"
@@ -418,6 +441,27 @@ class Application(models.Model):
         REJECTED = "REJECTED", "Rejected"
         ENROLLED = "ENROLLED", "Enrolled"
         INTERVIEW_COMPLETED = "INTERVIEW_COMPLETED", "Interview Completed"
+
+    # Strict pipeline: ENROLLED only via enroll action
+    ALLOWED_TRANSITIONS = {
+        "DRAFT": {"SUBMITTED", "DRAFT"},
+        "SUBMITTED": {"UNDER_REVIEW", "REJECTED", "DRAFT"},
+        "UNDER_REVIEW": {"TEST_SCHEDULED", "OFFERED", "REJECTED", "UNDER_REVIEW"},
+        "TEST_SCHEDULED": {"INTERVIEW_COMPLETED", "UNDER_REVIEW", "REJECTED", "TEST_SCHEDULED"},
+        "INTERVIEW_COMPLETED": {"OFFERED", "REJECTED", "UNDER_REVIEW", "INTERVIEW_COMPLETED"},
+        "OFFERED": {"ACCEPTED", "REJECTED", "OFFERED"},
+        "ACCEPTED": {"ACCEPTED"},
+        "ENROLLED": {"ENROLLED"},
+        "REJECTED": {"UNDER_REVIEW", "REJECTED"},
+    }
+
+    def can_transition_to(self, new_status: str) -> bool:
+        current = (self.status or "").upper()
+        target = (new_status or "").upper()
+        if current == target:
+            return True
+        allowed = self.ALLOWED_TRANSITIONS.get(current, set())
+        return target in allowed
 
     class PlacementType(models.TextChoices):
         SELF = "SELF", "Self / Parent Application"
@@ -850,9 +894,12 @@ class AdmissionFeePayment(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.receipt_number:
-            school_prefix = getattr(self.application.school, 'admission_prefix', 'SCH')
+            school = self.application.school
+            rcp = (getattr(school, 'receipt_prefix', None) or '').strip()
+            school_prefix = (getattr(school, 'admission_prefix', None) or 'SCH').strip()
+            prefix = rcp or f"ADM-{school_prefix}"
             timestamp = timezone.now().strftime('%Y%m%d%H%M%S')
-            self.receipt_number = f"ADM-{school_prefix}-{timestamp}-{str(self.application.id)[:8]}"
+            self.receipt_number = f"{prefix}-{timestamp}-{str(self.application.id)[:8]}"
         super().save(*args, **kwargs)
 
     def __str__(self):

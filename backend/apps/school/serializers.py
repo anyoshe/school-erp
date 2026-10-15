@@ -75,6 +75,8 @@ class SchoolSerializer(serializers.ModelSerializer):
             'modules', 'grade_levels', 'logo',
             'bank_name', 'branch_name', 'bank_account_name', 
             'bank_account_number', 'paybill_number', 'payment_instructions',
+            'admission_prefix', 'admission_number_format', 'admission_seq_padding',
+            'assign_admission_number_on', 'require_admission_fee_before_enroll', 'receipt_prefix',
             'created_at', 'updated_at'
         ]
 
@@ -117,6 +119,8 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
             'registration_authority', 'registration_date',
             'bank_name', 'branch_name', 'bank_account_name', 
             'bank_account_number', 'paybill_number', 'payment_instructions',
+            'admission_prefix', 'admission_number_format', 'admission_seq_padding',
+            'assign_admission_number_on', 'require_admission_fee_before_enroll', 'receipt_prefix',
             'alternative_phone',          
             'emergency_phone',
             'postal_address',

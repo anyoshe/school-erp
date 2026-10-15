@@ -519,6 +519,26 @@ class School(models.Model):
     admission_seq_padding = models.PositiveSmallIntegerField(
         default=4
     )
+    # When to mint official admission numbers
+    ASSIGN_ADMISSION_NUMBER_CHOICES = [
+        ('ENROLL', 'On enroll (recommended)'),
+        ('ACCEPT', 'When offer is accepted'),
+        ('SUBMIT', 'When application is submitted'),
+    ]
+    assign_admission_number_on = models.CharField(
+        max_length=10,
+        choices=ASSIGN_ADMISSION_NUMBER_CHOICES,
+        default='ENROLL',
+    )
+    require_admission_fee_before_enroll = models.BooleanField(
+        default=False,
+        help_text="If true, enroll is blocked until admission_fee is fully paid on the application.",
+    )
+    receipt_prefix = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Prefix for payment receipts, e.g. RCP-SCH",
+    )
 
 
     # =====================================================

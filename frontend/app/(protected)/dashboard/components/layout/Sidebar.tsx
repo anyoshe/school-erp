@@ -65,6 +65,7 @@ const SETTINGS_LINKS: MenuItem[] = [
   { label: "Contact & Address", href: "/dashboard/settings/school/contact", icon: MapPin },
   { label: "Academic Departments", href: "/dashboard/settings/school/departments", icon: Book },
   { label: "Academic Config", href: "/dashboard/settings/school/academic", icon: Book },
+  { label: "Admissions & Numbers", href: "/dashboard/settings/school/admissions", icon: GraduationCap },
   { label: "Branding", href: "/dashboard/settings/school/branding", icon: Image },
   { label: "Modules", href: "/dashboard/settings/modules", icon: Grid },
   { label: "Users & Roles", href: "/dashboard/settings/users", icon: Users },

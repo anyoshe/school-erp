@@ -59,6 +59,12 @@ export interface School {
   registration_authority?: string;
   registration_date?: string;
   admission_fee?: number;
+  admission_prefix?: string;
+  admission_number_format?: string;
+  admission_seq_padding?: number;
+  assign_admission_number_on?: string;
+  require_admission_fee_before_enroll?: boolean;
+  receipt_prefix?: string;
   logo?: string | null;
   module_ids?: number[];
   modules: Module[];

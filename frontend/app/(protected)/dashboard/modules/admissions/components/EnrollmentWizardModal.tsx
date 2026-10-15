@@ -232,6 +232,28 @@ export default function EnrollmentWizardModal({
   applicationData,
   onEnrolled,
 }: Props) {
+  const [readiness, setReadiness] = useState<{
+    ready: boolean;
+    checks: Array<{ code: string; label: string; ok: boolean; detail?: string | null }>;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!open || !applicationId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get(`/admissions/applications/${applicationId}/enroll-readiness/`);
+        if (!cancelled) setReadiness(res.data);
+      } catch {
+        if (!cancelled) setReadiness(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, applicationId]);
+
+
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 6;
@@ -1836,6 +1858,24 @@ export default function EnrollmentWizardModal({
             For {formData.first_name} {formData.last_name}. Step {currentStep} of {totalSteps}
           </DialogDescription>
         </DialogHeader>
+        {readiness && (
+          <div className="mx-6 mb-2 rounded-xl border p-3 space-y-2 bg-stone-50">
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Enroll checklist</p>
+            {readiness.checks.map((c) => (
+              <div key={c.code} className="flex items-start gap-2 text-sm">
+                <span className={c.ok ? "text-secondary-600" : "text-red-600"}>{c.ok ? "✓" : "✗"}</span>
+                <div>
+                  <p className="font-medium">{c.label}</p>
+                  {c.detail ? <p className="text-xs text-muted-foreground">{String(c.detail)}</p> : null}
+                </div>
+              </div>
+            ))}
+            {!readiness.ready && (
+              <p className="text-xs text-red-600 font-medium">Resolve the items above before completing enroll.</p>
+            )}
+          </div>
+        )}
+
 
         <div className="my-6">
           <div className="flex justify-between text-sm font-medium mb-2">
