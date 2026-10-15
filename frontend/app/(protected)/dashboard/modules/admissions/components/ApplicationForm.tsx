@@ -231,7 +231,11 @@ export default function ApplicationForm({
         const res = await api.get("/academics/grade-levels/", {
           headers: { "X-School-ID": school.id },
         });
-        return res.data;
+        const data = res.data;
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.results)) return data.results;
+        if (Array.isArray(data?.data)) return data.data;
+        return [];
       }
       return [];
     },

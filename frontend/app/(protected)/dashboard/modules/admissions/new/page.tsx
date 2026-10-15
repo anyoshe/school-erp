@@ -191,17 +191,23 @@ function NewApplicationPageInner() {
   });
 
   // Fetch Grade Levels
-  const { data: gradeLevels = [], isLoading: gradesLoading } = useQuery<GradeLevel[]>({
+  const { data: gradeLevelsRaw = [], isLoading: gradesLoading } = useQuery<GradeLevel[]>({
+
     queryKey: ["gradeLevels", currentSchool?.id],
     queryFn: async () => {
       if (!currentSchool?.id) throw new Error("No school selected");
       const res = await api.get("/academics/grade-levels/", {
         headers: { "X-School-ID": currentSchool.id },
       });
-      return res.data || [];
+      const data = res.data;
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data?.results)) return data.results;
+      if (Array.isArray(data?.data)) return data.data;
+      return [];
     },
     enabled: !!currentSchool?.id && !schoolLoading,
   });
+  const gradeLevels = Array.isArray(gradeLevelsRaw) ? gradeLevelsRaw : [];
 
   // Load existing draft / application for continue-editing
   useEffect(() => {
@@ -627,12 +633,12 @@ function NewApplicationPageInner() {
                                   <Loader className="h-4 w-4 animate-spin mr-2" />
                                   <span className="text-sm">Fetching grades...</span>
                                 </div>
-                              ) : gradeLevels.length === 0 ? (
+                              ) : (Array.isArray(gradeLevels) ? gradeLevels : []).length === 0 ? (
                                 <div className="p-4 text-center text-sm text-muted-foreground">
                                   No classes available for this school
                                 </div>
                               ) : (
-                                gradeLevels.map((g) => (
+                                (Array.isArray(gradeLevels) ? gradeLevels : []).map((g) => (
                                   <SelectItem
                                     key={String(g.id)}
                                     value={String(g.id)}
