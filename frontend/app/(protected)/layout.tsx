@@ -6,34 +6,21 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getToken } from "@/utils/auth";
 
 /**
- * Auth gate that does not tear down the tree on refresh when a token exists.
- * Sidebar/navbar live in the dashboard layout and stay mounted.
+ * Auth gate. Avoids SSR/client HTML mismatch by not branching on
+ * window/token during the initial render.
  */
 export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const { user, loading, hasToken } = useCurrentUser();
-  const tokenPresent = typeof window !== "undefined" ? !!getToken() : hasToken;
+  const { user, loading, mounted } = useCurrentUser();
 
   useEffect(() => {
-    if (!loading && !user && !tokenPresent) {
+    if (!mounted || loading) return;
+    if (!getToken() && !user) {
       router.replace("/login");
     }
-  }, [loading, router, user, tokenPresent]);
+  }, [mounted, loading, user, router]);
 
-  // No token and still checking → brief spinner
-  if (!tokenPresent && loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  // No session → redirect handled above
-  if (!tokenPresent && !user) {
-    return null;
-  }
-
-  // Token present (or cached user) → render children immediately
+  // Always render children on server + first client paint (same HTML).
+  // Redirect runs only after mount when there is truly no session.
   return <>{children}</>;
 }

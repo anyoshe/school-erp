@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCurrentUser } from "@/utils/api";
 import { getToken } from "@/utils/auth";
@@ -48,39 +48,49 @@ function writeCachedUser(user: CurrentUser | null) {
     if (user) sessionStorage.setItem(CACHE_KEY, JSON.stringify(user));
     else sessionStorage.removeItem(CACHE_KEY);
   } catch {
-    /* ignore quota */
+    /* ignore */
   }
 }
 
 export function useCurrentUser() {
-  const hasToken = typeof window !== "undefined" && !!getToken();
-  const cached = typeof window !== "undefined" ? readCachedUser() : undefined;
+  // Defer browser-only reads until after mount so SSR + first client paint match
+  const [mounted, setMounted] = useState(false);
+  const [cached, setCached] = useState<CurrentUser | undefined>(undefined);
+  const [hasToken, setHasToken] = useState(false);
 
-  const { data: user = null, isLoading, isFetching, error, isPending } = useQuery<CurrentUser>({
+  useEffect(() => {
+    setMounted(true);
+    setHasToken(!!getToken());
+    setCached(readCachedUser());
+  }, []);
+
+  const { data, isLoading, isFetching, error } = useQuery<CurrentUser>({
     queryKey: ["currentUser"],
     queryFn: () => getCurrentUser(),
-    enabled: hasToken,
+    enabled: mounted && hasToken,
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
     retry: 1,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
-    // Instant shell on refresh when we already know the user
     placeholderData: cached,
   });
 
-  useEffect(() => {
-    if (user) writeCachedUser(user);
-  }, [user]);
+  const user = data ?? cached ?? null;
 
-  // Only block UI when we have no token/user and are still loading
-  const loading = hasToken ? isLoading && !user && !cached : isPending || isLoading;
+  useEffect(() => {
+    if (data) writeCachedUser(data);
+  }, [data]);
+
+  // While not mounted, treat as "not loading shell" — layouts render consistently
+  const loading = !mounted ? false : hasToken ? isLoading && !user : false;
 
   return {
-    user: user ?? cached ?? null,
-    loading: loading && !cached,
+    user,
+    loading,
     fetching: isFetching,
     error: error ? "Failed to load user information" : null,
-    hasToken,
+    hasToken: mounted ? hasToken : false,
+    mounted,
   };
 }

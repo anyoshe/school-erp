@@ -12,34 +12,22 @@ interface DashboardLayoutProps {
   children: ReactNode;
 }
 
+/**
+ * Always mounts the dashboard shell (sidebar + navbar) with the same HTML
+ * on server and client. Auth redirect happens after mount only.
+ * This prevents hydration mismatches from token/window checks.
+ */
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const router = useRouter();
-  const { user, loading } = useCurrentUser();
-  const tokenPresent = typeof window !== "undefined" && !!getToken();
+  const { user, loading, mounted } = useCurrentUser();
 
   useEffect(() => {
-    if (!loading && !user && !tokenPresent) {
+    if (!mounted || loading) return;
+    if (!getToken() && !user) {
       router.replace("/login");
     }
-  }, [loading, user, router, tokenPresent]);
+  }, [mounted, loading, user, router]);
 
-  // Only full-page block when there is no session at all
-  if (!tokenPresent && loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-center">
-          <div className="w-14 h-14 border-4 border-primary/20 border-t-primary rounded-full animate-spin mb-5 mx-auto" />
-          <p className="text-base font-medium text-textPrimary">Loading dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!tokenPresent && !user) {
-    return null;
-  }
-
-  // Token / cached user → mount shell immediately; school context loads inside
   return (
     <CurrentSchoolProvider>
       <InnerDashboardLayout>{children}</InnerDashboardLayout>
