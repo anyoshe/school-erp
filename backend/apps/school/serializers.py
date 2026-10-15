@@ -5,12 +5,30 @@ from uuid import UUID
 from apps.academics.serializers import GradeLevelSerializer
 
 
+def absolute_media_url(request, file_field):
+    """Return absolute URL for an ImageField/FileField, or None."""
+    if not file_field:
+        return None
+    try:
+        url = file_field.url
+    except Exception:
+        return None
+    if not url:
+        return None
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    if request is not None:
+        return request.build_absolute_uri(url)
+    return url
+
+
+
 
 class SchoolMiniSerializer(serializers.ModelSerializer):
     
     setup_complete = serializers.BooleanField(read_only=True)
     modules = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
-    logo = serializers.ImageField(read_only=True, allow_null=True)
+    logo = serializers.SerializerMethodField()
     currency = serializers.CharField(read_only=True)
     owner = serializers.UUIDField(source="owner.id", read_only=True)
     class Meta:
@@ -25,6 +43,10 @@ class SchoolMiniSerializer(serializers.ModelSerializer):
             'currency', 'currency_symbol', 'currency_display',            
             'modules'             
         ]
+
+
+    def get_logo(self, obj):
+        return absolute_media_url(self.context.get("request"), obj.logo)
 
 
 class PlatformSchoolSerializer(serializers.ModelSerializer):
@@ -59,6 +81,7 @@ class SchoolSessionSerializer(serializers.ModelSerializer):
     """
     modules = ModuleSerializer(many=True, read_only=True)
     owner = serializers.UUIDField(source="owner.id", read_only=True)
+    logo = serializers.SerializerMethodField()
 
     class Meta:
         model = School
@@ -70,12 +93,17 @@ class SchoolSessionSerializer(serializers.ModelSerializer):
             "created_at", "updated_at",
         ]
 
+    def get_logo(self, obj):
+        return absolute_media_url(self.context.get("request"), obj.logo)
+
 
 class SchoolSerializer(serializers.ModelSerializer):
 
     modules = ModuleSerializer(many=True, read_only=True)
     grade_levels = GradeLevelSerializer(many=True, read_only=True) 
     owner = serializers.UUIDField(source="owner.id", read_only=True)
+    logo = serializers.SerializerMethodField()
+
     class Meta:
         model = School
         fields = [
@@ -97,6 +125,10 @@ class SchoolSerializer(serializers.ModelSerializer):
             'bank_account_number', 'paybill_number', 'payment_instructions',
             'created_at', 'updated_at'
         ]
+
+
+    def get_logo(self, obj):
+        return absolute_media_url(self.context.get("request"), obj.logo)
 
 
 class PublicSchoolSerializer(serializers.ModelSerializer):

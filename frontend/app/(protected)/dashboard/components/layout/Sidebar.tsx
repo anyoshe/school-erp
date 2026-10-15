@@ -1,3 +1,4 @@
+import { resolveMediaUrl } from "@/utils/media";
 "use client";
 
 import Link from "next/link";
@@ -134,7 +135,7 @@ if (duplicates.length > 0) {
           <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-gradient-to-br from-primary-700 to-primary-900 flex items-center justify-center text-white font-bold">
             {currentSchool?.logo ? (
               <img
-                src={currentSchool.logo}
+                src={resolveMediaUrl(currentSchool.logo) || undefined}
                 alt={currentSchool.name || "School logo"}
                 className="w-full h-full object-cover"
                 onError={(e) => {
