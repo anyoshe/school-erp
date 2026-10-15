@@ -35,6 +35,7 @@ export const removeActiveSchool = () => {
   localStorage.removeItem(SCHOOL_KEY);
   try {
     sessionStorage.removeItem("erp_active_school_cache");
+    sessionStorage.removeItem("erp_active_school_cache_meta");
     sessionStorage.removeItem("erp_schools_list_cache");
   } catch { /* */ }
 };
@@ -99,6 +100,7 @@ export const logout = () => {
   try {
     sessionStorage.removeItem("erp_current_user_cache");
     sessionStorage.removeItem("erp_active_school_cache");
+    sessionStorage.removeItem("erp_active_school_cache_meta");
     sessionStorage.removeItem("erp_schools_list_cache");
   } catch {}
   removeActiveSchool();

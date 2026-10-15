@@ -30,59 +30,89 @@ export interface CurrentUser {
 }
 
 const CACHE_KEY = "erp_current_user_cache";
+/** How long cached user is trusted without a network round-trip (30 min) */
+const USER_CACHE_TTL_MS = 30 * 60 * 1000;
 
-function readCachedUser(): CurrentUser | undefined {
+type UserCacheEnvelope = {
+  user: CurrentUser;
+  cachedAt: number;
+};
+
+function readUserCache(): UserCacheEnvelope | undefined {
   if (typeof window === "undefined") return undefined;
   try {
     const raw = sessionStorage.getItem(CACHE_KEY);
     if (!raw) return undefined;
-    return JSON.parse(raw) as CurrentUser;
+    const parsed = JSON.parse(raw);
+    // Back-compat: older cache was the user object only
+    if (parsed && parsed.user && typeof parsed.cachedAt === "number") {
+      return parsed as UserCacheEnvelope;
+    }
+    if (parsed && parsed.id) {
+      return { user: parsed as CurrentUser, cachedAt: Date.now() };
+    }
+    return undefined;
   } catch {
     return undefined;
   }
 }
 
-function writeCachedUser(user: CurrentUser | null) {
+function writeUserCache(user: CurrentUser | null) {
   if (typeof window === "undefined") return;
   try {
-    if (user) sessionStorage.setItem(CACHE_KEY, JSON.stringify(user));
-    else sessionStorage.removeItem(CACHE_KEY);
+    if (user) {
+      const envelope: UserCacheEnvelope = { user, cachedAt: Date.now() };
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify(envelope));
+    } else {
+      sessionStorage.removeItem(CACHE_KEY);
+    }
   } catch {
     /* ignore */
   }
 }
 
+/**
+ * Session user for chrome (navbar).
+ * If token + recent cache exist → return cache immediately and do NOT refetch
+ * until the TTL expires. Module pages still fetch their own data.
+ */
 export function useCurrentUser() {
-  // Defer browser-only reads until after mount so SSR + first client paint match
   const [mounted, setMounted] = useState(false);
-  const [cached, setCached] = useState<CurrentUser | undefined>(undefined);
+  const [envelope, setEnvelope] = useState<UserCacheEnvelope | undefined>(undefined);
   const [hasToken, setHasToken] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     setHasToken(!!getToken());
-    setCached(readCachedUser());
+    setEnvelope(readUserCache());
   }, []);
+
+  const cachedUser = envelope?.user;
+  const cacheAge = envelope ? Date.now() - envelope.cachedAt : Infinity;
+  const cacheFresh = !!cachedUser && cacheAge < USER_CACHE_TTL_MS;
+
+  // Only hit the network when mounted, token present, and cache is missing/stale
+  const shouldFetch = mounted && hasToken && !cacheFresh;
 
   const { data, isLoading, isFetching, error } = useQuery<CurrentUser>({
     queryKey: ["currentUser"],
     queryFn: () => getCurrentUser(),
-    enabled: mounted && hasToken,
-    staleTime: 5 * 60_000,
-    gcTime: 30 * 60_000,
+    enabled: shouldFetch,
+    staleTime: USER_CACHE_TTL_MS,
+    gcTime: 60 * 60_000,
     retry: 1,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
-    placeholderData: cached,
+    initialData: cacheFresh ? cachedUser : undefined,
+    initialDataUpdatedAt: cacheFresh && envelope ? envelope.cachedAt : undefined,
   });
 
-  const user = data ?? cached ?? null;
+  const user = data ?? cachedUser ?? null;
 
   useEffect(() => {
-    if (data) writeCachedUser(data);
+    if (data) writeUserCache(data);
   }, [data]);
 
-  // While not mounted, treat as "not loading shell" — layouts render consistently
   const loading = !mounted ? false : hasToken ? isLoading && !user : false;
 
   return {
@@ -92,5 +122,7 @@ export function useCurrentUser() {
     error: error ? "Failed to load user information" : null,
     hasToken: mounted ? hasToken : false,
     mounted,
+    /** True when chrome is serving session cache (no user network call needed) */
+    fromCache: !!cacheFresh && !shouldFetch,
   };
 }

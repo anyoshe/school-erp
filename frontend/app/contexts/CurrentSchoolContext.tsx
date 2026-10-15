@@ -131,6 +131,7 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
         const schoolData = detailResponse.data as School;
         setCurrentSchoolState(schoolData);
         cacheActiveSchool(schoolData);
+        try { sessionStorage.setItem("erp_active_school_cache_meta", String(Date.now())); } catch { /* */ }
         return;
       }
 
@@ -157,6 +158,7 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
       setCurrentSchoolState(selected);
       persistActiveSchool(selected.id);
       cacheActiveSchool(selected);
+      try { sessionStorage.setItem("erp_active_school_cache_meta", String(Date.now())); } catch { /* */ }
     } catch (err: any) {
       console.error("[Context] Failed to load schools:", err);
       setError("Could not load your schools. Please try again later.");
@@ -168,22 +170,41 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
     }
   }, [user, userLoading, router]);
 
+  // Chrome policy: if we already hydrated a school from session cache, do NOT
+  // refetch on every dashboard refresh. Only fetch when there is no cache
+  // (first login / cleared session). Manual school switch still uses setCurrentSchool.
   useEffect(() => {
-    if (
-      !userLoading
-      && user
-      && initializedForUser.current !== user.id
-    ) {
-      initializedForUser.current = user.id;
-      void fetchAndSetSchools();
+    if (userLoading || !user) return;
+    if (initializedForUser.current === user.id) return;
+    initializedForUser.current = user.id;
+
+    const hasSchoolCache = !!readCachedActiveSchool();
+    if (hasSchoolCache) {
+      // Cache already applied in useLayoutEffect — keep chrome static.
+      // Optional quiet refresh only if cache is older than 30 minutes.
+      try {
+        const raw = sessionStorage.getItem("erp_active_school_cache_meta");
+        const cachedAt = raw ? Number(raw) : 0;
+        const age = Date.now() - (cachedAt || 0);
+        if (cachedAt && age < 30 * 60 * 1000) {
+          setLoading(false);
+          return;
+        }
+      } catch {
+        setLoading(false);
+        return;
+      }
     }
-  }, [fetchAndSetSchools]);
+
+    void fetchAndSetSchools();
+  }, [user, userLoading, fetchAndSetSchools]);
 
   const setCurrentSchool = (school: School | null) => {
     setCurrentSchoolState(school);
     if (school) {
       persistActiveSchool(school.id);
       cacheActiveSchool(school);
+      try { sessionStorage.setItem("erp_active_school_cache_meta", String(Date.now())); } catch { /* */ }
     } else {
       removeActiveSchool();
     }
@@ -197,6 +218,7 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
     const schoolData = schoolResponse.data as School;
     setCurrentSchoolState(schoolData);
     cacheActiveSchool(schoolData);
+    try { sessionStorage.setItem("erp_active_school_cache_meta", String(Date.now())); } catch { /* */ }
   };
 
   const exitSchoolSupport = async () => {
