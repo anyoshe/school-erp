@@ -164,14 +164,14 @@ export default function Navbar({
             <div className="flex items-center gap-2">
               <div className="hidden sm:block text-right">
                 <p className="text-sm font-medium text-gray-900">
-                  {isLoadingUser ? "Loading..." : displayName}
+                  {displayName}
                 </p>
                 <p className="text-xs text-gray-500">{displayRole}</p>
               </div>
 
               {/* User Avatar / Initials */}
               <div className="w-8 h-8 bg-gradient-to-br from-primary-600 to-primary-800 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                {isLoadingUser ? "..." : initials}
+                {initials}
               </div>
             </div>
           </div>
