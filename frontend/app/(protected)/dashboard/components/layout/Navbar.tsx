@@ -37,7 +37,7 @@ export default function Navbar({
     `${user.first_name || ""} ${user.last_name || ""}`.trim() ||
     user.email.split("@")[0] ||
     "User"
-    : "Loading...";
+    : "Account";
 
   // Compute initials (first letter of first name + last name, or email)
   const initials = user
@@ -48,7 +48,7 @@ export default function Navbar({
   // Role display (capitalize or fallback)
   const displayRole = user?.role
     ? user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()
-    : "Loading...";
+    : "Account";
 
   async function exitSupportContext() {
     try {

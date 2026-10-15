@@ -79,18 +79,32 @@ const CurrentSchoolContext = createContext<CurrentSchoolContextType | undefined>
 export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, loading: userLoading } = useCurrentUser();
+  // SSR-safe defaults (match server HTML). Hydrate from session cache in useLayoutEffect
+  // so chrome paints with school data before the browser paints — no sidebar skeleton flash.
   const [schools, setSchools] = useState<School[]>([]);
   const [currentSchool, setCurrentSchoolState] = useState<School | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const initializedForUser = useRef<string | null>(null);
+  const hydratedCache = useRef(false);
+
+  useLayoutEffect(() => {
+    if (hydratedCache.current) return;
+    hydratedCache.current = true;
+    const cachedSchool = readCachedActiveSchool<School>();
+    const cachedList = readCachedSchoolsList<School[]>();
+    if (cachedList?.length) setSchools(cachedList);
+    if (cachedSchool) {
+      setCurrentSchoolState(cachedSchool);
+      setLoading(false);
+    }
+  }, []);
 
   const fetchAndSetSchools = useCallback(async () => {
     if (userLoading || !user) return;
 
     try {
-      setLoading(true);
       setError(null);
       setIsPlatformAdmin(Boolean(user.is_superuser));
 
@@ -109,7 +123,9 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
         persistActiveSchool(support.school.id);
         setSchoolSupportSessionId(support.id);
         const detailResponse = await api.get(`/schools/${support.school.id}/`);
-        setCurrentSchoolState(detailResponse.data as School);
+        const schoolData = detailResponse.data as School;
+        setCurrentSchoolState(schoolData);
+        cacheActiveSchool(schoolData);
         return;
       }
 
@@ -119,6 +135,7 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
       const schoolsResponse = await api.get("/schools/my-schools/");
       const fetchedSchools: School[] = schoolsResponse.data;
       setSchools(fetchedSchools);
+      cacheSchoolsList(fetchedSchools);
 
       if (fetchedSchools.length === 0) {
         setCurrentSchoolState(null);
@@ -134,6 +151,7 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
         )[0];
       setCurrentSchoolState(selected);
       persistActiveSchool(selected.id);
+      cacheActiveSchool(selected);
     } catch (err: any) {
       console.error("[Context] Failed to load schools:", err);
       setError("Could not load your schools. Please try again later.");
@@ -160,6 +178,7 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
     setCurrentSchoolState(school);
     if (school) {
       persistActiveSchool(school.id);
+      cacheActiveSchool(school);
     } else {
       removeActiveSchool();
     }
@@ -170,7 +189,9 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
     persistActiveSchool(schoolId);
     setSchoolSupportSessionId(response.data.id);
     const schoolResponse = await api.get(`/schools/${schoolId}/`);
-    setCurrentSchoolState(schoolResponse.data as School);
+    const schoolData = schoolResponse.data as School;
+    setCurrentSchoolState(schoolData);
+    cacheActiveSchool(schoolData);
   };
 
   const exitSchoolSupport = async () => {

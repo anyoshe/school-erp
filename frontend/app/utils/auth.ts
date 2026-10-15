@@ -33,6 +33,41 @@ export const getActiveSchoolId = (): string | null => {
 
 export const removeActiveSchool = () => {
   localStorage.removeItem(SCHOOL_KEY);
+  try {
+    sessionStorage.removeItem("erp_active_school_cache");
+    sessionStorage.removeItem("erp_schools_list_cache");
+  } catch { /* */ }
+};
+
+/** Persist selected school object for instant chrome on refresh */
+export const cacheActiveSchool = (school: unknown) => {
+  try {
+    sessionStorage.setItem("erp_active_school_cache", JSON.stringify(school));
+  } catch { /* */ }
+};
+
+export const readCachedActiveSchool = <T = unknown>(): T | null => {
+  try {
+    const raw = sessionStorage.getItem("erp_active_school_cache");
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const cacheSchoolsList = (schools: unknown) => {
+  try {
+    sessionStorage.setItem("erp_schools_list_cache", JSON.stringify(schools));
+  } catch { /* */ }
+};
+
+export const readCachedSchoolsList = <T = unknown>(): T | null => {
+  try {
+    const raw = sessionStorage.getItem("erp_schools_list_cache");
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
 };
 
 export const setSchoolSupportSessionId = (sessionId: string) => {
@@ -61,7 +96,11 @@ export const isSchoolSelected = (): boolean => {
 // Optional but VERY useful
 export const logout = () => {
   removeToken();
-  try { sessionStorage.removeItem("erp_current_user_cache"); } catch {}
+  try {
+    sessionStorage.removeItem("erp_current_user_cache");
+    sessionStorage.removeItem("erp_active_school_cache");
+    sessionStorage.removeItem("erp_schools_list_cache");
+  } catch {}
   removeActiveSchool();
   removeSchoolSupportSessionId();
 };
