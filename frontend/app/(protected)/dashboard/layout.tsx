@@ -8,16 +8,11 @@ import { CurrentSchoolProvider } from "@/contexts/CurrentSchoolContext";
 import Sidebar from "./components/layout/Sidebar";
 import Navbar from "./components/layout/Navbar";
 
-interface DashboardLayoutProps {
-  children: ReactNode;
-}
-
 /**
- * Always mounts the dashboard shell (sidebar + navbar) with the same HTML
- * on server and client. Auth redirect happens after mount only.
- * This prevents hydration mismatches from token/window checks.
+ * Dashboard chrome is identical on server and client (no token/window branches).
+ * Auth redirect runs only after mount in useEffect.
  */
-export default function DashboardLayout({ children }: DashboardLayoutProps) {
+export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, loading, mounted } = useCurrentUser();
 
@@ -30,54 +25,56 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <CurrentSchoolProvider>
-      <InnerDashboardLayout>{children}</InnerDashboardLayout>
+      <DashboardShell>{children}</DashboardShell>
     </CurrentSchoolProvider>
   );
 }
 
-function InnerDashboardLayout({ children }: { children: ReactNode }) {
+function DashboardShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div
+      className="flex h-screen bg-background overflow-hidden"
+      suppressHydrationWarning
+    >
       <aside
-        className={`
-          hidden lg:flex flex-col fixed inset-y-0 left-0 z-30
-          transition-all duration-300 ease-in-out bg-white border-r border-border shadow-sm
-          ${sidebarOpen ? "w-[280px]" : "w-20"}
-        `}
+        className={
+          "hidden lg:flex flex-col fixed inset-y-0 left-0 z-30 " +
+          "transition-all duration-300 ease-in-out bg-white border-r border-border shadow-sm " +
+          (sidebarOpen ? "w-[280px]" : "w-20")
+        }
       >
         <Sidebar
           isCollapsed={!sidebarOpen}
-          onToggleCollapse={() => setSidebarOpen(!sidebarOpen)}
+          onToggleCollapse={() => setSidebarOpen((v) => !v)}
         />
       </aside>
 
-      {mobileSidebarOpen && (
+      {mobileSidebarOpen ? (
         <div
           className="lg:hidden fixed inset-0 z-40 bg-black/40"
           onClick={() => setMobileSidebarOpen(false)}
         />
-      )}
+      ) : null}
 
-      {mobileSidebarOpen && (
+      {mobileSidebarOpen ? (
         <aside className="lg:hidden fixed inset-y-0 left-0 z-50 w-[280px] bg-white shadow-2xl">
           <Sidebar isCollapsed={false} onToggleCollapse={() => setMobileSidebarOpen(false)} />
         </aside>
-      )}
+      ) : null}
 
       <div
-        className={`
-          flex-1 flex flex-col min-w-0
-          lg:transition-all lg:duration-300 lg:ease-in-out
-          ${sidebarOpen ? "lg:ml-[280px]" : "lg:ml-20"}
-        `}
+        className={
+          "flex-1 flex flex-col min-w-0 lg:transition-all lg:duration-300 lg:ease-in-out " +
+          (sidebarOpen ? "lg:ml-[280px]" : "lg:ml-20")
+        }
       >
         <header className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-border shadow-sm">
           <Navbar
             onMenuClick={() => setMobileSidebarOpen(true)}
-            onDesktopSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
+            onDesktopSidebarToggle={() => setSidebarOpen((v) => !v)}
             isDesktopSidebarOpen={sidebarOpen}
           />
         </header>
