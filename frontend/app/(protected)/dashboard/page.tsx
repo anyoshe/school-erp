@@ -92,7 +92,7 @@ export default function DashboardHome() {
         <Kpi
           label="Collected this month"
           value={pulseQ.isLoading ? "…" : `${currency} ${Number(pulse?.finance?.collected_month || 0).toLocaleString()}`}
-          sub={`${pulse?.finance?.overdue_invoices ?? 0} overdue invoices`}
+          sub={`${pulse?.finance?.collection_rate ?? 0}% collection rate · ${pulse?.finance?.overdue_invoices ?? 0} overdue`}
           icon={DollarSign}
           tone="amber"
           onClick={() => router.push("/dashboard/modules/finance")}
@@ -100,7 +100,7 @@ export default function DashboardHome() {
         <Kpi
           label="Fees outstanding"
           value={pulseQ.isLoading ? "…" : `${currency} ${Number(pulse?.finance?.outstanding || 0).toLocaleString()}`}
-          sub={`${pulse?.finance?.invoices_unpaid ?? 0} unpaid invoices`}
+          sub={`${currency} ${Number(pulse?.finance?.overdue_balance || 0).toLocaleString()} overdue balance`}
           icon={TrendingUp}
           tone="coral"
           onClick={() => router.push("/dashboard/modules/finance")}

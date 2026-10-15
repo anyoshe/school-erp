@@ -7,7 +7,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Prefetch
+from django.db.models import Q, Prefetch
 from .models import (
     FeeCategory, FeeItem, FeeStructure, StudentFeeAssignment, PaymentPlan,
     Invoice, InvoiceLine, Payment
@@ -53,7 +53,9 @@ def _build_finance_dashboard_summary(request):
     )
 
     invoices = list(
-        Invoice.objects.filter(school_id__in=school_ids)
+        Invoice.objects.filter(
+            Q(school_id__in=school_ids) | Q(student__school_id__in=school_ids)
+        )
         .select_related("student", "fee_assignment", "fee_assignment__fee_structure")
         .prefetch_related(
             Prefetch("lines", queryset=InvoiceLine.objects.select_related("item__category")),
@@ -478,9 +480,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
   
     def get_queryset(self):
+        school_ids = accessible_school_ids(self.request)
         return self.queryset.filter(
-            school_id__in=accessible_school_ids(self.request)
-        )
+            Q(school_id__in=school_ids) | Q(student__school_id__in=school_ids)
+        ).distinct()
 
     @action(detail=False, methods=['get'], url_path='overdue')
     def overdue_invoices(self, request):

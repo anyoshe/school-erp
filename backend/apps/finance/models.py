@@ -343,7 +343,14 @@ class Invoice(models.Model):
     """
     Generated bill for a student per term/year
     """
-    school = models.ForeignKey('school.School', on_delete=models.CASCADE, null=True, blank=True)
+    school = models.ForeignKey(
+        'school.School',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="invoices",
+        help_text="Denormalized from student.school; always set on save.",
+    )
     student = models.ForeignKey('students.Student', on_delete=models.CASCADE, related_name="invoices")
     fee_assignment = models.ForeignKey(StudentFeeAssignment, on_delete=models.CASCADE, related_name="invoices")
     installment = models.ForeignKey(
@@ -357,7 +364,7 @@ class Invoice(models.Model):
     due_date = models.DateField()
     term = models.CharField(max_length=20)  # "Term 1", "Term 2", "Full Year"
     academic_year = models.CharField(max_length=9)  # "2026"
-    invoice_number = models.CharField(max_length=50, unique=True)  # Auto-generated
+    invoice_number = models.CharField(max_length=50)  # unique per school via constraint
     amount_due = models.DecimalField(max_digits=12, decimal_places=2)
     amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -374,13 +381,21 @@ class Invoice(models.Model):
 
     class Meta:
         ordering = ["-generated_at"]
-        # unique_together = ["student", "term", "academic_year"]
         unique_together = ["student", "fee_assignment", "installment_number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["school", "invoice_number"],
+                name="finance_invoice_unique_number_per_school",
+            ),
+        ]
 
     def __str__(self):
         return f"Invoice {self.invoice_number} - {self.student.full_name} ({self.term})"
 
     def save(self, *args, **kwargs):
+        # Always keep tenant school in sync with the student
+        if self.student_id and (not self.school_id or self.school_id != self.student.school_id):
+            self.school_id = self.student.school_id
         if not self.invoice_number:
             self.invoice_number = self.generate_invoice_number()
         self.balance = max(Decimal('0'), self.current_total_due - self.amount_paid)
@@ -453,6 +468,13 @@ class Payment(models.Model):
         if self.amount < 0:
             raise ValidationError("Payment amount cannot be negative.")
 
+        # Tenant denormalization from invoice / student
+        if self.invoice_id:
+            inv = self.invoice
+            school_id = inv.school_id or (inv.student.school_id if inv.student_id else None)
+            if school_id and self.school_id != school_id:
+                self.school_id = school_id
+
         is_new = self._state.adding
         super().save(*args, **kwargs)
 
@@ -462,7 +484,7 @@ class Payment(models.Model):
                 amount_paid=F('amount_paid') + self.amount
             )
             self.invoice.refresh_from_db(fields=['amount_paid', 'amount_due', 'late_fee_applied'])
-            self.invoice.save(update_fields=['balance', 'is_paid', 'paid_at'])
+            self.invoice.save(update_fields=['balance', 'is_paid', 'paid_at', 'school'])
 class LateFeeRule(models.Model):
 
     school = models.ForeignKey(School, on_delete=models.CASCADE)

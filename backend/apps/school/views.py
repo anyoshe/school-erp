@@ -228,11 +228,22 @@ class SchoolViewSet(ModelViewSet):
                 .aggregate(t=Sum("amount"))["t"]
                 or Decimal("0")
             )
+            billed = inv.aggregate(t=Sum("amount_due"))["t"] or Decimal("0")
+            paid_total = inv.aggregate(t=Sum("amount_paid"))["t"] or Decimal("0")
+            collection_rate = float((paid_total / billed * 100) if billed > 0 else 0)
+            overdue_balance = (
+                inv.filter(is_paid=False, due_date__lt=today).aggregate(t=Sum("balance"))["t"]
+                or Decimal("0")
+            )
             finance = {
                 "outstanding": f"{outstanding:.2f}",
                 "collected_month": f"{collected:.2f}",
                 "overdue_invoices": overdue,
                 "invoices_unpaid": unpaid,
+                "billed": f"{billed:.2f}",
+                "collected_total": f"{paid_total:.2f}",
+                "collection_rate": round(collection_rate, 1),
+                "overdue_balance": f"{overdue_balance:.2f}",
             }
         except Exception:
             pass
@@ -274,6 +285,12 @@ class SchoolViewSet(ModelViewSet):
             gaps.append({"code": "year", "label": "Activate an academic year", "href": "/dashboard/modules/academics"})
         if not subjects.exists():
             gaps.append({"code": "subjects", "label": "Add subjects", "href": "/dashboard/modules/academics"})
+        try:
+            from apps.finance.models import FeeStructure
+            if not FeeStructure.objects.filter(school=school).exists():
+                gaps.append({"code": "finance", "label": "Set up fee structures", "href": "/dashboard/modules/finance/fee-structures"})
+        except Exception:
+            pass
 
         return Response({
             "school": {"id": str(school.id), "name": school.name, "currency_symbol": getattr(school, "currency_symbol", None) or school.currency},
