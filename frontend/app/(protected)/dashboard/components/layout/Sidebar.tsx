@@ -1,5 +1,6 @@
-import { resolveMediaUrl } from "@/utils/media";
 "use client";
+
+import { resolveMediaUrl } from "@/utils/media";
 
 import Link from "next/link";
 import {
