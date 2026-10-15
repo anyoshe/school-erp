@@ -1,39 +1,28 @@
 "use client";
 
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getToken } from "@/utils/auth";
 
 /**
- * Auth gate that does not tear down the tree on refresh when a token exists.
- * Sidebar/navbar live in the dashboard layout and stay mounted.
+ * Auth gate only. Never render a spinner based on window/token (SSR mismatch).
  */
 export default function ProtectedLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const { user, loading, hasToken } = useCurrentUser();
-  const tokenPresent = typeof window !== "undefined" ? !!getToken() : hasToken;
+  const { user, loading } = useCurrentUser();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user && !tokenPresent) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted || loading) return;
+    if (!getToken() && !user) {
       router.replace("/login");
     }
-  }, [loading, router, user, tokenPresent]);
+  }, [mounted, loading, user, router]);
 
-  // No token and still checking → brief spinner
-  if (!tokenPresent && loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  // No session → redirect handled above
-  if (!tokenPresent && !user) {
-    return null;
-  }
-
-  // Token present (or cached user) → render children immediately
   return <>{children}</>;
 }
