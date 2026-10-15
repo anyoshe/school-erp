@@ -107,6 +107,13 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             <Badge className={`px-4 py-1.5 rounded-full border shadow-none font-bold uppercase tracking-tighter ${getStatusColor(application.status)}`}>
               {application.status}
             </Badge>
+            {(application.status === "DRAFT" || application.status === "SUBMITTED") && (
+              <Link href={`/dashboard/modules/admissions/new?id=${application.id}`}>
+                <Button className="ml-2 rounded-xl bg-primary text-white">
+                  Continue editing
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       </div>

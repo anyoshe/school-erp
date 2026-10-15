@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useMemo, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -28,7 +28,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Loader, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Loader, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
 import Link from "next/link";
 
 // ──────────────────────────────
@@ -78,21 +78,61 @@ interface GradeLevel {
 // ──────────────────────────────
 // Page component
 // ──────────────────────────────
-export default function NewApplicationPage() {
+const FIELD_LABELS: Record<string, string> = {
+  first_name: "First name",
+  last_name: "Last name",
+  nationality: "Nationality",
+  class_applied: "Class / Grade",
+  primary_guardian_name: "Primary guardian name",
+  primary_guardian_phone: "Guardian phone",
+  primary_guardian_email: "Guardian email",
+  primary_guardian_relationship: "Guardian relationship",
+  gender: "Gender",
+  date_of_birth: "Date of birth",
+};
+
+const FIELD_STEP: Record<string, number> = {
+  first_name: 0,
+  last_name: 0,
+  nationality: 0,
+  class_applied: 0,
+  gender: 0,
+  date_of_birth: 0,
+  preferred_name: 0,
+  middle_name: 0,
+  primary_guardian_name: 1,
+  primary_guardian_phone: 1,
+  primary_guardian_email: 1,
+  primary_guardian_relationship: 1,
+  primary_guardian_id_number: 1,
+};
+
+function fieldErrorClass(hasError: boolean) {
+  return hasError
+    ? "border-red-500 focus-visible:ring-red-500 bg-red-50/40"
+    : "";
+}
+
+function NewApplicationPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const editId = searchParams.get("id");
   const queryClient = useQueryClient();
   const { currentSchool, loading: schoolLoading, error: schoolError } = useCurrentSchool();
 
   const [currentStep, setCurrentStep] = useState(0);
   const [documents, setDocuments] = useState<File[]>([]);
   const [isFinalSubmitted, setIsFinalSubmitted] = useState(false);
-  const [savedAppId, setSavedAppId] = useState<string | null>(null);
+  const [savedAppId, setSavedAppId] = useState<string | null>(editId);
+  const [loadingDraft, setLoadingDraft] = useState(!!editId);
 
   const steps = ["Student", "Guardian", "Additional Info", "Documents"];
 
   const {
     control,
     getValues,
+    reset,
+    setFocus,
     formState: { errors, isValid, isSubmitting },
     trigger,
   } = useForm<FormValues>({
@@ -145,29 +185,87 @@ export default function NewApplicationPage() {
     enabled: !!currentSchool?.id && !schoolLoading,
   });
 
-  // Save mutation - both create and update via public endpoint
+  // Load existing draft / application for continue-editing
+  useEffect(() => {
+    if (!editId || !currentSchool?.id) {
+      if (!editId) setLoadingDraft(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoadingDraft(true);
+      try {
+        const res = await api.get(`/admissions/applications/${editId}/`);
+        const app = res.data;
+        if (cancelled) return;
+        setSavedAppId(app.id);
+        const classId =
+          typeof app.class_applied === "object" && app.class_applied
+            ? String(app.class_applied.id)
+            : app.class_applied
+              ? String(app.class_applied)
+              : "";
+        reset({
+          first_name: app.first_name || "",
+          middle_name: app.middle_name || "",
+          last_name: app.last_name || "",
+          preferred_name: app.preferred_name || "",
+          gender: app.gender || "",
+          date_of_birth: app.date_of_birth || "",
+          nationality: app.nationality || "",
+          passport_number: app.passport_number || "",
+          class_applied: classId,
+          primary_guardian_name: app.primary_guardian_name || "",
+          primary_guardian_phone: app.primary_guardian_phone || "",
+          primary_guardian_email: app.primary_guardian_email || "",
+          primary_guardian_relationship: app.primary_guardian_relationship || "",
+          primary_guardian_id_number: app.primary_guardian_id_number || "",
+          address: app.address || "",
+          region: app.region || "",
+          district: app.district || "",
+          previous_school: app.previous_school || "",
+          religion: app.religion || "",
+          category: app.category || "",
+          placement_type: app.placement_type || "SELF",
+          blood_group: app.blood_group || "",
+          allergies: app.allergies || "",
+          chronic_conditions: app.chronic_conditions || "",
+          disability: app.disability || "",
+          emergency_contact_name: app.emergency_contact_name || "",
+          emergency_contact_phone: app.emergency_contact_phone || "",
+          emergency_relationship: app.emergency_relationship || "",
+          notes: app.notes || "",
+          photo: undefined,
+        });
+        toast.message("Continuing saved application", {
+          description: `${app.first_name || ""} ${app.last_name || ""} · ${app.status || "DRAFT"}`,
+        });
+      } catch (err: any) {
+        toast.error("Could not open this application", {
+          description: err?.response?.data?.detail || "It may have been submitted or deleted.",
+        });
+      } finally {
+        if (!cancelled) setLoadingDraft(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [editId, currentSchool?.id, reset]);
+
+  // Save mutation — authenticated staff API (create + update)
   const saveMutation = useMutation({
     mutationFn: async ({ fd, id }: { fd: FormData; id?: string }) => {
-      console.log(`[DEBUG] Save action - ${id ? 'UPDATE (PATCH)' : 'CREATE (POST)'} | ID: ${id ?? 'new'}`);
-
       if (!currentSchool?.id) {
         throw new Error("No school selected");
       }
-      fd.append("school", currentSchool.id);
-
+      // school is taken from X-School-ID / selected school on backend for staff create
       let res;
       if (id) {
-        // PATCH existing draft (public)
-        const url = `/admissions/public/applications/${id}/update/`;
-        console.log(`[DEBUG] PATCH → ${url}`);
-        res = await publicApi.patch(url, fd);
+        res = await api.patch(`/admissions/applications/${id}/`, fd);
       } else {
-        // POST new draft (public)
-        console.log("[DEBUG] POST → /admissions/public/applications/submit/");
-        res = await publicApi.post("/admissions/public/applications/submit/", fd);
+        res = await api.post(`/admissions/applications/`, fd);
       }
-
-      console.log("[DEBUG] Response data:", res.data);
       return res.data;
     },
     onSuccess: (response, { id }) => {
@@ -198,9 +296,27 @@ export default function NewApplicationPage() {
       }
     },
     onError: (err: any) => {
-      console.error("[DEBUG] Save mutation error:", err);
+      const data = err?.response?.data;
+      if (data && typeof data === "object" && !data.detail) {
+        const parts: string[] = [];
+        for (const [k, v] of Object.entries(data)) {
+          const msg = Array.isArray(v) ? v.join(", ") : String(v);
+          parts.push(`${FIELD_LABELS[k] || k}: ${msg}`);
+        }
+        if (parts.length) {
+          toast.error("Some fields need attention", {
+            description: parts.slice(0, 6).join(" · "),
+            duration: 9000,
+          });
+          const firstKey = Object.keys(data)[0];
+          if (firstKey && FIELD_STEP[firstKey] !== undefined) {
+            setCurrentStep(FIELD_STEP[firstKey]);
+          }
+          return;
+        }
+      }
       toast.error("Failed to save", {
-        description: err.response?.data?.detail || err.message || "Check console",
+        description: data?.detail || err.message || "Please try again",
       });
     },
   });
@@ -211,9 +327,66 @@ export default function NewApplicationPage() {
     if (action === "submit") {
       const isFormValid = await trigger();
       if (!isFormValid) {
-        toast.error("Please complete all required fields");
-        const firstError = document.querySelector(".text-red-500");
-        firstError?.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Re-read errors after trigger
+        const values = getValues();
+        const result = await trigger();
+        // Build readable list from known required fields
+        const missing: string[] = [];
+        const order = [
+          "first_name",
+          "last_name",
+          "nationality",
+          "class_applied",
+          "primary_guardian_name",
+          "primary_guardian_phone",
+          "primary_guardian_relationship",
+        ];
+        for (const key of order) {
+          // trigger already set formState.errors; use DOM + labels
+          missing.push(FIELD_LABELS[key] || key);
+        }
+        // Use a second pass with zod-style: check empty requireds
+        const emptyRequired: string[] = [];
+        const req: (keyof FormValues)[] = [
+          "first_name",
+          "last_name",
+          "nationality",
+          "class_applied",
+          "primary_guardian_name",
+          "primary_guardian_phone",
+          "primary_guardian_relationship",
+        ];
+        for (const key of req) {
+          const v = values[key];
+          if (v === undefined || v === null || String(v).trim() === "") {
+            emptyRequired.push(FIELD_LABELS[key] || key);
+          } else if (key === "primary_guardian_phone" && String(v).trim().length < 9) {
+            emptyRequired.push(`${FIELD_LABELS[key]} (too short)`);
+          }
+        }
+        const list = emptyRequired.length ? emptyRequired : missing;
+        const firstKey = req.find((k) => {
+          const v = values[k];
+          return v === undefined || v === null || String(v).trim() === "";
+        }) || req[0];
+        if (firstKey && FIELD_STEP[firstKey] !== undefined) {
+          setCurrentStep(FIELD_STEP[firstKey]);
+        }
+        try {
+          setFocus(firstKey as any);
+        } catch {
+          /* ignore */
+        }
+        toast.error("Please complete the highlighted fields", {
+          description: list.slice(0, 6).join(" · "),
+          duration: 8000,
+        });
+        setTimeout(() => {
+          document.querySelector("[data-field-error='true']")?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        }, 80);
         return;
       }
     }
@@ -249,10 +422,13 @@ export default function NewApplicationPage() {
   // ──────────────────────────────
   // Loading / Error States
   // ──────────────────────────────
-  if (schoolLoading) {
+  if (schoolLoading || loadingDraft) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <Loader className="animate-spin h-10 w-10" />
+      <div className="flex flex-col justify-center items-center min-h-screen gap-3">
+        <Loader className="animate-spin h-10 w-10 text-primary" />
+        <p className="text-sm text-muted-foreground">
+          {loadingDraft ? "Opening saved application…" : "Loading…"}
+        </p>
       </div>
     );
   }
@@ -288,7 +464,36 @@ export default function NewApplicationPage() {
           <Alert className="mx-6 mt-4 bg-secondary-50 border-secondary-200">
             <CheckCircle2 className="h-5 w-5 text-secondary-600" />
             <AlertDescription className="text-secondary-800">
-              Draft saved (ID: <strong>{savedAppId}</strong>). Continue editing or submit when ready.
+              {editId ? "Editing saved application" : "Draft saved"} (ID: <strong>{savedAppId}</strong>).
+              You can keep editing or submit when ready.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {Object.keys(errors).length > 0 && (
+          <Alert variant="destructive" className="mx-6 mt-4">
+            <AlertCircle className="h-5 w-5" />
+            <AlertDescription>
+              <p className="font-semibold mb-1">Please fix the following:</p>
+              <ul className="list-disc pl-5 text-sm space-y-0.5">
+                {Object.entries(errors).map(([key, err]) => (
+                  <li key={key}>
+                    <button
+                      type="button"
+                      className="underline text-left"
+                      onClick={() => {
+                        if (FIELD_STEP[key] !== undefined) setCurrentStep(FIELD_STEP[key]);
+                        try { setFocus(key as any); } catch { /* */ }
+                        setTimeout(() => {
+                          document.querySelector(`[data-field-error='true']`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                        }, 50);
+                      }}
+                    >
+                      {FIELD_LABELS[key] || key}: {(err as any)?.message || "Required"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </AlertDescription>
           </Alert>
         )}
@@ -334,8 +539,8 @@ export default function NewApplicationPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <Label>First Name *</Label>
-                    <Controller name="first_name" control={control} render={({ field }) => <Input {...field} />} />
-                    {errors.first_name && <p className="text-red-500 text-sm mt-1">{errors.first_name.message}</p>}
+                    <Controller name="first_name" control={control} render={({ field }) => <Input {...field} className={fieldErrorClass(!!errors.first_name)} aria-invalid={!!errors.first_name} />} />
+                    {errors.first_name && <p data-field-error="true" className="text-red-500 text-sm mt-1 font-medium">{errors.first_name.message}</p>}
                   </div>
                   <div>
                     <Label>Middle Name</Label>
@@ -343,8 +548,8 @@ export default function NewApplicationPage() {
                   </div>
                   <div>
                     <Label>Last Name *</Label>
-                    <Controller name="last_name" control={control} render={({ field }) => <Input {...field} />} />
-                    {errors.last_name && <p className="text-red-500 text-sm mt-1">{errors.last_name.message}</p>}
+                    <Controller name="last_name" control={control} render={({ field }) => <Input {...field} className={fieldErrorClass(!!errors.last_name)} aria-invalid={!!errors.last_name} />} />
+                    {errors.last_name && <p data-field-error="true" className="text-red-500 text-sm mt-1 font-medium">{errors.last_name.message}</p>}
                   </div>
                   <div>
                     <Label>Preferred Name</Label>
@@ -373,8 +578,8 @@ export default function NewApplicationPage() {
                   </div>
                   <div>
                     <Label>Nationality *</Label>
-                    <Controller name="nationality" control={control} render={({ field }) => <Input {...field} />} />
-                    {errors.nationality && <p className="text-red-500 text-sm mt-1">{errors.nationality.message}</p>}
+                    <Controller name="nationality" control={control} render={({ field }) => <Input {...field} className={fieldErrorClass(!!errors.nationality)} aria-invalid={!!errors.nationality} />} />
+                    {errors.nationality && <p data-field-error="true" className="text-red-500 text-sm mt-1 font-medium">{errors.nationality.message}</p>}
                   </div>
                   <div className="md:col-span-2">
                     <Label>Class / Grade Applied *</Label>
@@ -394,7 +599,7 @@ export default function NewApplicationPage() {
                             }}
                             disabled={gradesLoading}
                           >
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger className={`w-full ${fieldErrorClass(!!errors.class_applied)}`}>
                               <SelectValue placeholder={gradesLoading ? "Loading classes..." : "Select class"} />
                             </SelectTrigger>
 
@@ -425,7 +630,7 @@ export default function NewApplicationPage() {
                       }}
                     />
                     {errors.class_applied && (
-                      <p className="text-red-500 text-sm mt-1 font-medium">
+                      <p data-field-error="true" className="text-red-500 text-sm mt-1 font-medium">
                         {errors.class_applied.message}
                       </p>
                     )}
@@ -438,18 +643,18 @@ export default function NewApplicationPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="md:col-span-2">
                     <Label>Primary Guardian Name *</Label>
-                    <Controller name="primary_guardian_name" control={control} render={({ field }) => <Input {...field} />} />
-                    {errors.primary_guardian_name && <p className="text-red-500 text-sm mt-1">{errors.primary_guardian_name.message}</p>}
+                    <Controller name="primary_guardian_name" control={control} render={({ field }) => <Input {...field} className={fieldErrorClass(!!errors.primary_guardian_name)} aria-invalid={!!errors.primary_guardian_name} />} />
+                    {errors.primary_guardian_name && <p data-field-error="true" className="text-red-500 text-sm mt-1 font-medium">{errors.primary_guardian_name.message}</p>}
                   </div>
                   <div>
                     <Label>Relationship *</Label>
-                    <Controller name="primary_guardian_relationship" control={control} render={({ field }) => <Input {...field} />} />
-                    {errors.primary_guardian_relationship && <p className="text-red-500 text-sm mt-1">{errors.primary_guardian_relationship.message}</p>}
+                    <Controller name="primary_guardian_relationship" control={control} render={({ field }) => <Input {...field} className={fieldErrorClass(!!errors.primary_guardian_relationship)} aria-invalid={!!errors.primary_guardian_relationship} />} />
+                    {errors.primary_guardian_relationship && <p data-field-error="true" className="text-red-500 text-sm mt-1 font-medium">{errors.primary_guardian_relationship.message}</p>}
                   </div>
                   <div>
                     <Label>Phone Number *</Label>
-                    <Controller name="primary_guardian_phone" control={control} render={({ field }) => <Input type="tel" {...field} />} />
-                    {errors.primary_guardian_phone && <p className="text-red-500 text-sm mt-1">{errors.primary_guardian_phone.message}</p>}
+                    <Controller name="primary_guardian_phone" control={control} render={({ field }) => <Input type="tel" {...field} className={fieldErrorClass(!!errors.primary_guardian_phone)} aria-invalid={!!errors.primary_guardian_phone} />} />
+                    {errors.primary_guardian_phone && <p data-field-error="true" className="text-red-500 text-sm mt-1 font-medium">{errors.primary_guardian_phone.message}</p>}
                   </div>
                   <div>
                     <Label>Email</Label>
@@ -673,5 +878,13 @@ export default function NewApplicationPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function NewApplicationPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center"><Loader className="h-10 w-10 animate-spin" /></div>}>
+      <NewApplicationPageInner />
+    </Suspense>
   );
 }

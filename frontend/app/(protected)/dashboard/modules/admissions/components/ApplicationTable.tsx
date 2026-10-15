@@ -17,6 +17,7 @@ import {
   Calendar,
   User,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -177,10 +178,18 @@ export default function ApplicationTable({
                 <td className="p-4 text-right">
                   <div className="flex justify-end gap-2">
                     <Link href={`/dashboard/modules/admissions/${app.id}`}>
-                      <Button variant="ghost" size="sm" className="rounded-xl">
+                      <Button variant="ghost" size="sm" className="rounded-xl" title="View">
                         <Eye className="h-4 w-4" />
                       </Button>
                     </Link>
+                    {(app.status === "DRAFT" || app.status === "SUBMITTED") && (
+                      <Link href={`/dashboard/modules/admissions/new?id=${app.id}`}>
+                        <Button variant="outline" size="sm" className="rounded-xl gap-1" title="Continue editing">
+                          <Pencil className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline text-xs">Edit</span>
+                        </Button>
+                      </Link>
+                    )}
                     <ActionMenu
                       app={app}
                       onEnroll={handleEnroll}
