@@ -17,6 +17,10 @@ import {
   removeSchoolSupportSessionId,
   setActiveSchool as persistActiveSchool,
   setSchoolSupportSessionId,
+  cacheActiveSchool,
+  readCachedActiveSchool,
+  cacheSchoolsList,
+  readCachedSchoolsList,
 } from "@/utils/auth";
 import { toast } from "sonner";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
