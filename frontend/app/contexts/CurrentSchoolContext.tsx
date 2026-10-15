@@ -24,6 +24,7 @@ import {
 } from "@/utils/auth";
 import { toast } from "sonner";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { asList } from "@/utils/listResponse";
 import { useRouter } from "next/navigation";
 
 export interface Module {
@@ -105,7 +106,8 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
     hydratedCache.current = true;
     const cachedSchool = readCachedActiveSchool<School>();
     const cachedList = readCachedSchoolsList<School[]>();
-    if (cachedList?.length) setSchools(cachedList);
+    const list = asList<School>(cachedList);
+    if (list.length) setSchools(list);
     if (cachedSchool) {
       setCurrentSchoolState(cachedSchool);
       setLoading(false);
@@ -145,7 +147,7 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
       // my-schools already returns full SchoolSerializer (incl. modules)
       // — skip redundant detail request so dashboard mounts faster
       const schoolsResponse = await api.get("/schools/my-schools/");
-      const fetchedSchools: School[] = schoolsResponse.data;
+      const fetchedSchools = asList<School>(schoolsResponse.data);
       setSchools(fetchedSchools);
       cacheSchoolsList(fetchedSchools);
 
@@ -243,7 +245,7 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
       value={{
         currentSchool,
         setCurrentSchool,
-        schools,
+        schools: Array.isArray(schools) ? schools : [],
         loading,
         error,
         isPlatformAdmin,

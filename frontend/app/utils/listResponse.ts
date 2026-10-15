@@ -14,20 +14,15 @@ export function asList<T = unknown>(data: unknown): T[] {
   return [];
 }
 
-/** True when payload looks like a DRF PageNumberPagination response. */
-export function isPaginatedList(data: unknown): data is {
-  count?: number;
-  next?: string | null;
-  previous?: string | null;
-  results: unknown[];
-} {
+/**
+ * True when payload looks like a list envelope (DRF pagination or similar).
+ * Intentionally does not require count/next — some endpoints only return { results }.
+ */
+export function isPaginatedList(data: unknown): data is { results: unknown[] } {
   return (
     !!data &&
     typeof data === "object" &&
     !Array.isArray(data) &&
-    Array.isArray((data as { results?: unknown }).results) &&
-    ("count" in (data as object) ||
-      "next" in (data as object) ||
-      "previous" in (data as object))
+    Array.isArray((data as { results?: unknown }).results)
   );
 }
