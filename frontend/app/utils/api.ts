@@ -5,6 +5,7 @@ import {
   getActiveSchoolId,
   getSchoolSupportSessionId,
 } from "./auth";
+import { isPaginatedList } from "./listResponse";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
@@ -42,6 +43,22 @@ if (typeof window !== "undefined") {
 
     return config;
   });
+}
+
+
+// Unwrap DRF paginated list payloads so callers can safely use .map / .find / .filter.
+// Detail/object responses are left unchanged. Code that already did `data.results || data`
+// still works because arrays have no `.results` and fall back to the array itself.
+if (typeof window !== "undefined") {
+  api.interceptors.response.use(
+    (response) => {
+      if (isPaginatedList(response.data)) {
+        response.data = response.data.results;
+      }
+      return response;
+    },
+    (error) => Promise.reject(error)
+  );
 }
 
 export const getCurrentUser = async (forceFresh: boolean = false) => {

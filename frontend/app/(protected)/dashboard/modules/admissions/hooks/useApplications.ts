@@ -10,7 +10,7 @@ export const useApplications = () => {
     const fetch = async () => {
       try {
         const res = await axios.get('/api/admissions/applications/');
-        setApplications(res.data);
+        setApplications(Array.isArray(res.data) ? res.data : Array.isArray(res.data?.results) ? res.data.results : []);
       } catch (error) {
         // Offline fallback: localStorage.getItem('applications')
       } finally {

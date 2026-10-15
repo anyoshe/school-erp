@@ -23,6 +23,7 @@ import {
   fetchCurriculumTemplates, adoptCurriculumTemplate,
   type AcademicYear, type GradeLevel, type CurriculumTemplate,
 } from "./services";
+import { asList } from "@/utils/listResponse";
 
 type Tab = "overview" | "years" | "classes" | "subjects";
 
@@ -40,11 +41,11 @@ export default function AcademicsPage() {
     queryFn: fetchCurriculumTemplates,
   });
 
-  const years = yearsQ.data ?? [];
-  const grades = gradesQ.data ?? [];
-  const subjects = subjectsQ.data ?? [];
-  const curricula = curriculaQ.data ?? [];
-  const templates = templatesQ.data ?? [];
+  const years = asList<AcademicYear>(yearsQ.data);
+  const grades = asList<GradeLevel>(gradesQ.data);
+  const subjects = asList(subjectsQ.data);
+  const curricula = asList(curriculaQ.data);
+  const templates = asList<CurriculumTemplate>(templatesQ.data);
   const activeYear = years.find((y) => y.is_active) ?? years[0];
   const needsCurriculum = !curriculaQ.isLoading && curricula.length === 0;
 

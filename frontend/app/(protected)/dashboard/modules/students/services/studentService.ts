@@ -1,5 +1,6 @@
 "use client";
 
+import { asList } from "@/utils/listResponse";
 import api from "../../../../../utils/api"; // Axios instance that auto-attaches JWT
 const LOCAL_KEY = "students_cache";
 const PENDING_CREATE = "pending_students";
@@ -10,9 +11,7 @@ const PENDING_DELETE = "pending_deletes";
 const isBrowser = () => typeof window !== "undefined";
 
 function normalizeList(data: any): any[] {
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.results)) return data.results;
-  return [];
+  return asList(data);
 }
 
 function readJSON(key: string, fallback: any[] = []): any[] {

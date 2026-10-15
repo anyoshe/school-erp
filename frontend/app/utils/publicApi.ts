@@ -1,3 +1,4 @@
+import { isPaginatedList } from "./listResponse";
 // utils/publicApi.ts
 import axios from "axios";
 
@@ -18,5 +19,16 @@ publicApi.interceptors.request.use((config) => {
   }
   return config;
 });
+
+
+publicApi.interceptors.response.use(
+  (response) => {
+    if (isPaginatedList(response.data)) {
+      response.data = response.data.results;
+    }
+    return response;
+  },
+  (error) => Promise.reject(error)
+);
 
 export default publicApi;

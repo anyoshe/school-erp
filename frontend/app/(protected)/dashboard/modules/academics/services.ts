@@ -1,3 +1,4 @@
+import { asList } from "@/utils/listResponse";
 import api from "@/utils/api";
 
 export type AcademicYear = {
@@ -60,7 +61,7 @@ export type Curriculum = {
 
 export async function fetchAcademicYears() {
   const { data } = await api.get("/academics/academic-years/");
-  return (data.results ?? data) as AcademicYear[];
+  return asList<AcademicYear>(data);
 }
 
 export async function createAcademicYear(payload: {
@@ -90,7 +91,7 @@ export async function addTerm(yearId: number, payload: {
 
 export async function fetchGradeLevels() {
   const { data } = await api.get("/academics/grade-levels/");
-  return (data.results ?? data) as GradeLevel[];
+  return asList<GradeLevel>(data);
 }
 
 export async function createGradeLevel(payload: Record<string, unknown>) {
@@ -109,7 +110,7 @@ export async function createSection(payload: {
 
 export async function fetchSubjects() {
   const { data } = await api.get("/academics/subjects/");
-  return (data.results ?? data) as Subject[];
+  return asList<Subject>(data);
 }
 
 export async function createSubject(payload: {
@@ -123,7 +124,7 @@ export async function createSubject(payload: {
 
 export async function fetchCurricula() {
   const { data } = await api.get("/academics/curricula/");
-  return (data.results ?? data) as Curriculum[];
+  return asList<Curriculum>(data);
 }
 
 
@@ -137,7 +138,7 @@ export type CurriculumTemplate = {
 
 export async function fetchCurriculumTemplates() {
   const { data } = await api.get("/academics/curriculum-templates/");
-  return (data.results ?? data) as CurriculumTemplate[];
+  return asList<CurriculumTemplate>(data);
 }
 
 /** Clone a global template (CBC, 8-4-4, etc.) into this school with its grade levels */
