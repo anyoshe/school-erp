@@ -1,6 +1,6 @@
 "use client";
 
-                    src={resolveMediaUrl(currentSchool.logo) || undefined}  // ← Now full URL from ImageField
+import { resolveMediaUrl } from "@/utils/media";
 
 import {
   Menu,
@@ -96,6 +96,7 @@ export default function Navbar({
               <div className="relative w-8 h-8 rounded-full overflow-hidden flex items-center justify-center text-white font-semibold text-sm bg-gradient-to-br from-primary-600 to-primary-800 shadow-sm">
                 {currentSchool?.logo ? (
                   <img
+                    src={resolveMediaUrl(currentSchool.logo) || undefined}  // ← Now full URL from ImageField
                     alt={`${currentSchool.name || 'School'} logo`}
                     className="w-full h-full object-cover"
                     onError={(e) => {
