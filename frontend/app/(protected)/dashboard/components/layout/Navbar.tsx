@@ -29,26 +29,24 @@ export default function Navbar({
 }: NavbarProps) {
   const { currentSchool } = useCurrentSchool();
   const router = useRouter();
-  const { user, loading: isLoadingUser } = useCurrentUser();
+  const { user } = useCurrentUser();
 
-  // Compute display name (priority: full_name → first+last → email username → fallback)
+  // Stable placeholders for SSR + first client paint (avoid "Loading..." hydration mismatch)
   const displayName = user
     ? user.full_name ||
-    `${user.first_name || ""} ${user.last_name || ""}`.trim() ||
-    user.email.split("@")[0] ||
-    "User"
-    : "Loading...";
+      `${user.first_name || ""} ${user.last_name || ""}`.trim() ||
+      user.email?.split("@")[0] ||
+      "User"
+    : "Account";
 
-  // Compute initials (first letter of first name + last name, or email)
   const initials = user
     ? ((user.first_name?.[0] || "") + (user.last_name?.[0] || "")).toUpperCase() ||
-    user.email[0].toUpperCase()
-    : "?";
+      (user.email?.[0] || "U").toUpperCase()
+    : "U";
 
-  // Role display (capitalize or fallback)
   const displayRole = user?.role
     ? user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()
-    : "Loading...";
+    : "Member";
 
   async function exitSupportContext() {
     try {
@@ -111,7 +109,7 @@ export default function Navbar({
 
               <div className="hidden sm:block">
                 <p className="text-sm font-semibold text-gray-900 truncate max-w-[160px]">
-                  {currentSchool?.name || "Select School"}
+                  <span suppressHydrationWarning>{currentSchool?.name || "School"}</span>
                 </p>
                 <p className="text-xs text-gray-500">Dashboard</p>
               </div>
@@ -163,15 +161,15 @@ export default function Navbar({
             {/* User Profile */}
             <div className="flex items-center gap-2">
               <div className="hidden sm:block text-right">
-                <p className="text-sm font-medium text-gray-900">
-                  {isLoadingUser ? "Loading..." : displayName}
+                <p className="text-sm font-medium text-gray-900" suppressHydrationWarning>
+                  {displayName}
                 </p>
-                <p className="text-xs text-gray-500">{displayRole}</p>
+                <p className="text-xs text-gray-500" suppressHydrationWarning>{displayRole}</p>
               </div>
 
               {/* User Avatar / Initials */}
-              <div className="w-8 h-8 bg-gradient-to-br from-primary-600 to-primary-800 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                {isLoadingUser ? "..." : initials}
+              <div className="w-8 h-8 bg-gradient-to-br from-primary-600 to-primary-800 rounded-full flex items-center justify-center text-white font-semibold text-sm" suppressHydrationWarning>
+                {initials}
               </div>
             </div>
           </div>
