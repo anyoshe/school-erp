@@ -21,7 +21,8 @@ export default function DashboardHome() {
     queryKey: ["school-pulse", currentSchool?.id],
     queryFn: fetchSchoolPulse,
     enabled: !!currentSchool?.id,
-    staleTime: 60_000,
+    staleTime: 120_000,
+    placeholderData: (prev) => prev,
   });
 
   const pulse = pulseQ.data;
@@ -33,10 +34,7 @@ export default function DashboardHome() {
 
   const currency = pulse?.school?.currency_symbol || currentSchool?.currency_symbol || "KSh";
 
-  if (schoolLoading) {
-    return <div className="h-64 animate-pulse bg-stone-100 rounded-2xl" />;
-  }
-
+  // Paint hero immediately; pulse cards show their own loading state
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       {/* Hero — explicit colors so heading never washes out */}

@@ -174,9 +174,10 @@ class CurrentUserSerializer(serializers.ModelSerializer):
         return f"{obj.first_name or ''} {obj.last_name or ''}".strip() or obj.email.split('@')[0]
 
     def get_schools(self, obj):
-        from apps.school.serializers import SchoolMiniSerializer
-        schools_qs = obj.schools.prefetch_related('modules').all()
-        return SchoolMiniSerializer(schools_qs, many=True).data
+        # Session serializer includes modules (code/name) without grade_levels — enough for shell
+        from apps.school.serializers import SchoolSessionSerializer
+        schools_qs = obj.schools.prefetch_related("modules").all()
+        return SchoolSessionSerializer(schools_qs, many=True, context=self.context).data
     
     def get_is_temporary_password(self, obj):
         return obj.password_changed_at is None

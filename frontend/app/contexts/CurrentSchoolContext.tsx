@@ -90,7 +90,7 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
     if (userLoading || !user) return;
 
     try {
-      setLoading(true);
+      setLoading(false); // never block dashboard chrome; background refresh only
       setError(null);
       setIsPlatformAdmin(Boolean(user.is_superuser));
 
@@ -144,6 +144,24 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, [user, userLoading, router]);
+
+  // Instant bootstrap from /accounts/me schools (already fetched) — no spinner
+  useEffect(() => {
+    if (userLoading || !user) return;
+    const fromUser = (user as any).schools;
+    if (Array.isArray(fromUser) && fromUser.length > 0 && !currentSchool) {
+      setSchools(fromUser);
+      const savedId = getActiveSchoolId();
+      const selected =
+        fromUser.find((s: School) => s.id === savedId) ||
+        (user as any).active_school ||
+        fromUser[0];
+      if (selected) {
+        setCurrentSchoolState(selected);
+        persistActiveSchool(selected.id);
+      }
+    }
+  }, [user, userLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (

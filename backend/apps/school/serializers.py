@@ -52,7 +52,27 @@ class ModuleSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'code']
 
 
+class SchoolSessionSerializer(serializers.ModelSerializer):
+    """
+    Lightweight school payload for login/session and my-schools.
+    Includes modules for the sidebar — excludes heavy grade_levels tree.
+    """
+    modules = ModuleSerializer(many=True, read_only=True)
+    owner = serializers.UUIDField(source="owner.id", read_only=True)
+
+    class Meta:
+        model = School
+        fields = [
+            "id", "owner", "name", "short_name",
+            "email", "phone", "city", "country",
+            "currency", "currency_symbol", "currency_display",
+            "logo", "modules", "setup_complete",
+            "created_at", "updated_at",
+        ]
+
+
 class SchoolSerializer(serializers.ModelSerializer):
+
     modules = ModuleSerializer(many=True, read_only=True)
     grade_levels = GradeLevelSerializer(many=True, read_only=True) 
     owner = serializers.UUIDField(source="owner.id", read_only=True)

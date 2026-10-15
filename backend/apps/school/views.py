@@ -14,6 +14,7 @@ from .serializers import (
     SchoolCreateUpdateSerializer,
     ModuleSerializer,
     SchoolMiniSerializer,
+    SchoolSessionSerializer,
     PlatformSchoolSerializer,
 )
 from .module_seed import seed_default_modules
@@ -90,7 +91,8 @@ class SchoolViewSet(ModelViewSet):
             schools = School.objects.filter(
                 Q(owner=request.user) | Q(users=request.user)
             ).distinct().order_by('name')
-        serializer = SchoolSerializer(schools, many=True, context={'request': request})
+        schools = schools.prefetch_related("modules")
+        serializer = SchoolSessionSerializer(schools, many=True, context={'request': request})
         return Response(serializer.data)
 
     @action(detail=False, methods=["get"], url_path="platform-directory")
