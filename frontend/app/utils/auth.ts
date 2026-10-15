@@ -61,6 +61,7 @@ export const isSchoolSelected = (): boolean => {
 // Optional but VERY useful
 export const logout = () => {
   removeToken();
+  try { sessionStorage.removeItem("erp_current_user_cache"); } catch {}
   removeActiveSchool();
   removeSchoolSupportSessionId();
 };

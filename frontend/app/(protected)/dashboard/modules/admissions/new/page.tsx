@@ -34,19 +34,29 @@ import Link from "next/link";
 // ──────────────────────────────
 // Form schema
 // ──────────────────────────────
+const emptyToUndefined = (v: unknown) =>
+  v === "" || v === null || v === undefined ? undefined : v;
+
 const formSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
   middle_name: z.string().optional(),
   last_name: z.string().min(1, "Last name is required"),
   preferred_name: z.string().optional(),
-  gender: z.enum(["MALE", "FEMALE", "OTHER", ""]).optional(),
+  gender: z.preprocess(
+    emptyToUndefined,
+    z.enum(["MALE", "FEMALE", "OTHER"]).optional()
+  ),
   date_of_birth: z.string().optional(),
   nationality: z.string().min(1, "Nationality is required"),
   passport_number: z.string().optional(),
   class_applied: z.string().min(1, "Class/Grade is required"),
   primary_guardian_name: z.string().min(1, "Guardian name is required"),
   primary_guardian_phone: z.string().min(9, "Valid phone number required"),
-  primary_guardian_email: z.string().email("Invalid email").optional(),
+  // empty string must NOT fail as "invalid email"
+  primary_guardian_email: z.preprocess(
+    emptyToUndefined,
+    z.string().email("Invalid email").optional()
+  ),
   primary_guardian_relationship: z.string().min(1, "Relationship is required"),
   primary_guardian_id_number: z.string().optional(),
   address: z.string().optional(),
@@ -105,6 +115,14 @@ const FIELD_STEP: Record<string, number> = {
   primary_guardian_email: 1,
   primary_guardian_relationship: 1,
   primary_guardian_id_number: 1,
+};
+
+/** Required fields enforced per tab before Next / Submit */
+const STEP_REQUIRED: Record<number, string[]> = {
+  0: ["first_name", "last_name", "nationality", "class_applied"],
+  1: ["primary_guardian_name", "primary_guardian_phone", "primary_guardian_relationship"],
+  2: [],
+  3: [],
 };
 
 function fieldErrorClass(hasError: boolean) {
@@ -840,8 +858,26 @@ function NewApplicationPageInner() {
                 {currentStep < steps.length - 1 ? (
                   <Button
                     type="button"
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.preventDefault();
+                      const fields = STEP_REQUIRED[currentStep] || [];
+                      const ok = fields.length ? await trigger(fields as any) : true;
+                      if (!ok) {
+                        const labels = fields
+                          .filter((f) => !getValues(f) || (f === "primary_guardian_phone" && String(getValues(f) || "").length < 9))
+                          .map((f) => FIELD_LABELS[f] || f);
+                        toast.error("Complete required fields on this step", {
+                          description: labels.join(" · ") || "Check highlighted fields",
+                          duration: 6000,
+                        });
+                        setTimeout(() => {
+                          document.querySelector("[data-field-error='true']")?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "center",
+                          });
+                        }, 50);
+                        return;
+                      }
                       setCurrentStep((prev) => prev + 1);
                     }}
                   >
@@ -851,8 +887,8 @@ function NewApplicationPageInner() {
                   <Button
                     type="button"
                     onClick={() => handleAction("submit")}
-                    disabled={!isValid || isSubmitting || saveMutation.isPending}
-                    className={`min-w-[180px] ${!isValid ? "opacity-70 cursor-not-allowed" : ""}`}
+                    disabled={isSubmitting || saveMutation.isPending}
+                    className="min-w-[180px]"
                   >
                     {saveMutation.isPending ? (
                       <>
@@ -867,10 +903,17 @@ function NewApplicationPageInner() {
               </div>
             </div>
 
-            {!isValid && currentStep === steps.length - 1 && (
+            {Object.keys(errors).length > 0 && currentStep === steps.length - 1 && (
               <Alert variant="destructive" className="mt-4">
                 <AlertDescription>
-                  Some required fields are still missing. Please check all tabs.
+                  <p className="font-semibold mb-1">Still need attention:</p>
+                  <ul className="list-disc pl-5 text-sm">
+                    {Object.entries(errors).map(([key, err]) => (
+                      <li key={key}>
+                        {FIELD_LABELS[key] || key}: {(err as any)?.message || "Invalid"}
+                      </li>
+                    ))}
+                  </ul>
                 </AlertDescription>
               </Alert>
             )}
