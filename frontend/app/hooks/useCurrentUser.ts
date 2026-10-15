@@ -91,18 +91,19 @@ export function useCurrentUser() {
   const cacheAge = envelope ? Date.now() - envelope.cachedAt : Infinity;
   const cacheFresh = !!cachedUser && cacheAge < USER_CACHE_TTL_MS;
 
-  // Only hit the network when mounted, token present, and cache is missing/stale
-  const shouldFetch = mounted && hasToken && !cacheFresh;
+  // Always refresh user when token exists; cache only speeds up first paint.
+  const shouldFetch = mounted && hasToken;
 
   const { data, isLoading, isFetching, error } = useQuery<CurrentUser>({
     queryKey: ["currentUser"],
     queryFn: () => getCurrentUser(),
     enabled: shouldFetch,
-    staleTime: USER_CACHE_TTL_MS,
+    staleTime: 60_000,
     gcTime: 60 * 60_000,
     retry: 1,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    placeholderData: cachedUser,
     initialData: cacheFresh ? cachedUser : undefined,
     initialDataUpdatedAt: cacheFresh && envelope ? envelope.cachedAt : undefined,
   });

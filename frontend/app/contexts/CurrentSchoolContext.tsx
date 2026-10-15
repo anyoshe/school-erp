@@ -152,8 +152,8 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
       cacheSchoolsList(fetchedSchools);
 
       if (fetchedSchools.length === 0) {
-        setCurrentSchoolState(null);
-        removeActiveSchool();
+        // Do not wipe a working cached school on a transient empty payload
+        console.warn("[Context] my-schools returned empty list");
         return;
       }
 
@@ -178,32 +178,13 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
     }
   }, [user, userLoading, router]);
 
-  // Chrome policy: if we already hydrated a school from session cache, do NOT
-  // refetch on every dashboard refresh. Only fetch when there is no cache
-  // (first login / cleared session). Manual school switch still uses setCurrentSchool.
+  // Always load schools from API when the user is known.
+  // Session cache (useLayoutEffect) only paints chrome immediately; it must not
+  // block the network refresh, or schools[] can stay empty forever.
   useEffect(() => {
     if (userLoading || !user) return;
     if (initializedForUser.current === user.id) return;
     initializedForUser.current = user.id;
-
-    const hasSchoolCache = !!readCachedActiveSchool();
-    if (hasSchoolCache) {
-      // Cache already applied in useLayoutEffect — keep chrome static.
-      // Optional quiet refresh only if cache is older than 30 minutes.
-      try {
-        const raw = sessionStorage.getItem("erp_active_school_cache_meta");
-        const cachedAt = raw ? Number(raw) : 0;
-        const age = Date.now() - (cachedAt || 0);
-        if (cachedAt && age < 30 * 60 * 1000) {
-          setLoading(false);
-          return;
-        }
-      } catch {
-        setLoading(false);
-        return;
-      }
-    }
-
     void fetchAndSetSchools();
   }, [user, userLoading, fetchAndSetSchools]);
 
