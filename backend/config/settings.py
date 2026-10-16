@@ -126,6 +126,9 @@ if DATABASE_URL:
         )
 
     DATABASES = {
+    # Reuse DB connections (helps Neon / remote Postgres on refresh)
+    # Applied via default entry CONN_MAX_AGE below when present.
+
         "default": {
             "ENGINE": "django.db.backends.postgresql",
             "NAME": url.path.lstrip("/"),

@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { getCurrentUser } from "@/utils/api";
-import { setActiveSchool, getActiveSchoolId } from "@/utils/auth";
+import { setActiveSchool, getActiveSchoolId, cacheActiveSchool, cacheSchoolsList } from "@/utils/auth";
 
 export default function AuthResolvePage() {
   const router = useRouter();
@@ -20,6 +20,12 @@ export default function AuthResolvePage() {
 
         // Seed react-query cache so dashboard does not refetch immediately
         queryClient.setQueryData(["currentUser"], user);
+        try {
+          sessionStorage.setItem(
+            "erp_current_user_cache",
+            JSON.stringify({ user, cachedAt: Date.now() })
+          );
+        } catch { /* */ }
 
         if (user.force_change_password) {
           router.replace("/change-password?first=true");
@@ -44,6 +50,10 @@ export default function AuthResolvePage() {
 
         if (activeSchool?.id) {
           setActiveSchool(activeSchool.id);
+          cacheActiveSchool(activeSchool);
+        }
+        if (Array.isArray(user.schools)) {
+          cacheSchoolsList(user.schools);
         }
 
         if (!activeSchool?.setup_complete) {

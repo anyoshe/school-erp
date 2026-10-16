@@ -59,9 +59,58 @@ export const isSchoolSelected = (): boolean => {
 };
 
 // Optional but VERY useful
+const ACTIVE_SCHOOL_CACHE = "erp_active_school_cache";
+const SCHOOLS_LIST_CACHE = "erp_schools_list_cache";
+const SCHOOL_CACHE_META = "erp_active_school_cache_meta";
+
+export const cacheActiveSchool = (school: unknown) => {
+  try {
+    sessionStorage.setItem(ACTIVE_SCHOOL_CACHE, JSON.stringify(school));
+    sessionStorage.setItem(SCHOOL_CACHE_META, String(Date.now()));
+  } catch { /* ignore */ }
+};
+
+export const readCachedActiveSchool = <T = unknown>(): T | null => {
+  try {
+    const raw = sessionStorage.getItem(ACTIVE_SCHOOL_CACHE);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const cacheSchoolsList = (schools: unknown) => {
+  try {
+    sessionStorage.setItem(SCHOOLS_LIST_CACHE, JSON.stringify(schools));
+  } catch { /* ignore */ }
+};
+
+export const readCachedSchoolsList = <T = unknown>(): T | null => {
+  try {
+    const raw = sessionStorage.getItem(SCHOOLS_LIST_CACHE);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const getSchoolCacheAgeMs = (): number => {
+  try {
+    const t = Number(sessionStorage.getItem(SCHOOL_CACHE_META) || 0);
+    return t ? Date.now() - t : Infinity;
+  } catch {
+    return Infinity;
+  }
+};
+
 export const logout = () => {
   removeToken();
-  try { sessionStorage.removeItem("erp_current_user_cache"); } catch {}
+  try {
+    sessionStorage.removeItem("erp_current_user_cache");
+    sessionStorage.removeItem(ACTIVE_SCHOOL_CACHE);
+    sessionStorage.removeItem(SCHOOLS_LIST_CACHE);
+    sessionStorage.removeItem(SCHOOL_CACHE_META);
+  } catch {}
   removeActiveSchool();
   removeSchoolSupportSessionId();
 };

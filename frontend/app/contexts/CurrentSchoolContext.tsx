@@ -5,6 +5,7 @@ import {
   useContext,
   useState,
   useEffect,
+  useLayoutEffect,
   useCallback,
   useRef,
   ReactNode,
@@ -16,6 +17,11 @@ import {
   removeSchoolSupportSessionId,
   setActiveSchool as persistActiveSchool,
   setSchoolSupportSessionId,
+  cacheActiveSchool,
+  readCachedActiveSchool,
+  cacheSchoolsList,
+  readCachedSchoolsList,
+  getSchoolCacheAgeMs,
 } from "@/utils/auth";
 import { toast } from "sonner";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -85,6 +91,21 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const initializedForUser = useRef<string | null>(null);
+  const hydratedCache = useRef(false);
+
+  // Instant chrome on refresh — paint school/modules from session before browser paint
+  useLayoutEffect(() => {
+    if (hydratedCache.current) return;
+    hydratedCache.current = true;
+    const cachedSchool = readCachedActiveSchool<School>();
+    const cachedList = readCachedSchoolsList<School[]>();
+    if (Array.isArray(cachedList) && cachedList.length) setSchools(cachedList);
+    if (cachedSchool?.id) {
+      setCurrentSchoolState(cachedSchool);
+      setLoading(false);
+    }
+  }, []);
+
 
   const fetchAndSetSchools = useCallback(async () => {
     if (userLoading || !user) return;
@@ -134,6 +155,8 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
         )[0];
       setCurrentSchoolState(selected);
       persistActiveSchool(selected.id);
+      cacheActiveSchool(selected);
+      cacheSchoolsList(fetchedSchools);
     } catch (err: any) {
       console.error("[Context] Failed to load schools:", err);
       setError("Could not load your schools. Please try again later.");
@@ -170,14 +193,29 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
       && initializedForUser.current !== user.id
     ) {
       initializedForUser.current = user.id;
+      const age = getSchoolCacheAgeMs();
+      const cached = readCachedActiveSchool<School>();
+      const hasUsableCache =
+        !!cached?.id &&
+        Array.isArray(cached.modules) &&
+        cached.modules.length > 0 &&
+        age < 10 * 60 * 1000;
+      if (hasUsableCache) {
+        // Chrome already hydrated — quiet background refresh after a tick
+        const t = window.setTimeout(() => {
+          void fetchAndSetSchools();
+        }, 2500);
+        return () => window.clearTimeout(t);
+      }
       void fetchAndSetSchools();
     }
-  }, [fetchAndSetSchools]);
+  }, [fetchAndSetSchools, user, userLoading]);
 
   const setCurrentSchool = (school: School | null) => {
     setCurrentSchoolState(school);
     if (school) {
       persistActiveSchool(school.id);
+      cacheActiveSchool(school);
     } else {
       removeActiveSchool();
     }
