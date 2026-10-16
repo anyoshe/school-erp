@@ -146,19 +146,18 @@ export default function FeeStructureForm({
   // --- Logic ---
 
   const loadData = useCallback(async () => {
-    setFormLoading(true);
+    // Never block the whole dialog on network — show fields immediately
+    setFormLoading(false);
     try {
       const schoolId = currentSchool?.id || "none";
       const gradesKey = `erp_fee_form_grades_${schoolId}`;
       const catsKey = `erp_fee_form_cats_${schoolId}`;
 
-      // Paint from short-lived session cache first (refresh / reopen form)
       const cachedGrades = readFormCache(gradesKey);
       const cachedCats = readFormCache(catsKey);
       if (cachedGrades?.length) setGradeLevels(cachedGrades);
       if (cachedCats?.length) {
         setCategories(cachedCats);
-        // only seed empty groups when creating new (no clone/edit id)
         if (!structureId && !cloneFromId) {
           setCategoryGroups(
             cachedCats.map((cat: FeeCategory) => ({
@@ -170,19 +169,26 @@ export default function FeeStructureForm({
           );
         }
       }
-      // If we have cache, unlock form shell immediately; still refresh in background
-      if (cachedGrades?.length && cachedCats?.length && !structureId && !cloneFromId) {
-        setFormLoading(false);
-      }
+
+      const withTimeout = <T,>(p: Promise<T>, ms = 12000): Promise<T> =>
+        Promise.race([
+          p,
+          new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error("Request timed out")), ms)
+          ),
+        ]);
 
       const [gradesRes, categoriesRes] = await Promise.all([
-        api.get("/academics/grade-levels/", {
-          params: { is_active: true },
-          headers: { "X-School-ID": currentSchool?.id },
-        }),
-        api.get("/finance/categories/", {
-          headers: { "X-School-ID": currentSchool?.id },
-        }),
+        withTimeout(
+          api.get("/academics/grade-levels/", {
+            headers: { "X-School-ID": currentSchool?.id },
+          })
+        ),
+        withTimeout(
+          api.get("/finance/categories/", {
+            headers: { "X-School-ID": currentSchool?.id },
+          })
+        ),
       ]);
 
       const fetchedGrades = asArray(gradesRes.data);
@@ -402,10 +408,13 @@ export default function FeeStructureForm({
           </DialogTitle>
         </DialogHeader>
 
-        {formLoading ? (
-          <div className="flex justify-center py-20"><Loader2 className="h-10 w-10 animate-spin" /></div>
-        ) : (
-          <div className="space-y-6">
+        <div className="space-y-6">
+          {(gradeLevels.length === 0 || categories.length === 0) && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground rounded-lg border bg-stone-50 px-3 py-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Loading grades / fee categories in the background…
+            </div>
+          )}
             <section className="grid grid-cols-4 gap-4">
               <div className="col-span-2">
                 <Label>Structure Name</Label>
@@ -417,7 +426,7 @@ export default function FeeStructureForm({
                   <SelectTrigger><SelectValue placeholder="Grade" /></SelectTrigger>
                   <SelectContent>
                     {gradeLevels.map((g) => (
-                      <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                      <SelectItem key={String(g.id)} value={String(g.id)}>{g.name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -471,6 +480,11 @@ export default function FeeStructureForm({
               </div>
             </section>
 
+            {categories.length === 0 && (
+              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-3">
+                No fee categories yet. Create categories under Finance first, or wait for them to finish loading — you can still fill name, grade, and period above.
+              </p>
+            )}
             <section>
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-semibold">Items Breakdown</h3>
@@ -535,7 +549,6 @@ export default function FeeStructureForm({
               </Button>
             </DialogFooter>
           </div>
-        )}
       </DialogContent>
     </Dialog>
   );
