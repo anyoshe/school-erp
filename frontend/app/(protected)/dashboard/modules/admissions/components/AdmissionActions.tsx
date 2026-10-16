@@ -54,14 +54,24 @@ interface Props {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  SUBMITTED: "New Application",
+  DRAFT: "Draft",
+  SUBMITTED: "Submitted",
   UNDER_REVIEW: "Under Review",
   TEST_SCHEDULED: "Interview Scheduled",
+  INTERVIEW_COMPLETED: "Interview Done",
   OFFERED: "Offer Issued",
   ACCEPTED: "Offer Accepted",
   REJECTED: "Rejected",
   ENROLLED: "Enrolled",
 };
+
+const PIPELINE = [
+  "SUBMITTED",
+  "UNDER_REVIEW",
+  "OFFERED",
+  "ACCEPTED",
+  "ENROLLED",
+] as const;
 
 const STATUS_COLORS: Record<string, string> = {
   SUBMITTED: "bg-primary-100 text-primary-900 border-primary-200",
@@ -171,16 +181,33 @@ Admissions Team
   };
 
   const renderPrimaryAction = () => {
-    if (["SUBMITTED", "UNDER_REVIEW"].includes(status)) {
+    if (status === "SUBMITTED") {
       return (
-        <div className="flex flex-col sm:flex-row gap-3 w-full">
-          <Button
-            onClick={() => setIsScheduleOpen(true)}
-            className="flex-1 h-12 bg-primary hover:bg-primary-700 text-white rounded-xl shadow-lg"
-          >
-            <Calendar className="mr-2 h-5 w-5" />
-            Schedule Interview
-          </Button>
+        <div className="flex flex-col gap-3 w-full">
+          <p className="text-sm text-muted-foreground">
+            Next: move into review, then interview (optional) or issue an offer.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 w-full">
+            <Button
+              disabled={!!loading}
+              onClick={() => performAction("status", "UNDER_REVIEW")}
+              className="flex-1 h-12 bg-primary hover:bg-primary-700 text-white rounded-xl shadow-lg"
+            >
+              {isLoading("UNDER_REVIEW") ? (
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              ) : (
+                <FileText className="mr-2 h-5 w-5" />
+              )}
+              Start review
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsScheduleOpen(true)}
+              className="flex-1 h-12 rounded-xl"
+            >
+              <Calendar className="mr-2 h-5 w-5" />
+              Schedule interview
+            </Button>
 
 
 
@@ -301,6 +328,42 @@ Admissions Team
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </div>
+        </div>
+      );
+    }
+
+    if (status === "UNDER_REVIEW") {
+      return (
+        <div className="flex flex-col gap-3 w-full">
+          <p className="text-sm text-muted-foreground">
+            Review in progress. Schedule an interview or issue an offer letter.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 w-full">
+            <Button
+              onClick={() => setIsOfferLetterOpen(true)}
+              className="flex-1 h-12 bg-primary hover:bg-primary-700 text-white rounded-xl shadow-lg"
+            >
+              <FileText className="mr-2 h-5 w-5" />
+              Issue offer
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsScheduleOpen(true)}
+              className="flex-1 h-12 rounded-xl"
+            >
+              <Calendar className="mr-2 h-5 w-5" />
+              Schedule interview
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setIsRejectOpen(true)}
+              className="h-12 border-red-200 text-red-600 hover:bg-red-50 rounded-xl"
+            >
+              <Ban className="mr-2 h-4 w-4" />
+              Reject
+            </Button>
+          </div>
         </div>
       );
     }
@@ -400,10 +463,61 @@ Admissions Team
     return null;
   };
 
+  const pipelineIndex = (() => {
+    if (status === "DRAFT") return -1;
+    if (status === "REJECTED") return -2;
+    if (status === "TEST_SCHEDULED" || status === "INTERVIEW_COMPLETED") {
+      return PIPELINE.indexOf("UNDER_REVIEW");
+    }
+    const idx = PIPELINE.indexOf(status as (typeof PIPELINE)[number]);
+    return idx;
+  })();
+
   return (
-    <div className="w-full">
-      <div className="mb-4">
-        <Badge className={cn("px-4 py-1.5 text-sm font-medium rounded-full", STATUS_COLORS[status])}>
+    <div className="w-full space-y-4">
+      <div className="rounded-2xl border bg-white p-4 shadow-sm">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-3">
+          Admissions pipeline
+        </p>
+        <div className="flex items-center gap-1 overflow-x-auto pb-1">
+          {PIPELINE.map((step, i) => {
+            const done = pipelineIndex > i || status === "ENROLLED";
+            const current = pipelineIndex === i;
+            return (
+              <div key={step} className="flex items-center min-w-0">
+                <div
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[10px] sm:text-xs font-semibold whitespace-nowrap border",
+                    done && "bg-secondary-100 text-secondary-800 border-secondary-200",
+                    current && "bg-primary text-white border-primary shadow",
+                    !done && !current && "bg-stone-50 text-stone-400 border-stone-200"
+                  )}
+                >
+                  {STATUS_LABELS[step] || step}
+                </div>
+                {i < PIPELINE.length - 1 && (
+                  <div
+                    className={cn(
+                      "w-4 h-0.5 mx-0.5",
+                      done || current ? "bg-secondary-400" : "bg-stone-200"
+                    )}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground mt-3">
+          {status === "ENROLLED"
+            ? "Student created — continue in Students module."
+            : status === "ACCEPTED"
+              ? "Ready to enroll: placement + fees, then a Student record is created."
+              : "Complete the current step to unlock the next. Enroll creates the Student."}
+        </p>
+      </div>
+
+      <div className="mb-1">
+        <Badge className={cn("px-4 py-1.5 text-sm font-medium rounded-full", STATUS_COLORS[status] || "bg-slate-100")}>
           {STATUS_LABELS[status] || status.replace("_", " ")}
         </Badge>
       </div>

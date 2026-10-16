@@ -43,14 +43,19 @@ const AdmissionsPage = () => {
       const res = await api.get('/admissions/applications/', {
         headers: { 'X-School-ID': currentSchool.id },
       });
-      return res.data;
+      const data = res.data;
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data?.results)) return data.results;
+      return [];
     },
     enabled: !!currentSchool?.id && !schoolLoading,
   });
 
+  const applicationList = Array.isArray(applications) ? applications : [];
+
   // Memoized stats to prevent re-calculation jumps
   const { counts, readyToEnrollCount } = useMemo(() => {
-    const statusCounts = applications.reduce(
+    const statusCounts = applicationList.reduce(
       (acc: Record<string, number>, app: any) => {
         const status = app.status || 'UNKNOWN';
         acc[status] = (acc[status] || 0) + 1;
@@ -60,16 +65,18 @@ const AdmissionsPage = () => {
       { ALL: 0 } as Record<string, number>
     );
 
-    const ready = applications.filter(
-      (app: any) => app.status === 'ACCEPTED' && (app.fee_payments?.length ?? 0) > 0 && !app.student
+    const ready = applicationList.filter(
+      (app: any) => app.status === 'ACCEPTED' && !app.student
     ).length;
 
     return { counts: statusCounts, readyToEnrollCount: ready };
-  }, [applications]);
+  }, [applicationList]);
 
   const statusTabs = [
     { key: 'ALL', label: 'All', icon: Users },
-    { key: 'SUBMITTED', label: 'Pending', icon: Clock },
+    { key: 'SUBMITTED', label: 'Submitted', icon: Clock },
+    { key: 'UNDER_REVIEW', label: 'In review', icon: Filter },
+    { key: 'OFFERED', label: 'Offered', icon: Sparkles },
     { key: 'ACCEPTED', label: 'Accepted', icon: CalendarCheck },
     { key: 'ENROLLED', label: 'Enrolled', icon: UserCheck },
   ];
@@ -256,7 +263,7 @@ const AdmissionsPage = () => {
               <Loader2 className="h-8 w-8 animate-spin text-slate-300" />
               <p className="text-sm text-slate-400 font-medium">Synchronizing records...</p>
             </div>
-          ) : applications.length === 0 ? (
+          ) : applicationList.length === 0 ? (
             <div className="bg-white rounded-[2rem] border border-slate-200 p-12 text-center">
               <div className="mx-auto h-16 w-16 rounded-full bg-slate-50 flex items-center justify-center mb-4">
                 <Users className="h-8 w-8 text-slate-200" />
@@ -269,7 +276,7 @@ const AdmissionsPage = () => {
           ) : (
             <ApplicationTable
               searchTerm={searchTerm}
-              applications={applications}
+              applications={applicationList}
               statusFilter={activeTab === 'ALL' ? undefined : activeTab}
             />
           )}

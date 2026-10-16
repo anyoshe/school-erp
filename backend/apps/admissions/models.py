@@ -419,6 +419,25 @@ class Application(models.Model):
         ENROLLED = "ENROLLED", "Enrolled"
         INTERVIEW_COMPLETED = "INTERVIEW_COMPLETED", "Interview Completed"
 
+    ALLOWED_TRANSITIONS = {
+        "DRAFT": {"SUBMITTED", "DRAFT"},
+        "SUBMITTED": {"UNDER_REVIEW", "TEST_SCHEDULED", "REJECTED", "DRAFT"},
+        "UNDER_REVIEW": {"TEST_SCHEDULED", "OFFERED", "REJECTED", "UNDER_REVIEW"},
+        "TEST_SCHEDULED": {"INTERVIEW_COMPLETED", "UNDER_REVIEW", "REJECTED", "TEST_SCHEDULED"},
+        "INTERVIEW_COMPLETED": {"OFFERED", "REJECTED", "UNDER_REVIEW", "INTERVIEW_COMPLETED"},
+        "OFFERED": {"ACCEPTED", "REJECTED", "OFFERED"},
+        "ACCEPTED": {"ACCEPTED"},
+        "ENROLLED": {"ENROLLED"},
+        "REJECTED": {"UNDER_REVIEW", "REJECTED"},
+    }
+
+    def can_transition_to(self, new_status: str) -> bool:
+        current = (self.status or "").upper()
+        target = (new_status or "").upper()
+        if current == target:
+            return True
+        return target in self.ALLOWED_TRANSITIONS.get(current, set())
+
     class PlacementType(models.TextChoices):
         SELF = "SELF", "Self / Parent Application"
         PUBLIC = "PUBLIC", "Government / Public Authority Placement"

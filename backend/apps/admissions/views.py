@@ -75,13 +75,24 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         new_status = serializer.validated_data.get('status')
 
         if new_status:
-            # Only set timestamp if status is actually changing to this value
+            new_status = str(new_status).upper()
+            if new_status == Application.Status.ENROLLED:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError(
+                    {"status": "Cannot set ENROLLED via update. Use the Enroll action after ACCEPTED."}
+                )
+            if not instance.can_transition_to(new_status):
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError(
+                    {
+                        "status": (
+                            f"Invalid transition from {instance.status} to {new_status}. "
+                            "Follow: Submitted → Under Review → Offered → Accepted → Enroll."
+                        )
+                    }
+                )
             if new_status == Application.Status.OFFERED and instance.status != Application.Status.OFFERED:
                 serializer.validated_data['offer_issued_at'] = timezone.now()
-                # Optional: if frontend sends offer_method
-                if 'offer_method' in serializer.validated_data:
-                    serializer.validated_data['offer_method'] = serializer.validated_data['offer_method']
-
             if new_status == Application.Status.ACCEPTED and instance.status != Application.Status.ACCEPTED:
                 serializer.validated_data['accepted_at'] = timezone.now()
 
