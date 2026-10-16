@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 export default function FeeStructuresList() {
   const { currentSchool } = useCurrentSchool();
   const [structures, setStructures] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   // Modal States
   const [isFormOpen, setIsFormOpen] = useState(false);

@@ -80,6 +80,23 @@ export default function FinanceDashboard() {
   const [detectedYear, setDetectedYear] = useState<string>("2026");
 
   const fetchDashboardData = useCallback(async () => {
+    const cacheKey = `erp_finance_summary_${currentSchool?.id || "x"}`;
+    // Instant paint from short cache (same tab)
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      if (raw) {
+        const { at, data } = JSON.parse(raw);
+        if (Date.now() - at < 60_000 && data?.stats) {
+          setStats(data.stats);
+          setRevenueByPeriod(data.revenueByPeriod || revenueByPeriod);
+          setDetectedTerm(data.detectedTerm || "Term 1");
+          setDetectedYear(data.detectedYear || new Date().getFullYear().toString());
+          setFeeItemTotals(data.feeGroupBreakdown || []);
+          setLoading(false);
+        }
+      }
+    } catch { /* */ }
+
     setLoading(true);
     try {
       const response = await api.get<DashboardSummaryResponse>("/finance/dashboard-summary/");
@@ -89,13 +106,16 @@ export default function FinanceDashboard() {
       setDetectedTerm(data.detectedTerm || "Term 1");
       setDetectedYear(data.detectedYear || new Date().getFullYear().toString());
       setFeeItemTotals(data.feeGroupBreakdown || []);
+      try {
+        sessionStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data }));
+      } catch { /* */ }
     } catch (error) {
       console.error("Failed to fetch dashboard data:", error);
       toast.error("Failed to load finance dashboard");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentSchool?.id]);
 
   useEffect(() => {
     fetchDashboardData();

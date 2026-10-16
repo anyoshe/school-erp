@@ -148,16 +148,16 @@ export default function PaymentsPage() {
       .reduce((sum, p) => sum + parseFloat(p.amount.toString()), 0),
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="animate-spin h-8 w-8" />
-      </div>
-    );
-  }
-
+  // Shell first — never block the whole module on network
   return (
     <div className="space-y-6">
+      {loading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground rounded-xl border bg-stone-50 px-4 py-3">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading data…
+        </div>
+      )}
+
       <div>
         <h1 className="text-3xl font-bold">Payments Management</h1>
         <p className="text-muted-foreground mt-2">
