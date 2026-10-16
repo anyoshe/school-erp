@@ -264,6 +264,9 @@ export default function FeeStructureForm({
   useEffect(() => {
     if (open && currentSchool?.id) {
       loadData();
+    } else if (open && !currentSchool?.id) {
+      setFormLoading(false);
+      toast.error("Select a school before creating fee structures");
     } else if (!open) {
       setFormData({
         name: "",
