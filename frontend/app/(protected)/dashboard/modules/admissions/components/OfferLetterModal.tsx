@@ -43,27 +43,57 @@ export default function OfferLetterModal({
     "We are delighted to offer you admission to our institution for the upcoming academic year. Please review the details below and complete the enrollment process by the deadline."
   );
 
+  const classId = applicationData?.class_applied?.id;
+  const className = applicationData?.class_applied?.name || "the applied class";
+
   useEffect(() => {
-    const classId = applicationData?.class_applied?.id;
-    if (!open || !classId) return;
+    if (!open) return;
+
+    if (!classId) {
+      setFeeStructures([]);
+      return;
+    }
 
     const loadFinanceData = async () => {
       setFeeLoading(true);
       try {
-        // Fetch structures - includes term/period names from backend
-        const structuresRes = await api.get("/finance/structures/", { 
-          params: { grade_level: classId } 
+        // Fee structures for THIS applicant's grade only (active)
+        const structuresRes = await api.get("/finance/structures/", {
+          params: { grade_level: classId, is_active: true },
         });
-        setFeeStructures(structuresRes.data || []);
+        const data = structuresRes.data;
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.results)
+            ? data.results
+            : [];
+        // Extra client guard: only structures for this grade
+        const forGrade = list.filter(
+          (s: any) =>
+            !s.grade_level ||
+            String(s.grade_level) === String(classId) ||
+            String(s.grade_level?.id) === String(classId)
+        );
+        setFeeStructures(forGrade);
+        if (forGrade.length === 0) {
+          toast.message("No fee structure for this grade", {
+            description:
+              "Create an active fee structure in Finance for this class before issuing the offer letter.",
+          });
+        }
       } catch (err) {
-        toast.error("Failed to load official fee structure");
+        setFeeStructures([]);
+        toast.error("Failed to load fee structure for this grade");
       } finally {
         setFeeLoading(false);
       }
     };
 
     loadFinanceData();
-  }, [open, applicationData.class_applied?.id]);
+  }, [open, classId]);
+
+  const feesReady = !feeLoading && feeStructures.length > 0;
+  const canGenerate = Boolean(classId) && feesReady;
 
   const loadImage = (url: string): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -197,6 +227,21 @@ export default function OfferLetterModal({
   };
 
   const handleAction = async (method: "whatsapp" | "email" | "download") => {
+    if (!classId) {
+      toast.error("This application has no class/grade. Assign a class before issuing an offer.");
+      return;
+    }
+    if (feeLoading) {
+      toast.error("Fee structure is still loading. Please wait.");
+      return;
+    }
+    if (!feeStructures.length) {
+      toast.error("No fee structure for " + className, {
+        description: "Set up fees under Finance → Fee structures for this grade, then try again.",
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       const doc = await generatePDF();
@@ -256,8 +301,27 @@ export default function OfferLetterModal({
 
             <div className="bg-slate-900 text-white p-6 rounded-xl shadow-inner max-h-64 overflow-y-auto">
               <h4 className="text-primary-400 text-xs font-bold uppercase tracking-widest mb-4">Structure Breakdown</h4>
-              {feeLoading ? <Loader2 className="animate-spin h-5 w-5" /> : (
+              {!classId ? (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-3">
+                  No class/grade on this application. Set <strong>class applied</strong> first so the correct fee structure can load.
+                </p>
+              ) : feeLoading ? (
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <Loader2 className="animate-spin h-5 w-5" />
+                  Loading fee structure for {className}…
+                </div>
+              ) : feeStructures.length === 0 ? (
+                <div className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-3 space-y-1">
+                  <p className="font-semibold">No active fee structure for {className}</p>
+                  <p className="text-amber-700/90">
+                    Go to <strong>Finance → Fee structures</strong>, create (or activate) a structure for this grade, then reopen this offer letter.
+                  </p>
+                </div>
+              ) : (
                 <div className="space-y-6">
+                  <p className="text-xs text-slate-500 mb-2">
+                    Fees for <span className="font-semibold text-slate-700">{className}</span> ({feeStructures.length} period structure{feeStructures.length === 1 ? "" : "s"})
+                  </p>
                   {feeStructures.map(fs => (
                     <div key={fs.id} className="border-l-2 border-slate-700 pl-4">
                       <div className="flex justify-between items-center mb-1">
@@ -291,9 +355,9 @@ export default function OfferLetterModal({
         <DialogFooter className="bg-slate-50 p-6 flex flex-col sm:flex-row items-center justify-between gap-4 border-t sticky bottom-0">
           <div className="flex gap-2">
              <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-             <Button variant="outline" onClick={() => handleAction("whatsapp")} disabled={loading}><Phone className="mr-2 h-4 w-4" /> WhatsApp</Button>
-             <Button variant="outline" onClick={() => handleAction("email")} disabled={loading}><Mail className="mr-2 h-4 w-4" /> Email</Button>
-             <Button variant="secondary" onClick={() => handleAction("download")} disabled={loading} title="Download Draft PDF">
+             <Button variant="outline" onClick={() => handleAction("whatsapp")} disabled={loading || !canGenerate}><Phone className="mr-2 h-4 w-4" /> WhatsApp</Button>
+             <Button variant="outline" onClick={() => handleAction("email")} disabled={loading || !canGenerate}><Mail className="mr-2 h-4 w-4" /> Email</Button>
+             <Button variant="secondary" onClick={() => handleAction("download")} disabled={loading || !canGenerate} title="Download Draft PDF">
                 {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
              </Button>
           </div>
