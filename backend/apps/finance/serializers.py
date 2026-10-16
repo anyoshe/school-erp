@@ -19,7 +19,15 @@ from apps.school.support import selected_school
 def _selected_school_for_serializer(serializer):
     return selected_school(serializer.context["request"])
 
+class FeeCategoryLiteSerializer(serializers.ModelSerializer):
+    """id/name only — for fee structure form dropdowns."""
+    class Meta:
+        model = FeeCategory
+        fields = ["id", "name", "is_mandatory", "display_order"]
+
+
 class FeeCategorySerializer(serializers.ModelSerializer):
+
     school = SchoolSerializer(read_only=True)
 
     class Meta:

@@ -170,33 +170,58 @@ export default function FeeStructureForm({
         }
       }
 
-      const withTimeout = <T,>(p: Promise<T>, ms = 12000): Promise<T> =>
-        Promise.race([
-          p,
-          new Promise<T>((_, reject) =>
-            setTimeout(() => reject(new Error("Request timed out")), ms)
-          ),
-        ]);
+      // Load independently so one slow endpoint does not block the other.
+      // Soft timeout: keep cached data; do not throw for the whole form.
+      const softGet = async (url: string, ms = 20000) => {
+        try {
+          return await Promise.race([
+            api.get(url, { headers: { "X-School-ID": currentSchool?.id } }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("timeout")), ms)
+            ),
+          ]);
+        } catch (e: any) {
+          if (e?.message === "timeout") {
+            console.warn("Slow API:", url, "(using cache if any)");
+            return null;
+          }
+          console.warn("API error:", url, e?.message || e);
+          return null;
+        }
+      };
 
       const [gradesRes, categoriesRes] = await Promise.all([
-        withTimeout(
-          api.get("/academics/grade-levels/", {
-            headers: { "X-School-ID": currentSchool?.id },
-          })
-        ),
-        withTimeout(
-          api.get("/finance/categories/", {
-            headers: { "X-School-ID": currentSchool?.id },
-          })
-        ),
+        softGet("/academics/grade-levels/"),
+        softGet("/finance/categories/"),
       ]);
 
-      const fetchedGrades = asArray(gradesRes.data);
-      const fetchedCats = asArray(categoriesRes.data);
-      setGradeLevels(fetchedGrades);
-      setCategories(fetchedCats);
-      writeFormCache(gradesKey, fetchedGrades);
-      writeFormCache(catsKey, fetchedCats);
+      if (gradesRes) {
+        const fetchedGrades = asArray(gradesRes.data);
+        setGradeLevels(fetchedGrades);
+        writeFormCache(gradesKey, fetchedGrades);
+      }
+      if (categoriesRes) {
+        const fetchedCats = asArray(categoriesRes.data);
+        setCategories(fetchedCats);
+        writeFormCache(catsKey, fetchedCats);
+        if (!structureId && !cloneFromId) {
+          setCategoryGroups(
+            fetchedCats.map((cat: FeeCategory) => ({
+              category: cat,
+              items: [],
+              selected: false,
+              expanded: false,
+            }))
+          );
+        }
+      }
+
+      const fetchedGrades = gradesRes
+        ? asArray(gradesRes.data)
+        : (readFormCache(gradesKey) || []);
+      const fetchedCats = categoriesRes
+        ? asArray(categoriesRes.data)
+        : (readFormCache(catsKey) || []);
 
       const targetId = structureId || cloneFromId;
 
@@ -260,8 +285,8 @@ export default function FeeStructureForm({
         })));
       }
     } catch (err) {
-      console.error("Load Error:", err);
-      toast.error("Failed to load form data");
+      console.warn("Load Error:", err);
+      // Form stays usable with cache / empty dropdowns
     } finally {
       setFormLoading(false);
     }

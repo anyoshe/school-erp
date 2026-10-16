@@ -14,7 +14,7 @@ from .models import (
     Invoice, InvoiceLine, Payment
 )
 from .serializers import (
-    FeeCategorySerializer, FeeCategoryCreateUpdateSerializer,
+    FeeCategorySerializer, FeeCategoryLiteSerializer, FeeCategoryCreateUpdateSerializer,
     FeeItemSerializer, FeeItemCreateUpdateSerializer,
     FeeStructureSerializer, FeeStructureCreateUpdateSerializer,
     StudentFeeAssignmentSerializer, StudentFeeAssignmentCreateUpdateSerializer,
@@ -284,12 +284,17 @@ class FeeCategoryViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return FeeCategoryCreateUpdateSerializer
+        if self.action == "list":
+            return FeeCategoryLiteSerializer
         return FeeCategorySerializer
 
     def get_queryset(self):
-        return self.queryset.filter(
+        qs = self.queryset.filter(
             school_id__in=accessible_school_ids(self.request)
         )
+        if self.action == "list":
+            return qs.only("id", "name", "is_mandatory", "display_order", "school_id")
+        return qs
 
 
 class FeeItemViewSet(viewsets.ModelViewSet):
