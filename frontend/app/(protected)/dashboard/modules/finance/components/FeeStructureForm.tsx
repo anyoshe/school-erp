@@ -55,7 +55,36 @@
 //   expanded: boolean;
 // }
 
-// export default function FeeStructureForm({
+// function asArray(data: unknown): any[] {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    const o = data as any;
+    if (Array.isArray(o.results)) return o.results;
+    if (Array.isArray(o.data)) return o.data;
+  }
+  return [];
+}
+
+function readFormCache(key: string): any[] | null {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const { at, data } = JSON.parse(raw);
+    if (Date.now() - at > 5 * 60 * 1000) return null;
+    return Array.isArray(data) ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeFormCache(key: string, data: any[]) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
+  } catch { /* */ }
+}
+
+export default function FeeStructureForm(
+{
 //   open,
 //   onOpenChange,
 //   onSuccess,
@@ -504,7 +533,36 @@ interface CategoryGroup {
   expanded: boolean;
 }
 
-export default function FeeStructureForm({
+function asArray(data: unknown): any[] {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object") {
+    const o = data as any;
+    if (Array.isArray(o.results)) return o.results;
+    if (Array.isArray(o.data)) return o.data;
+  }
+  return [];
+}
+
+function readFormCache(key: string): any[] | null {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const { at, data } = JSON.parse(raw);
+    if (Date.now() - at > 5 * 60 * 1000) return null;
+    return Array.isArray(data) ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeFormCache(key: string, data: any[]) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ at: Date.now(), data }));
+  } catch { /* */ }
+}
+
+export default function FeeStructureForm(
+{
   open,
   onOpenChange,
   onSuccess,
@@ -568,6 +626,33 @@ export default function FeeStructureForm({
   const loadData = useCallback(async () => {
     setFormLoading(true);
     try {
+      const schoolId = currentSchool?.id || "none";
+      const gradesKey = `erp_fee_form_grades_${schoolId}`;
+      const catsKey = `erp_fee_form_cats_${schoolId}`;
+
+      // Paint from short-lived session cache first (refresh / reopen form)
+      const cachedGrades = readFormCache(gradesKey);
+      const cachedCats = readFormCache(catsKey);
+      if (cachedGrades?.length) setGradeLevels(cachedGrades);
+      if (cachedCats?.length) {
+        setCategories(cachedCats);
+        // only seed empty groups when creating new (no clone/edit id)
+        if (!structureId && !cloneFromId) {
+          setCategoryGroups(
+            cachedCats.map((cat: FeeCategory) => ({
+              category: cat,
+              items: [],
+              selected: false,
+              expanded: false,
+            }))
+          );
+        }
+      }
+      // If we have cache, unlock form shell immediately; still refresh in background
+      if (cachedGrades?.length && cachedCats?.length && !structureId && !cloneFromId) {
+        setFormLoading(false);
+      }
+
       const [gradesRes, categoriesRes] = await Promise.all([
         api.get("/academics/grade-levels/", {
           params: { is_active: true },
@@ -578,10 +663,12 @@ export default function FeeStructureForm({
         }),
       ]);
 
-      const fetchedGrades = gradesRes.data || [];
-      const fetchedCats = categoriesRes.data || [];
+      const fetchedGrades = asArray(gradesRes.data);
+      const fetchedCats = asArray(categoriesRes.data);
       setGradeLevels(fetchedGrades);
       setCategories(fetchedCats);
+      writeFormCache(gradesKey, fetchedGrades);
+      writeFormCache(catsKey, fetchedCats);
 
       const targetId = structureId || cloneFromId;
 

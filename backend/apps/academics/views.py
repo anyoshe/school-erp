@@ -12,7 +12,7 @@ from .models import Curriculum, GradeLevel, Department
 from .serializers import (
     CurriculumSerializer, CurriculumCreateUpdateSerializer,
     CurriculumTemplateSerializer,
-    GradeLevelSerializer, GradeLevelCreateUpdateSerializer,
+    GradeLevelSerializer, GradeLevelLiteSerializer, GradeLevelCreateUpdateSerializer,
     DepartmentSerializer, DepartmentCreateUpdateSerializer,
 )
 from apps.school.models import School
@@ -197,16 +197,23 @@ class CopyCurriculumTemplateAPIView(APIView):
 
 class GradeLevelViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
+    # Dropdowns/forms need full list quickly; avoid pagination overhead
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return GradeLevelCreateUpdateSerializer
+        # List: lite (id/name only). Detail: full serializer.
+        # ?full=1 forces nested/counts when a page needs them.
+        if self.action == "list" and self.request.query_params.get("full") != "1":
+            return GradeLevelLiteSerializer
         return GradeLevelSerializer
 
     def get_queryset(self):
         queryset = GradeLevel.objects.all()
         curriculum_id = self.request.query_params.get('curriculum')
         is_template_only = self.request.query_params.get('school__isnull') == 'true'
+        is_active = self.request.query_params.get('is_active')
 
         # Fix: If we want templates, ignore the school_id header
         if is_template_only:
@@ -218,8 +225,20 @@ class GradeLevelViewSet(viewsets.ModelViewSet):
 
         if curriculum_id:
             queryset = queryset.filter(curriculum_id=curriculum_id)
+        if is_active is not None:
+            # GradeLevel may not have is_active — ignore if field missing
+            if hasattr(GradeLevel, "is_active"):
+                queryset = queryset.filter(is_active=(str(is_active).lower() == "true"))
 
-        return queryset.order_by('order', 'name')
+        # Only join what list needs
+        if self.action == "list" and self.request.query_params.get("full") != "1":
+            return queryset.order_by("order", "name").only(
+                "id", "name", "short_name", "order", "code", "curriculum_id", "school_id"
+            )
+
+        return queryset.select_related("curriculum", "school").prefetch_related(
+            "sections", "streams"
+        ).order_by("order", "name")
 
     def perform_create(self, serializer):
         serializer.save(school=selected_school(self.request))

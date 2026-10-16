@@ -56,7 +56,15 @@ class StreamSerializer(serializers.ModelSerializer):
         fields = ['id', 'grade_level', 'name',  'capacity', 'is_active']
 
 
+class GradeLevelLiteSerializer(serializers.ModelSerializer):
+    """Minimal grade payload for selects/forms (no N+1 counts or nested trees)."""
+    class Meta:
+        model = GradeLevel
+        fields = ["id", "name", "short_name", "order", "code", "curriculum"]
+
+
 class GradeLevelSerializer(serializers.ModelSerializer):
+
     school = SchoolMiniSerializer(read_only=True)
     curriculum_name = serializers.CharField(source='curriculum.name', read_only=True)
     sections = SectionSerializer(many=True, read_only=True)

@@ -279,6 +279,7 @@ class FeeCategoryViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['school', 'is_mandatory']
+    pagination_class = None  # few rows; form needs full list fast
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
