@@ -143,6 +143,7 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
             'blood_group', 'allergies', 'chronic_conditions', 'disability',
             'emergency_contact_name', 'emergency_contact_phone', 'emergency_relationship',
             'notes', 'status', 'admission_date',
+            'rejection_reason', 'internal_notes',
             'school',  # ← keep this so frontend can send it
             'documents', 'photo',
             'interview_date',
@@ -181,16 +182,40 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
         'emergency_relationship':    {'required': False, 'allow_blank': True},
         'primary_guardian_id_number': {'required': False, 'allow_blank': True},
         'notes':                {'required': False, 'allow_blank': True},
-        'school':               {'required': True},  # ← enforce frontend sends it
+        'school':               {'required': False},  # set by perform_create/update from tenant
     }
 
     def validate(self, data):
-        if data.get('status') in [Application.Status.SUBMITTED, Application.Status.UNDER_REVIEW]:
-            required = ['first_name', 'last_name', 'class_applied',
-                        'primary_guardian_name', 'primary_guardian_phone']
-            missing = [f for f in required if not data.get(f)]
+        """
+        On partial updates (e.g. only status), merge with the existing instance
+        so required-field checks do not fail when fields were already saved.
+        """
+        status = data.get("status")
+        if status is None and self.instance is not None:
+            status = self.instance.status
+
+        if status in [Application.Status.SUBMITTED, Application.Status.UNDER_REVIEW]:
+            required = [
+                "first_name",
+                "last_name",
+                "class_applied",
+                "primary_guardian_name",
+                "primary_guardian_phone",
+            ]
+            missing = []
+            for field in required:
+                if field in data:
+                    value = data.get(field)
+                elif self.instance is not None:
+                    value = getattr(self.instance, field, None)
+                else:
+                    value = None
+                if not value:
+                    missing.append(field)
             if missing:
-                raise serializers.ValidationError(f"Required for submission: {', '.join(missing)}")
+                raise serializers.ValidationError(
+                    {"detail": f"Required for submission: {', '.join(missing)}"}
+                )
         return data
 
     def compute_checksum(self, file): 
