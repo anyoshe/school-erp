@@ -314,7 +314,7 @@ class SchoolViewSet(ModelViewSet):
                 "sections": sections.count(),
                 "subjects": subjects.count(),
                 "academic_years": years.count(),
-                "active_year": AcademicYearSerializerLite(active_year).data if active_year else None,
+                "active_year": AcademicYearSerializerLite(active_year) if active_year else None,
                 "current_term": {
                     "id": current_term.id,
                     "name": current_term.name,

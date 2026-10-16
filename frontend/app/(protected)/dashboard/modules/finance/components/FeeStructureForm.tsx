@@ -368,57 +368,93 @@ export default function FeeStructureForm({
   };
 
   const handleSubmit = async () => {
+    if (!currentSchool?.id) return toast.error("No school selected");
     if (!formData.name.trim()) return toast.error("Name required");
     if (!formData.grade_level) return toast.error("Grade required");
-    if (!hasSelection) return toast.error("Select at least one item");
+    if (!hasSelection) return toast.error("Select at least one fee line (tick a category and add amounts)");
 
     setLoading(true);
     try {
-      const structureItems = [];
-      const optionalIds = [];
+      const structureItems: { item: number | string; amount: number }[] = [];
+      const optionalIds: (number | string)[] = [];
 
       for (const group of categoryGroups) {
-        if (!group.selected) continue;
+        if (!group.selected || !group.items.length) continue;
         for (const item of group.items) {
-          let itemId = item.id;
-          
-          // 1. If it's a new item, create it first
-          if (item.is_new) {
-            const itemRes = await api.post("/finance/items/", {
-              name: item.name,
-              category: group.category.id,
-              description: item.description,
-              is_optional: item.is_optional,
-              frequency: "per_term",
-              is_active: true,
-            }, { headers: { "X-School-ID": currentSchool?.id } });
+          let itemId: number | string = item.id;
+
+          // Create new catalogue items first
+          if (item.is_new || String(item.id).startsWith("temp_")) {
+            const itemRes = await api.post(
+              "/finance/items/",
+              {
+                name: item.name,
+                category: group.category.id,
+                description: item.description || "",
+                is_optional: !!item.is_optional,
+                frequency: "per_term",
+                is_active: true,
+              },
+              { headers: { "X-School-ID": currentSchool.id } }
+            );
             itemId = itemRes.data.id;
           }
 
-          // 2. Collect for the payload
-          structureItems.push({ item: itemId, amount: item.amount });
+          const amount = Number(item.amount);
+          if (!amount || amount <= 0) {
+            throw new Error(`Amount required for ${item.name}`);
+          }
+          structureItems.push({ item: itemId, amount });
           if (item.is_optional) optionalIds.push(itemId);
         }
       }
 
-      // 3. SEND EVERYTHING IN ONE PATCH/POST TO THE STRUCTURE
+      if (structureItems.length === 0) {
+        toast.error("Add at least one fee line with an amount before saving");
+        return;
+      }
+
       const payload = {
-        ...formData,
-        school: currentSchool?.id,
+        name: formData.name.trim(),
+        description: formData.description || "",
+        grade_level: formData.grade_level,
+        academic_year: formData.academic_year,
+        billing_period_type: formData.billing_period_type || "term",
+        period_name: formData.period_name || "Term 1",
+        is_active: formData.is_active !== false,
+        school: currentSchool.id,
         structure_items: structureItems,
         available_optional_items: optionalIds,
       };
 
-      const request = structureId
-        ? api.patch(`/finance/structures/${structureId}/`, payload, { headers: { "X-School-ID": currentSchool?.id } })
-        : api.post("/finance/structures/", payload, { headers: { "X-School-ID": currentSchool?.id } });
+      if (structureId) {
+        await api.patch(`/finance/structures/${structureId}/`, payload, {
+          headers: { "X-School-ID": currentSchool.id },
+        });
+      } else {
+        await api.post("/finance/structures/", payload, {
+          headers: { "X-School-ID": currentSchool.id },
+        });
+      }
 
-      await request;
       toast.success(structureId ? "Structure updated" : "Structure created");
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || "Failed to save structure");
+      console.error("Save structure failed", error?.response?.data || error);
+      const d = error?.response?.data;
+      let msg = error?.message || "Failed to save structure";
+      if (d) {
+        if (typeof d === "string") msg = d;
+        else if (d.detail) msg = String(d.detail);
+        else if (typeof d === "object") {
+          // DRF field errors: { grade_level: ["..."], structure_items: [...] }
+          msg = Object.entries(d)
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : JSON.stringify(v)}`)
+            .join(" · ");
+        }
+      }
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
