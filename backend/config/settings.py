@@ -136,6 +136,7 @@ if DATABASE_URL:
             "PASSWORD": url.password,
             "HOST": url.hostname,
             "PORT": url.port or 5432,
+            "CONN_MAX_AGE": 60,
             "OPTIONS": {
                 "sslmode": "require",
             },
