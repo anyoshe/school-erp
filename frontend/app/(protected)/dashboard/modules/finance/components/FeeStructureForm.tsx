@@ -145,12 +145,26 @@
 
 //         // 3. Set basic form info
 //         setFormData({
-//           name: cloneFromId ? `${data.name} (Copy)` : (data.name || ""),
+//           name: cloneFromId
+            ? `${data.grade_level?.name || data.name} – ${
+                String(data.period_name || "").includes("1")
+                  ? "Term 2"
+                  : String(data.period_name || "").includes("2")
+                    ? "Term 3"
+                    : "Copy"
+              } – ${data.academic_year || ""}`
+            : (data.name || ""),
 //           description: data.description || "",
 //           grade_level: data.grade_level?.id || "",
 //           academic_year: data.academic_year,
 //           billing_period_type: data.billing_period_type || "term",
-//           period_name: cloneFromId ? `${data.period_name} (Copy)` : (data.period_name || ""),
+//           period_name: cloneFromId
+            ? (String(data.period_name || "").includes("1")
+                ? "Term 2"
+                : String(data.period_name || "").includes("2")
+                  ? "Term 3"
+                  : `${data.period_name || "Term"} (Copy)`)
+            : (data.period_name || ""),
 //           is_active: data.is_active,
 //         });
 
@@ -592,12 +606,26 @@ export default function FeeStructureForm({
         const data = res.data;
 
         setFormData({
-          name: cloneFromId ? `${data.name} (Copy)` : (data.name || ""),
+          name: cloneFromId
+            ? `${data.grade_level?.name || data.name} – ${
+                String(data.period_name || "").includes("1")
+                  ? "Term 2"
+                  : String(data.period_name || "").includes("2")
+                    ? "Term 3"
+                    : "Copy"
+              } – ${data.academic_year || ""}`
+            : (data.name || ""),
           description: data.description || "",
           grade_level: data.grade_level?.id || "",
           academic_year: data.academic_year,
           billing_period_type: data.billing_period_type || "term",
-          period_name: cloneFromId ? `${data.period_name} (Copy)` : (data.period_name || ""),
+          period_name: cloneFromId
+            ? (String(data.period_name || "").includes("1")
+                ? "Term 2"
+                : String(data.period_name || "").includes("2")
+                  ? "Term 3"
+                  : `${data.period_name || "Term"} (Copy)`)
+            : (data.period_name || ""),
           is_active: data.is_active,
         });
 

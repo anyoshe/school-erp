@@ -93,10 +93,53 @@ export default function FeeStructuresList() {
   };
 
   const handleClone = (id: string) => {
+    // Open form prefilled from source (edit name/period then save as new)
     setCloneFromId(id);
-    setSelectedStructureId(undefined); // Treat as new record
+    setSelectedStructureId(undefined);
     setIsFormOpen(true);
   };
+
+  const nextPeriodName = (period: string) => {
+    const p = (period || "").toLowerCase();
+    if (p.includes("1")) return "Term 2";
+    if (p.includes("2")) return "Term 3";
+    if (p.includes("3")) return "Term 1";
+    return "Term 2";
+  };
+
+  /** One-click clone via API (items copied) — ideal for Term 1 → Term 2/3 */
+  const quickClone = async (
+    fs: any,
+    opts: { period_name: string; academic_year?: string; name?: string }
+  ) => {
+    try {
+      setLoading(true);
+      const year = opts.academic_year || fs.academic_year;
+      const period = opts.period_name;
+      const name =
+        opts.name ||
+        `${fs.grade_level?.name || "Grade"} – ${period} – ${year}`;
+      await api.post(
+        `/finance/structures/${fs.id}/clone/`,
+        {
+          period_name: period,
+          academic_year: year,
+          name,
+          is_active: true,
+        },
+        { headers: { "X-School-ID": currentSchool?.id } }
+      );
+      toast.success(`Cloned to ${period} (${year})`);
+      await fetchStructures();
+    } catch (err: any) {
+      toast.error(
+        err?.response?.data?.detail || "Could not clone fee structure"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this fee structure?")) return;
@@ -216,14 +259,65 @@ export default function FeeStructuresList() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 gap-1 text-primary-700 border-primary-200"
-                            onClick={() => handleClone(fs.id)}
-                          >
-                            <Copy className="h-3.5 w-3.5" /> Clone
-                          </Button>
+                          <div className="flex flex-wrap justify-end gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1 text-primary-700 border-primary-200"
+                              title="Open form with copied items (edit then save)"
+                              onClick={() => handleClone(fs.id)}
+                            >
+                              <Copy className="h-3.5 w-3.5" /> Clone & edit
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1"
+                              title="Copy all items to Term 2"
+                              disabled={loading}
+                              onClick={() =>
+                                quickClone(fs, {
+                                  period_name: "Term 2",
+                                  name: `${fs.grade_level?.name || "Grade"} – Term 2 – ${fs.academic_year}`,
+                                })
+                              }
+                            >
+                              → T2
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1"
+                              title="Copy all items to Term 3"
+                              disabled={loading}
+                              onClick={() =>
+                                quickClone(fs, {
+                                  period_name: "Term 3",
+                                  name: `${fs.grade_level?.name || "Grade"} – Term 3 – ${fs.academic_year}`,
+                                })
+                              }
+                            >
+                              → T3
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1"
+                              title="Clone to next academic year, same period"
+                              disabled={loading}
+                              onClick={() => {
+                                const y = Number(fs.academic_year) || new Date().getFullYear();
+                                const nextY = String(y + 1);
+                                quickClone(fs, {
+                                  period_name: fs.period_name || "Term 1",
+                                  academic_year: nextY,
+                                  name: `${fs.grade_level?.name || "Grade"} – ${fs.period_name || "Term 1"} – ${nextY}`,
+                                });
+                              }}
+                            >
+                              → Year+1
+                            </Button>
+                          </div>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(fs.id)}>
                             <Pencil className="h-4 w-4" />
                           </Button>

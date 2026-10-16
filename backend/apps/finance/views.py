@@ -1,3 +1,4 @@
+from django.db import transaction
 from collections import defaultdict
 from datetime import timedelta
 from decimal import Decimal
@@ -380,6 +381,83 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
             'total_amount': structure.total_amount,
             'items_by_category': structure.get_items_by_category()
         })
+
+    @action(detail=True, methods=['post'], url_path='clone')
+    @transaction.atomic
+    def clone(self, request, pk=None):
+        """
+        Clone a fee structure (items included) to another period/grade/year.
+        Body (all optional): period_name, academic_year, name, grade_level, is_active
+        """
+        from apps.finance.models import FeeStructure, FeeStructureItem
+        from apps.academics.models import GradeLevel
+
+        source = self.get_object()
+        school = source.school
+
+        period_name = (request.data.get("period_name") or source.period_name or "Term 1").strip()
+        academic_year = (request.data.get("academic_year") or source.academic_year or "").strip()
+        name = (request.data.get("name") or "").strip()
+        if not name:
+            name = f"{source.grade_level.name} – {period_name} – {academic_year}"
+
+        grade_level = source.grade_level
+        grade_level_id = request.data.get("grade_level")
+        if grade_level_id:
+            try:
+                grade_level = GradeLevel.objects.get(pk=grade_level_id, school=school)
+            except GradeLevel.DoesNotExist:
+                return Response(
+                    {"detail": "Grade level not found for this school."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        is_active = request.data.get("is_active")
+        if is_active is None:
+            is_active = True
+        elif isinstance(is_active, str):
+            is_active = is_active.lower() in ("1", "true", "yes")
+
+        # Unique constraint: school + grade + period type + period name + year
+        exists = FeeStructure.objects.filter(
+            school=school,
+            grade_level=grade_level,
+            billing_period_type=source.billing_period_type,
+            period_name=period_name,
+            academic_year=academic_year,
+        ).exists()
+        if exists:
+            return Response(
+                {
+                    "detail": (
+                        f"A structure already exists for {grade_level.name} / "
+                        f"{period_name} / {academic_year}."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        clone = FeeStructure.objects.create(
+            school=school,
+            name=name,
+            description=source.description,
+            grade_level=grade_level,
+            academic_year=academic_year,
+            billing_period_type=source.billing_period_type,
+            period_name=period_name,
+            is_active=bool(is_active),
+        )
+        for si in source.structure_items.select_related("item").all():
+            FeeStructureItem.objects.create(
+                structure=clone,
+                item=si.item,
+                amount=si.amount,
+            )
+        # Optional items M2M
+        clone.available_optional_items.set(source.available_optional_items.all())
+
+        serializer = FeeStructureSerializer(clone, context={"request": request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
     queryset = StudentFeeAssignment.objects.select_related('student', 'fee_structure').all()
