@@ -114,11 +114,12 @@ export default function AdmissionActions({
       setLoading(value || action);
 
       if (action === "status") {
-        await api.patch(`/admissions/applications/${applicationId}/`, {
-          status: value,
-          rejection_reason: metadata?.reason,
-          internal_notes: metadata?.notes,
-        });
+        const payload: Record<string, string> = { status: value || "" };
+        if (value === "REJECTED") {
+          if (metadata?.reason) payload.rejection_reason = metadata.reason;
+          if (metadata?.notes) payload.internal_notes = metadata.notes;
+        }
+        await api.patch(`/admissions/applications/${applicationId}/`, payload);
 
         toast.success(`Status updated to ${STATUS_LABELS[value || ""] || value}`);
 

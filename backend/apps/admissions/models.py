@@ -548,6 +548,8 @@ class Application(models.Model):
     religion = models.CharField(max_length=50, blank=True)
     category = models.CharField(max_length=50, blank=True)
     notes = models.TextField(blank=True)
+    rejection_reason = models.CharField(max_length=100, blank=True)
+    internal_notes = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     submitted_at = models.DateTimeField(null=True, blank=True)
     admission_date = models.DateField(null=True, blank=True)

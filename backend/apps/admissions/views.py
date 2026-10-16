@@ -76,13 +76,14 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
         if new_status:
             new_status = str(new_status).upper()
+            from rest_framework.exceptions import ValidationError
             if new_status == Application.Status.ENROLLED:
-                from rest_framework.exceptions import ValidationError
                 raise ValidationError(
                     {"status": "Cannot set ENROLLED via update. Use the Enroll action after ACCEPTED."}
                 )
+            if not hasattr(instance, "can_transition_to"):
+                raise ValidationError({"status": "Server misconfiguration: transitions unavailable."})
             if not instance.can_transition_to(new_status):
-                from rest_framework.exceptions import ValidationError
                 raise ValidationError(
                     {
                         "status": (
@@ -91,12 +92,19 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                         )
                     }
                 )
-            if new_status == Application.Status.OFFERED and instance.status != Application.Status.OFFERED:
-                serializer.validated_data['offer_issued_at'] = timezone.now()
-            if new_status == Application.Status.ACCEPTED and instance.status != Application.Status.ACCEPTED:
-                serializer.validated_data['accepted_at'] = timezone.now()
 
-        serializer.save(school=school)
+        application = serializer.save(school=school)
+        # Timestamps (save() on model also handles these; set explicitly for clarity)
+        if new_status:
+            update_fields = []
+            if new_status == Application.Status.OFFERED and not application.offer_issued_at:
+                application.offer_issued_at = timezone.now()
+                update_fields.append("offer_issued_at")
+            if new_status == Application.Status.ACCEPTED and not application.accepted_at:
+                application.accepted_at = timezone.now()
+                update_fields.append("accepted_at")
+            if update_fields:
+                application.save(update_fields=update_fields)
 
         
     @action(detail=True, methods=['post'], url_path='enroll')
