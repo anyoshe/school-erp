@@ -1,7 +1,7 @@
 # admissions/serializers.py
 import hashlib
 from rest_framework import serializers
-from .models import Application, ApplicationDocument, AdmissionFeePayment
+from .models import Application, ApplicationDocument, AdmissionFeePayment, ApplicationCharge
 from apps.academics.serializers import GradeLevelSerializer
 from apps.school.models import School
 from apps.school.serializers import SchoolSerializer
@@ -22,6 +22,27 @@ class AdmissionFeePaymentSerializer(serializers.ModelSerializer):
         read_only_fields = ['payment_date']
 
 
+class ApplicationChargeSerializer(serializers.ModelSerializer):
+    is_satisfied = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = ApplicationCharge
+        fields = [
+            "id",
+            "charge_type",
+            "policy",
+            "list_amount",
+            "discount_amount",
+            "amount_due",
+            "amount_paid",
+            "waiver_reason",
+            "notes",
+            "is_satisfied",
+            "updated_at",
+        ]
+        read_only_fields = ["updated_at", "is_satisfied"]
+
+
 class ApplicationSerializer(serializers.ModelSerializer):
     """
     Detailed read-only serializer - used for list/retrieve
@@ -29,6 +50,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
     class_applied = GradeLevelSerializer(read_only=True)
     documents = ApplicationDocumentSerializer(many=True, read_only=True)
     fee_payments = AdmissionFeePaymentSerializer(many=True, read_only=True)
+    charges = ApplicationChargeSerializer(many=True, read_only=True)
     photo = serializers.ImageField(read_only=True)
     school = SchoolSerializer(read_only=True)
 
@@ -81,7 +103,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'notes',
             'documents',
             'photo',
-            'fee_payments',
+            'fee_payments', 'charges',
             'student',
             'created_by',
             'updated_at',

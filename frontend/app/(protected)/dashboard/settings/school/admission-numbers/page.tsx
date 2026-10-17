@@ -53,6 +53,11 @@ export default function AdmissionNumbersSettingsPage() {
   const [format, setFormat] = useState("PREFIX_SEQ");
   const [prefix, setPrefix] = useState("PSS");
   const [padding, setPadding] = useState(3);
+  const [interviewEnabled, setInterviewEnabled] = useState(false);
+  const [interviewAmount, setInterviewAmount] = useState(0);
+  const [admissionAmount, setAdmissionAmount] = useState(0);
+  const [requireAdmission, setRequireAdmission] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -64,6 +69,10 @@ export default function AdmissionNumbersSettingsPage() {
     setFormat(currentSchool.admission_number_format || "PREFIX_SEQ");
     setPrefix((currentSchool.admission_prefix || "PSS").toString());
     setPadding(Number(currentSchool.admission_seq_padding || 3));
+    setInterviewEnabled(!!currentSchool.interview_fee_enabled);
+    setInterviewAmount(Number(currentSchool.interview_fee_amount || 0));
+    setAdmissionAmount(Number(currentSchool.admission_fee_amount || 0));
+    setRequireAdmission(!!currentSchool.require_admission_fee_before_enroll);
     setLoading(false);
   }, [currentSchool?.id, currentSchool?.admission_number_format, currentSchool?.admission_prefix, currentSchool?.admission_seq_padding]);
 
@@ -97,6 +106,10 @@ export default function AdmissionNumbersSettingsPage() {
           admission_number_format: format,
           admission_prefix: prefix.trim().toUpperCase(),
           admission_seq_padding: Math.min(8, Math.max(1, Number(padding) || 3)),
+          interview_fee_enabled: interviewEnabled,
+          interview_fee_amount: interviewAmount,
+          admission_fee_amount: admissionAmount,
+          require_admission_fee_before_enroll: requireAdmission,
         },
         { headers: { "X-School-ID": currentSchool.id } }
       );
@@ -196,6 +209,51 @@ export default function AdmissionNumbersSettingsPage() {
               <span className="text-slate-400 font-normal"> → {preview.second} → …</span>
             ) : null}
           </p>
+        </div>
+
+        <div className="border-t pt-6 space-y-4">
+          <h2 className="font-semibold">Pre-enrollment fees</h2>
+          <p className="text-xs text-muted-foreground">
+            Used on enroll Step 6. Leave amounts at 0 to default charges to Not applicable (legacy applications can enroll).
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="int-en"
+              checked={interviewEnabled}
+              onChange={(e) => setInterviewEnabled(e.target.checked)}
+            />
+            <Label htmlFor="int-en">Enable interview fee</Label>
+          </div>
+          {interviewEnabled && (
+            <div className="space-y-1">
+              <Label>Interview fee amount</Label>
+              <Input
+                type="number"
+                className="max-w-xs"
+                value={interviewAmount}
+                onChange={(e) => setInterviewAmount(Number(e.target.value))}
+              />
+            </div>
+          )}
+          <div className="space-y-1">
+            <Label>Admission / registration fee amount</Label>
+            <Input
+              type="number"
+              className="max-w-xs"
+              value={admissionAmount}
+              onChange={(e) => setAdmissionAmount(Number(e.target.value))}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="req-adm"
+              checked={requireAdmission}
+              onChange={(e) => setRequireAdmission(e.target.checked)}
+            />
+            <Label htmlFor="req-adm">Block enroll until admission fee is paid/waived</Label>
+          </div>
         </div>
 
         <div className="flex justify-end gap-2">

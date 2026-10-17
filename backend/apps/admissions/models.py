@@ -878,3 +878,68 @@ class AdmissionFeePayment(models.Model):
 
     def __str__(self):
         return f"Payment {self.receipt_number or ''} - {self.amount}"
+
+
+class ApplicationCharge(models.Model):
+    """
+    Pre-enrollment charges on the application (interview / admission).
+    Independent of term fee structures assigned at enroll.
+    """
+
+    class ChargeType(models.TextChoices):
+        INTERVIEW = "INTERVIEW", "Interview fee"
+        ADMISSION = "ADMISSION", "Admission / registration fee"
+
+    class Policy(models.TextChoices):
+        FULL = "FULL", "Full amount due"
+        DISCOUNTED = "DISCOUNTED", "Discounted"
+        WAIVED = "WAIVED", "Waived"
+        NOT_APPLICABLE = "NOT_APPLICABLE", "Not applicable"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    application = models.ForeignKey(
+        Application, on_delete=models.CASCADE, related_name="charges"
+    )
+    charge_type = models.CharField(max_length=20, choices=ChargeType.choices)
+    policy = models.CharField(
+        max_length=20, choices=Policy.choices, default=Policy.NOT_APPLICABLE
+    )
+    list_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    amount_due = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    waiver_reason = models.CharField(max_length=255, blank=True)
+    notes = models.TextField(blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("application", "charge_type")]
+        ordering = ["charge_type"]
+
+    def __str__(self):
+        return f"{self.charge_type} ({self.policy}) for {self.application_id}"
+
+    @property
+    def is_satisfied(self) -> bool:
+        if self.policy in (
+            self.Policy.WAIVED,
+            self.Policy.NOT_APPLICABLE,
+        ):
+            return True
+        return self.amount_paid >= self.amount_due
+
+    def recompute_due(self):
+        from decimal import Decimal
+        if self.policy == self.Policy.NOT_APPLICABLE:
+            self.amount_due = Decimal("0")
+        elif self.policy == self.Policy.WAIVED:
+            self.amount_due = Decimal("0")
+        elif self.policy == self.Policy.DISCOUNTED:
+            self.amount_due = max(
+                Decimal("0"),
+                Decimal(str(self.list_amount)) - Decimal(str(self.discount_amount)),
+            )
+        else:
+            self.amount_due = Decimal(str(self.list_amount or 0))
+

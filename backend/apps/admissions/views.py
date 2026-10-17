@@ -8,7 +8,7 @@ from rest_framework.exceptions import PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db import transaction
-from .models import Application, ApplicationDocument, AdmissionFeePayment
+from .models import Application, ApplicationDocument, AdmissionFeePayment, ApplicationCharge
 from .serializers import (
     ApplicationSerializer,
     ApplicationCreateUpdateSerializer,
@@ -25,7 +25,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
     """
     Main ViewSet for school staff/admins - full CRUD + enrollment
     """
-    queryset = Application.objects.prefetch_related('documents', 'fee_payments').select_related('class_applied', 'school')
+    queryset = Application.objects.prefetch_related('documents', 'fee_payments', 'charges').select_related('class_applied', 'school')
     serializer_class = ApplicationSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -107,6 +107,83 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                 application.save(update_fields=update_fields)
 
         
+    
+    @action(detail=True, methods=["post"], url_path="ensure-charges")
+    def ensure_charges(self, request, pk=None):
+        """
+        Create/sync INTERVIEW + ADMISSION charges from school defaults.
+        Existing apps get N/A when school amounts are 0 / interview disabled.
+        """
+        from decimal import Decimal
+        application = self.get_object()
+        school = application.school
+        created = []
+
+        specs = [
+            (
+                ApplicationCharge.ChargeType.INTERVIEW,
+                bool(getattr(school, "interview_fee_enabled", False)),
+                Decimal(str(getattr(school, "interview_fee_amount", 0) or 0)),
+            ),
+            (
+                ApplicationCharge.ChargeType.ADMISSION,
+                Decimal(str(getattr(school, "admission_fee_amount", 0) or 0)) > 0,
+                Decimal(str(getattr(school, "admission_fee_amount", 0) or 0)),
+            ),
+        ]
+
+        for charge_type, enabled, amount in specs:
+            charge, was_created = ApplicationCharge.objects.get_or_create(
+                application=application,
+                charge_type=charge_type,
+                defaults={
+                    "policy": (
+                        ApplicationCharge.Policy.FULL
+                        if enabled and amount > 0
+                        else ApplicationCharge.Policy.NOT_APPLICABLE
+                    ),
+                    "list_amount": amount if enabled else Decimal("0"),
+                    "amount_due": amount if enabled else Decimal("0"),
+                },
+            )
+            if was_created:
+                created.append(charge_type)
+            # Do not overwrite staff-adjusted policies on re-call
+        from .serializers import ApplicationChargeSerializer
+        qs = application.charges.all()
+        return Response(
+            {
+                "created": created,
+                "charges": ApplicationChargeSerializer(qs, many=True).data,
+            }
+        )
+
+    @action(detail=True, methods=["patch"], url_path="charges/(?P<charge_type>[^/.]+)")
+    def update_charge(self, request, pk=None, charge_type=None):
+        from decimal import Decimal
+        application = self.get_object()
+        charge = application.charges.filter(charge_type=str(charge_type).upper()).first()
+        if not charge:
+            return Response({"detail": "Charge not found. Call ensure-charges first."}, status=404)
+
+        policy = request.data.get("policy", charge.policy)
+        charge.policy = policy
+        if "list_amount" in request.data:
+            charge.list_amount = Decimal(str(request.data.get("list_amount") or 0))
+        if "discount_amount" in request.data:
+            charge.discount_amount = Decimal(str(request.data.get("discount_amount") or 0))
+        if "amount_paid" in request.data:
+            charge.amount_paid = Decimal(str(request.data.get("amount_paid") or 0))
+        if "waiver_reason" in request.data:
+            charge.waiver_reason = str(request.data.get("waiver_reason") or "")
+        if "notes" in request.data:
+            charge.notes = str(request.data.get("notes") or "")
+        charge.recompute_due()
+        charge.save()
+        from .serializers import ApplicationChargeSerializer
+        return Response(ApplicationChargeSerializer(charge).data)
+
+
     @action(detail=True, methods=['post'], url_path='enroll')
     @transaction.atomic
     def enroll(self, request, pk=None):
@@ -126,6 +203,27 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
         if application.student:
             return Response({"detail": "Already enrolled."}, status=400)
+
+        # Optional: block enroll until admission charge satisfied
+        school = application.school
+        if getattr(school, "require_admission_fee_before_enroll", False):
+            from .models import ApplicationCharge
+            adm = application.charges.filter(
+                charge_type=ApplicationCharge.ChargeType.ADMISSION
+            ).first()
+            if adm and not adm.is_satisfied:
+                return Response(
+                    {
+                        "detail": "Admission fee is not satisfied (pay, waive, or mark N/A before enroll).",
+                        "charge": {
+                            "policy": adm.policy,
+                            "amount_due": str(adm.amount_due),
+                            "amount_paid": str(adm.amount_paid),
+                        },
+                    },
+                    status=400,
+                )
+
 
         # Build wizard_data from request.data while preserving repeated form fields
         # such as selected_optional_items submitted via multipart/form-data.

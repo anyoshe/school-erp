@@ -329,6 +329,9 @@ export default function EnrollmentWizardModal({
   const [feeStructures, setFeeStructures] = useState<any[]>([]);
   const [feeLoading, setFeeLoading] = useState(false);
   const [feeError, setFeeError] = useState<string | null>(null);
+  const [applicationCharges, setApplicationCharges] = useState<any[]>([]);
+  const [chargesLoading, setChargesLoading] = useState(false);
+
   // 1. Add this to your State/useEffect at the top of the component
   const [optionalItems, setOptionalItems] = useState<any[]>([]);
   const [paymentPlans, setPaymentPlans] = useState<any[]>([]);
@@ -614,6 +617,55 @@ export default function EnrollmentWizardModal({
 
     loadFinanceData();
   }, [open, applicationData?.class_applied?.id]);
+
+  // Ensure interview/admission charges exist (N/A by default if school amounts are 0)
+  useEffect(() => {
+    if (!open || !applicationId) return;
+    let cancelled = false;
+    (async () => {
+      setChargesLoading(true);
+      try {
+        const res = await api.post(`/admissions/applications/${applicationId}/ensure-charges/`);
+        if (!cancelled) setApplicationCharges(res.data?.charges || []);
+      } catch (e) {
+        console.warn("ensure-charges failed", e);
+        if (!cancelled) setApplicationCharges([]);
+      } finally {
+        if (!cancelled) setChargesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, applicationId]);
+
+  // When structure selected, always load full detail so line items display
+  useEffect(() => {
+    const id = formData.fee_structure_id;
+    if (!open || !id) return;
+    const existing = feeStructures.find((s) => String(s.id) === String(id));
+    if (existing && Array.isArray(existing.structure_items) && existing.structure_items.length > 0) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get(`/finance/structures/${id}/`);
+        if (cancelled || !res.data) return;
+        setFeeStructures((prev) => {
+          const others = prev.filter((s) => String(s.id) !== String(id));
+          return [...others, res.data];
+        });
+      } catch (e) {
+        console.warn("structure detail failed", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, formData.fee_structure_id]);
+
+
   const getAdmissionCategoryName = () => "Admission & Registration";
 
   const getSelectedFeeItems = (structure: any) => {
@@ -729,6 +781,31 @@ export default function EnrollmentWizardModal({
   const updateForm = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+
+  const updateApplicationCharge = async (
+    chargeType: string,
+    payload: Record<string, any>
+  ) => {
+    try {
+      const res = await api.patch(
+        `/admissions/applications/${applicationId}/charges/${chargeType}/`,
+        payload
+      );
+      setApplicationCharges((prev) => {
+        const rest = prev.filter((c) => c.charge_type !== chargeType);
+        return [...rest, res.data];
+      });
+      toast.success(`${chargeType === "INTERVIEW" ? "Interview" : "Admission"} fee updated`);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Could not update charge");
+    }
+  };
+
+  const lineLabel = (si: any) =>
+    si.item_name || si.item_details?.name || si.name || "Fee item";
+  const lineCat = (si: any) =>
+    si.category_name || si.item_details?.category_name || "Fees";
+
 
   const validateStep = (step: number) => {
     switch (step) {
@@ -1426,6 +1503,92 @@ export default function EnrollmentWizardModal({
               {/* LEFT COLUMN */}
               <div className="lg:col-span-3 space-y-6">
 
+
+                {/* Pre-enrollment charges (interview / admission) */}
+                <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
+                  <h3 className="font-semibold text-lg">Pre-enrollment charges</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Interview and admission fees are separate from term school fees. Defaults follow school settings; mark N/A or waived for legacy applications.
+                  </p>
+                  {chargesLoading ? (
+                    <p className="text-sm text-muted-foreground">Loading charges…</p>
+                  ) : applicationCharges.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No charges configured yet.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {["INTERVIEW", "ADMISSION"].map((ctype) => {
+                        const c = applicationCharges.find((x) => x.charge_type === ctype);
+                        if (!c) return null;
+                        const label = ctype === "INTERVIEW" ? "Interview fee" : "Admission / registration fee";
+                        return (
+                          <div key={ctype} className="rounded-lg border bg-slate-50 p-3 space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-medium text-sm">{label}</span>
+                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                c.is_satisfied ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"
+                              }`}>
+                                {c.is_satisfied ? "Satisfied" : "Outstanding"}
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-2 items-center">
+                              <Select
+                                value={c.policy}
+                                onValueChange={(v) =>
+                                  updateApplicationCharge(ctype, {
+                                    policy: v,
+                                    waiver_reason: v === "WAIVED" || v === "DISCOUNTED" ? c.waiver_reason || "Staff adjustment" : "",
+                                  })
+                                }
+                              >
+                                <SelectTrigger className="h-9 w-[180px] bg-white">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="NOT_APPLICABLE">Not applicable</SelectItem>
+                                  <SelectItem value="FULL">Full amount due</SelectItem>
+                                  <SelectItem value="DISCOUNTED">Discounted</SelectItem>
+                                  <SelectItem value="WAIVED">Waived</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <span className="text-sm font-mono">
+                                Due {currencySymbol} {Number(c.amount_due || 0).toLocaleString()}
+                                {Number(c.amount_paid) > 0
+                                  ? ` · Paid ${Number(c.amount_paid).toLocaleString()}`
+                                  : ""}
+                              </span>
+                            </div>
+                            {(c.policy === "FULL" || c.policy === "DISCOUNTED") && !c.is_satisfied && (
+                              <div className="flex gap-2 items-end">
+                                <div className="flex-1">
+                                  <Label className="text-xs">Record payment amount</Label>
+                                  <Input
+                                    type="number"
+                                    className="h-9"
+                                    defaultValue={c.amount_due}
+                                    id={`pay-${ctype}`}
+                                  />
+                                </div>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="secondary"
+                                  onClick={() => {
+                                    const el = document.getElementById(`pay-${ctype}`) as HTMLInputElement | null;
+                                    const amt = Number(el?.value || c.amount_due || 0);
+                                    updateApplicationCharge(ctype, { amount_paid: amt, policy: c.policy });
+                                  }}
+                                >
+                                  Mark paid
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </section>
+
                 {/* Fee Structure */}
                 <section className="space-y-3">
                   <Label className="text-sm font-bold flex items-center gap-2">
@@ -1480,14 +1643,14 @@ export default function EnrollmentWizardModal({
                     {admissionItems.length > 0 ? (
                       <ul className="space-y-2 text-sm">
                         {admissionItems.map((si: any) => (
-                          <li key={si.id} className="flex justify-between">
-                            <span>{si.item_details?.name || "Unnamed Item"}</span>
-                            <span>{currencySymbol} {Number(si.amount).toLocaleString()}</span>
+                          <li key={si.id || lineLabel(si)} className="flex justify-between gap-2">
+                            <span>{lineLabel(si)} <span className="text-slate-400">· {lineCat(si)}</span></span>
+                            <span className="font-mono shrink-0">{currencySymbol} {Number(si.amount).toLocaleString()}</span>
                           </li>
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-sm text-amber-700">No admission items in this structure</p>
+                      <p className="text-sm text-slate-500">No separate “Admission & Registration” category lines — term lines are listed below.</p>
                     )}
 
                     {/* Waiver */}
@@ -1538,10 +1701,42 @@ export default function EnrollmentWizardModal({
                   </div>
 
                   {/* Other mandatory */}
-                  <div className="mt-4">
-                    <p className="font-medium">Other Mandatory Fees</p>
+                  <div className="mt-4 space-y-2">
+                    <p className="font-medium">Term school fees (required lines)</p>
+                    {mandatoryItems.filter((si: any) => {
+                      const cat = (si.category_name || si.item_details?.category_name || "").trim();
+                      return cat !== ADMISSION_CATEGORY_NAME;
+                    }).length === 0 && allItems.length === 0 ? (
+                      <p className="text-sm text-amber-700">
+                        No line items on this structure. Open Finance → Fee structures, edit this term, and re-save lines.
+                      </p>
+                    ) : (
+                      <ul className="space-y-1.5 text-sm border rounded-lg bg-white p-3">
+                        {(mandatoryItems.filter((si: any) => {
+                          const cat = (si.category_name || si.item_details?.category_name || "").trim();
+                          return cat !== ADMISSION_CATEGORY_NAME;
+                        }).length
+                          ? mandatoryItems.filter((si: any) => {
+                              const cat = (si.category_name || si.item_details?.category_name || "").trim();
+                              return cat !== ADMISSION_CATEGORY_NAME;
+                            })
+                          : allItems
+                        ).map((si: any) => (
+                          <li key={si.id || lineLabel(si)} className="flex justify-between gap-2">
+                            <span>
+                              {lineLabel(si)}
+                              <span className="text-slate-400"> · {lineCat(si)}</span>
+                            </span>
+                            <span className="font-mono shrink-0">
+                              {currencySymbol} {Number(si.amount || 0).toLocaleString()}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     <p className="text-lg font-bold mt-1">
-                      {currencySymbol} {otherMandatoryAmount.toLocaleString()}
+                      Subtotal {currencySymbol}{" "}
+                      {(otherMandatoryAmount || allItems.reduce((s: number, si: any) => s + Number(si.amount || 0), 0)).toLocaleString()}
                     </p>
                   </div>
                 </section>

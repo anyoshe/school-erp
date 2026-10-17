@@ -505,6 +505,24 @@ class School(models.Model):
         default=False
     )
 
+    # Pre-enrollment fee policy (interview / admission)
+    interview_fee_enabled = models.BooleanField(
+        default=False,
+        help_text="If true, interview fee applies unless marked N/A on the application",
+    )
+    interview_fee_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0
+    )
+    admission_fee_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        help_text="One-time admission/registration fee (0 = treat as N/A by default)",
+    )
+    require_admission_fee_before_enroll = models.BooleanField(
+        default=False,
+        help_text="If true, enroll is blocked until admission charge is satisfied",
+    )
+
+
 
     # =====================================================
     # METADATA

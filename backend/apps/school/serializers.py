@@ -91,7 +91,11 @@ class SchoolSessionSerializer(serializers.ModelSerializer):
             "currency", "currency_symbol",
             "admission_number_format",
             "admission_prefix",
-            "admission_seq_padding", "currency_display",
+            "admission_seq_padding",
+            "interview_fee_enabled",
+            "interview_fee_amount",
+            "admission_fee_amount",
+            "require_admission_fee_before_enroll", "currency_display",
             "logo", "modules", "setup_complete",
             "created_at", "updated_at",
         ]
@@ -127,6 +131,10 @@ class SchoolSerializer(serializers.ModelSerializer):
             'bank_name', 'branch_name', 'bank_account_name', 
             'bank_account_number', 'paybill_number', 'payment_instructions',
             'admission_number_format', 'admission_prefix', 'admission_seq_padding',
+            'interview_fee_enabled',
+            'interview_fee_amount',
+            'admission_fee_amount',
+            'require_admission_fee_before_enroll',
             'created_at', 'updated_at'
         ]
 
