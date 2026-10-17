@@ -95,6 +95,31 @@ export default function OfferLetterModal({
   const feesReady = !feeLoading && feeStructures.length > 0;
   const canGenerate = Boolean(classId) && feesReady;
 
+  const lineName = (si: any) =>
+    si.item_name || si.item_details?.name || si.name || "Fee item";
+  const lineCategory = (si: any) =>
+    si.category_name || si.item_details?.category_name || si.item_details?.category?.name || "Fees";
+  const isOptionalLine = (si: any, structure: any) => {
+    if (si.is_optional != null) return !!si.is_optional;
+    if (si.item_details?.is_optional != null) return !!si.item_details.is_optional;
+    const itemId = si.item_details?.id ?? si.item;
+    const opts = structure?.available_optional_items || [];
+    return opts.some((o: any) => String(o?.id ?? o) === String(itemId));
+  };
+  const splitLines = (structure: any) => {
+    const items = Array.isArray(structure?.structure_items) ? structure.structure_items : [];
+    const required: any[] = [];
+    const optional: any[] = [];
+    for (const si of items) {
+      if (isOptionalLine(si, structure)) optional.push(si);
+      else required.push(si);
+    }
+    return { required, optional, items };
+  };
+  const sumAmounts = (lines: any[]) =>
+    lines.reduce((s, si) => s + Number(si.amount || 0), 0);
+
+
   const loadImage = (url: string): Promise<string> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
