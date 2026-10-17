@@ -528,23 +528,29 @@ export default function EnrollmentWizardModal({
       return [];
     };
 
+    const rank = (s: any) => {
+      const p = String(s.period_name || "").toLowerCase();
+      const m = p.match(/(\d+)/);
+      if (m) return Number(m[1]);
+      if (p.includes("term 1") || p.includes("semester 1")) return 1;
+      return 99;
+    };
+
     const loadFinanceData = async () => {
       setFeeLoading(true);
       setFeeError(null);
       try {
-        // Same source as the admission offer letter: Finance structures for this grade
-        const [structuresRes, itemsRes, plansRes] = await Promise.all([
+        // Fast path: lite list (no nested line items) + payment plans only.
+        // Detail for one structure is loaded by the fee_structure_id effect below.
+        const [structuresRes, plansRes] = await Promise.all([
           api.get("/finance/structures/", {
             params: {
               grade_level: classId,
               is_active: true,
-              include_items: 1,
             },
+            timeout: 20000,
           }),
-          api.get("/finance/items/", {
-            params: { is_optional: true },
-          }).catch(() => ({ data: [] })),
-          api.get("/finance/payment-plans/").catch(() => ({ data: [] })),
+          api.get("/finance/payment-plans/", { timeout: 15000 }).catch(() => ({ data: [] })),
         ]);
 
         let list = asList(structuresRes.data).filter(
@@ -554,37 +560,15 @@ export default function EnrollmentWizardModal({
             String(s.grade_level?.id) === String(classId)
         );
 
-        // Hydrate line items (needed for totals / optional lines)
-        list = await Promise.all(
-          list.map(async (s: any) => {
-            if (Array.isArray(s.structure_items) && s.structure_items.length > 0) {
-              return s;
-            }
-            try {
-              const res = await api.get(`/finance/structures/${s.id}/`);
-              return res.data || s;
-            } catch {
-              return s;
-            }
-          })
+        list = [...list].sort(
+          (a, b) => rank(a) - rank(b) || String(a.name || "").localeCompare(String(b.name || ""))
         );
 
-        // Prefer Term 1 / earliest period (matches offer-letter first term)
-        const rank = (s: any) => {
-          const p = String(s.period_name || "").toLowerCase();
-          const m = p.match(/(\d+)/);
-          if (m) return Number(m[1]);
-          if (p.includes("term 1") || p.includes("semester 1")) return 1;
-          return 99;
-        };
-        list = [...list].sort((a, b) => rank(a) - rank(b) || String(a.name).localeCompare(String(b.name)));
-
         setFeeStructures(list);
-        setOptionalItems(asList(itemsRes.data));
+        setOptionalItems([]); // come from structure detail available_optional_items
         const plans = asList(plansRes.data);
         setPaymentPlans(plans);
 
-        // Auto-select the structure that would appear on the offer letter (first term)
         if (list.length > 0) {
           setFormData((prev) => {
             if (prev.fee_structure_id && list.some((s) => String(s.id) === String(prev.fee_structure_id))) {
@@ -598,7 +582,6 @@ export default function EnrollmentWizardModal({
           );
         }
 
-        // Prefer recommended / first payment plan
         if (plans.length > 0) {
           setFormData((prev) => {
             if (prev.payment_plan) return prev;
@@ -639,7 +622,7 @@ export default function EnrollmentWizardModal({
     };
   }, [open, applicationId]);
 
-  // When structure selected, always load full detail so line items display
+  // Load line items only for the selected structure (1 request, not N)
   useEffect(() => {
     const id = formData.fee_structure_id;
     if (!open || !id) return;
@@ -650,11 +633,14 @@ export default function EnrollmentWizardModal({
     let cancelled = false;
     (async () => {
       try {
-        const res = await api.get(`/finance/structures/${id}/`);
+        const res = await api.get(`/finance/structures/${id}/`, { timeout: 20000 });
         if (cancelled || !res.data) return;
         setFeeStructures((prev) => {
-          const others = prev.filter((s) => String(s.id) !== String(id));
-          return [...others, res.data];
+          const idx = prev.findIndex((s) => String(s.id) === String(id));
+          if (idx === -1) return [...prev, res.data];
+          const next = [...prev];
+          next[idx] = { ...prev[idx], ...res.data };
+          return next;
         });
       } catch (e) {
         console.warn("structure detail failed", e);
