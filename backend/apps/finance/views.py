@@ -16,7 +16,7 @@ from .models import (
 from .serializers import (
     FeeCategorySerializer, FeeCategoryLiteSerializer, FeeCategoryCreateUpdateSerializer,
     FeeItemSerializer, FeeItemCreateUpdateSerializer,
-    FeeStructureSerializer, FeeStructureCreateUpdateSerializer,
+    FeeStructureSerializer, FeeStructureListSerializer, FeeStructureCreateUpdateSerializer,
     StudentFeeAssignmentSerializer, StudentFeeAssignmentCreateUpdateSerializer,
     InvoiceSerializer, InvoiceCreateUpdateSerializer,
     PaymentSerializer, PaymentCreateUpdateSerializer, PaymentPlanSerializer
@@ -351,16 +351,19 @@ def create_invoice_lines(invoice: Invoice, assignment: StudentFeeAssignment, pro
         )
 
 class FeeStructureViewSet(viewsets.ModelViewSet):
-    queryset = FeeStructure.objects.select_related('school', 'grade_level')\
-        .prefetch_related('structure_items__item__category').all()
     permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['school', 'grade_level', 'is_active']
+    # List pages need full set quickly
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return FeeStructureCreateUpdateSerializer
+        if self.action == "list":
+            return FeeStructureListSerializer
         return FeeStructureSerializer
+
 
     def perform_create(self, serializer):
         school = selected_school(self.request)
@@ -376,21 +379,32 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
         return Response(out.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def get_queryset(self):
-        queryset = self.queryset.filter(
+        from django.db.models import Sum, Prefetch
+        from .models import FeeStructureItem
+
+        qs = FeeStructure.objects.filter(
             school_id__in=accessible_school_ids(self.request)
-        )
-            
-        # NEW: Filter by Grade Level from URL params
-        grade_level = self.request.query_params.get('grade_level')
+        ).select_related("grade_level")
+
+        grade_level = self.request.query_params.get("grade_level")
         if grade_level:
-            queryset = queryset.filter(grade_level_id=grade_level)
-            
-        # NEW: Filter by Active status if requested
-        is_active = self.request.query_params.get('is_active')
-        if is_active:
-            queryset = queryset.filter(is_active=(is_active.lower() == 'true'))
-            
-        return queryset
+            qs = qs.filter(grade_level_id=grade_level)
+        is_active = self.request.query_params.get("is_active")
+        if is_active is not None:
+            qs = qs.filter(is_active=(str(is_active).lower() == "true"))
+
+        qs = qs.annotate(items_total=Sum("structure_items__amount"))
+
+        if self.action != "list":
+            qs = qs.prefetch_related(
+                Prefetch(
+                    "structure_items",
+                    queryset=FeeStructureItem.objects.select_related("item__category"),
+                ),
+                "available_optional_items",
+            )
+        return qs.order_by("-academic_year", "grade_level__order", "period_name")
+
 
     @action(detail=True, methods=['get'], url_path='preview')
     def preview(self, request, pk=None):

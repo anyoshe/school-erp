@@ -102,7 +102,20 @@ class FeeItemCreateUpdateSerializer(serializers.ModelSerializer):
             instance.grade_levels.set(grade_level_ids)
         return instance
 
+class FeeStructureItemLiteSerializer(serializers.ModelSerializer):
+    """Enough for edit form — no nested grade_levels trees."""
+    item_name = serializers.CharField(source="item.name", read_only=True)
+    category_id = serializers.UUIDField(source="item.category_id", read_only=True)
+    category_name = serializers.CharField(source="item.category.name", read_only=True)
+    is_optional = serializers.BooleanField(source="item.is_optional", read_only=True)
+
+    class Meta:
+        model = FeeStructureItem
+        fields = ["id", "item", "item_name", "category_id", "category_name", "amount", "is_optional"]
+
+
 class FeeStructureItemSerializer(serializers.ModelSerializer):
+
     item = serializers.PrimaryKeyRelatedField(queryset=FeeItem.objects.all())
     item_details = FeeItemSerializer(source='item', read_only=True)
     category_name = serializers.CharField(source='item.category.name', read_only=True)
@@ -120,17 +133,50 @@ class FeeStructureItemSerializer(serializers.ModelSerializer):
             )
         return value
 
+class FeeStructureListSerializer(serializers.ModelSerializer):
+    """
+    Fast list payload for Fee structures page.
+    No nested FeeItem trees; total from annotation when present.
+    """
+    grade_level = serializers.SerializerMethodField()
+    total_amount = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FeeStructure
+        fields = [
+            "id",
+            "name",
+            "grade_level",
+            "academic_year",
+            "billing_period_type",
+            "period_name",
+            "is_active",
+            "total_amount",
+            "updated_at",
+        ]
+
+    def get_grade_level(self, obj):
+        g = getattr(obj, "grade_level", None)
+        if not g:
+            return None
+        return {"id": str(g.id), "name": g.name, "short_name": getattr(g, "short_name", "") or ""}
+
+    def get_total_amount(self, obj):
+        # Prefer annotated value from queryset (one SQL GROUP BY)
+        annotated = getattr(obj, "items_total", None)
+        if annotated is not None:
+            return annotated
+        return obj.total_amount
+
+
 class FeeStructureSerializer(serializers.ModelSerializer):
+
 
     school = serializers.UUIDField(source="school_id", read_only=True)
     grade_level = serializers.SerializerMethodField()
 
-    structure_items = FeeStructureItemSerializer(many=True, read_only=True)
-    available_optional_items_details = FeeItemSerializer(
-        source='available_optional_items', 
-        many=True, 
-        read_only=True
-    )
+    structure_items = FeeStructureItemLiteSerializer(many=True, read_only=True)
+    available_optional_items = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
 
     total_amount = serializers.ReadOnlyField()
 
@@ -154,10 +200,9 @@ class FeeStructureSerializer(serializers.ModelSerializer):
             "is_active",
             "total_amount",
             "structure_items",
-            "available_optional_items",         
-            "available_optional_items_details",  
+            "available_optional_items",
             "created_at",
-            "updated_at"
+            "updated_at",
         ]
 
 class FeeStructureItemWriteSerializer(serializers.Serializer):

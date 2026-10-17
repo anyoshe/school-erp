@@ -92,11 +92,8 @@ export default function FeeStructuresList() {
         };
       }
 
-      const mandatoryTotal =
-        fs.structure_items?.reduce((sum: number, si: any) => {
-          const isOptional = fs.available_optional_items?.includes?.(si.item);
-          return isOptional ? sum : sum + Number(si.amount || 0);
-        }, 0) ?? Number(fs.total_amount || 0);
+      // List API is lite (no structure_items) — use total_amount annotation
+      const mandatoryTotal = Number(fs.total_amount ?? fs.mandatoryTotal ?? 0);
 
       groups[gradeId].items.push({ ...fs, mandatoryTotal });
       groups[gradeId].annualTotal += Number(mandatoryTotal || 0);

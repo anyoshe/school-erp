@@ -269,12 +269,11 @@ export default function FeeStructureForm({
         const mappedGroups = (catsForMap as FeeCategory[]).map((cat) => {
           const matches = items.filter((si: any) => {
             const itemCatId =
+              si.category_id ??
               si.item_details?.category?.id ??
-              si.item_details?.category ??
-              si.category_id;
+              si.item_details?.category;
             return String(itemCatId) === String(cat.id);
           });
-          // Fallback: match by category_name if ids missing
           const byName =
             matches.length > 0
               ? matches
@@ -282,7 +281,6 @@ export default function FeeStructureForm({
                   (si: any) =>
                     (si.category_name || si.item_details?.category_name) === cat.name
                 );
-
           const use = matches.length ? matches : byName;
           return {
             category: cat,
@@ -290,13 +288,12 @@ export default function FeeStructureForm({
             expanded: use.length > 0,
             items: use.map((si: any) => ({
               id: String(si.item_details?.id ?? si.item),
-              name: si.item_details?.name || si.name || "Fee item",
+              name: si.item_name || si.item_details?.name || si.name || "Fee item",
               description: si.item_details?.description || "",
               amount: Number(si.amount || 0),
               is_optional: !!(
-                si.item_details?.is_optional ||
-                (data.available_optional_items || []).includes(si.item) ||
-                (data.available_optional_items || []).includes(si.item_details?.id)
+                si.is_optional ??
+                si.item_details?.is_optional
               ),
               is_new: false,
             })),
