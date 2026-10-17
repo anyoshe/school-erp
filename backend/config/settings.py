@@ -11,11 +11,12 @@ from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
 
 
-# Load environment variables from .env
-load_dotenv()
-
 # Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load .env from backend/ (works even if runserver cwd differs)
+load_dotenv(BASE_DIR / ".env")
+load_dotenv()  # also allow process cwd override
 
 
 # ---------------------------------------------------------------------
@@ -136,9 +137,10 @@ if DATABASE_URL:
             "PASSWORD": url.password,
             "HOST": url.hostname,
             "PORT": url.port or 5432,
-            "CONN_MAX_AGE": 60,
+            "CONN_MAX_AGE": 0,  # safer with Neon pooler; avoid stale SSL sockets
             "OPTIONS": {
                 "sslmode": "require",
+                "connect_timeout": 15,
             },
         }
     }
