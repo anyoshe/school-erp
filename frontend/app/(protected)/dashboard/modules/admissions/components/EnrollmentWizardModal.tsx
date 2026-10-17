@@ -514,37 +514,106 @@ export default function EnrollmentWizardModal({
 
 
   useEffect(() => {
-    // Use optional chaining to prevent crash if class_applied is null
     const classId = applicationData?.class_applied?.id;
 
     if (!open || !classId) return;
 
+    const asList = (data: any): any[] => {
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data?.results)) return data.results;
+      if (Array.isArray(data?.data)) return data.data;
+      return [];
+    };
+
     const loadFinanceData = async () => {
       setFeeLoading(true);
+      setFeeError(null);
       try {
-        const [structures, items, plans] = await Promise.all([
-          api.get("/finance/structures/", { params: { grade_level: classId } }),
-          api.get("/finance/items/", { params: { grade_level: classId, is_optional: true } }),
-          api.get("/finance/payment-plans/")
+        // Same source as the admission offer letter: Finance structures for this grade
+        const [structuresRes, itemsRes, plansRes] = await Promise.all([
+          api.get("/finance/structures/", {
+            params: {
+              grade_level: classId,
+              is_active: true,
+              include_items: 1,
+            },
+          }),
+          api.get("/finance/items/", {
+            params: { is_optional: true },
+          }).catch(() => ({ data: [] })),
+          api.get("/finance/payment-plans/").catch(() => ({ data: [] })),
         ]);
 
-        setFeeStructures(structures.data || []);
-        setOptionalItems(items.data || []);
-        setPaymentPlans(plans.data || []);
+        let list = asList(structuresRes.data).filter(
+          (s: any) =>
+            !s.grade_level ||
+            String(s.grade_level) === String(classId) ||
+            String(s.grade_level?.id) === String(classId)
+        );
 
-        // Auto-select structure if only one exists
-        if (structures.data?.length === 1) {
-          updateForm("fee_structure_id", String(structures.data[0].id));
+        // Hydrate line items (needed for totals / optional lines)
+        list = await Promise.all(
+          list.map(async (s: any) => {
+            if (Array.isArray(s.structure_items) && s.structure_items.length > 0) {
+              return s;
+            }
+            try {
+              const res = await api.get(`/finance/structures/${s.id}/`);
+              return res.data || s;
+            } catch {
+              return s;
+            }
+          })
+        );
+
+        // Prefer Term 1 / earliest period (matches offer-letter first term)
+        const rank = (s: any) => {
+          const p = String(s.period_name || "").toLowerCase();
+          const m = p.match(/(\d+)/);
+          if (m) return Number(m[1]);
+          if (p.includes("term 1") || p.includes("semester 1")) return 1;
+          return 99;
+        };
+        list = [...list].sort((a, b) => rank(a) - rank(b) || String(a.name).localeCompare(String(b.name)));
+
+        setFeeStructures(list);
+        setOptionalItems(asList(itemsRes.data));
+        const plans = asList(plansRes.data);
+        setPaymentPlans(plans);
+
+        // Auto-select the structure that would appear on the offer letter (first term)
+        if (list.length > 0) {
+          setFormData((prev) => {
+            if (prev.fee_structure_id && list.some((s) => String(s.id) === String(prev.fee_structure_id))) {
+              return prev;
+            }
+            return { ...prev, fee_structure_id: String(list[0].id) };
+          });
+        } else {
+          setFeeError(
+            "No active fee structure for this grade in Finance. Create one under Finance → Fee structures (same as used on the offer letter)."
+          );
+        }
+
+        // Prefer recommended / first payment plan
+        if (plans.length > 0) {
+          setFormData((prev) => {
+            if (prev.payment_plan) return prev;
+            const rec = plans.find((p: any) => p.is_recommended) || plans[0];
+            return { ...prev, payment_plan: String(rec.id) };
+          });
         }
       } catch (err) {
-        toast.error("Failed to load financial data");
+        console.error(err);
+        setFeeError("Failed to load fee structures from Finance");
+        toast.error("Failed to load financial data from Finance");
       } finally {
         setFeeLoading(false);
       }
     };
 
     loadFinanceData();
-  }, [open, applicationData.class_applied?.id]);
+  }, [open, applicationData?.class_applied?.id]);
   const getAdmissionCategoryName = () => "Admission & Registration";
 
   const getSelectedFeeItems = (structure: any) => {
@@ -1342,20 +1411,30 @@ export default function EnrollmentWizardModal({
                 <section className="space-y-3">
                   <Label className="text-sm font-bold flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px]">1</span>
-                    Select Fee Structure
+                    Fee structure (from Finance)
                   </Label>
+                  <p className="text-xs text-muted-foreground -mt-1">
+                    Loaded for <strong>{applicationData?.class_applied?.name || "this grade"}</strong> — same active structures used on the admission offer letter. Not an upload.
+                  </p>
+                  {feeLoading && (
+                    <p className="text-sm text-muted-foreground">Loading fee structures…</p>
+                  )}
+                  {feeError && (
+                    <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-3">{feeError}</p>
+                  )}
                   <Select
                     value={formData.fee_structure_id}
                     onValueChange={(val) => {
                       updateForm("fee_structure_id", val);
                       updateForm("selected_optional_items", []);
                     }}
+                    disabled={feeLoading || feeStructures.length === 0}
                   >
                     <SelectTrigger className="h-12 border-slate-200">
-                      <SelectValue placeholder="Choose structure..." />
+                      <SelectValue placeholder={feeStructures.length ? "Choose term structure…" : "No structure for this grade"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {feeStructures.map((fs) => (
+                      {feeStructures.map((fs: any) => (
                         <SelectItem key={fs.id} value={String(fs.id)}>
                           {fs.name} — {fs.period_name}
                         </SelectItem>
