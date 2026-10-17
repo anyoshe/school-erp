@@ -1284,28 +1284,47 @@ export default function EnrollmentWizardModal({
           return (
             <div className="space-y-6 p-4">
               <section className="space-y-3">
-                <Label className="text-sm font-bold">Select Fee Structure</Label>
+                <Label className="text-sm font-bold">Fee structure (from Finance)</Label>
+                <p className="text-xs text-muted-foreground">
+                  Same active structures as the admission offer letter for{" "}
+                  <strong>{applicationData?.class_applied?.name || "this grade"}</strong>.
+                </p>
+                {feeLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+                {feeError && (
+                  <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-3">
+                    {feeError}
+                  </p>
+                )}
                 <Select
                   value={formData.fee_structure_id}
                   onValueChange={(val) => {
                     updateForm("fee_structure_id", val);
                     updateForm("selected_optional_items", []);
                   }}
+                  disabled={feeLoading || feeStructures.length === 0}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Choose structure..." />
+                    <SelectValue
+                      placeholder={
+                        feeStructures.length
+                          ? "Choose term structure…"
+                          : "No structure for this grade"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    {feeStructures.map((fs) => (
+                    {feeStructures.map((fs: any) => (
                       <SelectItem key={fs.id} value={String(fs.id)}>
-                        {fs.name} — {fs.period_name}
+                        {fs.period_name ? `${fs.period_name} — ${fs.name}` : fs.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </section>
-              <div className="text-center text-slate-500 py-10">
-                Please select a fee structure to continue.
+              <div className="text-center text-slate-500 py-10 text-sm">
+                {feeStructures.length === 0
+                  ? "Create an active fee structure in Finance for this grade, then return here."
+                  : "Select a fee structure above to continue enrollment."}
               </div>
             </div>
           );
