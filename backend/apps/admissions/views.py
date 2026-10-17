@@ -198,8 +198,22 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             return Response({"detail": "You can only enroll applications from your own school."},
                             status=status.HTTP_403_FORBIDDEN)
 
-        if application.status not in [Application.Status.ACCEPTED, Application.Status.ENROLLED]:
-            return Response({"detail": "Only ACCEPTED applications can be enrolled."}, status=400)
+        allowed = {
+            Application.Status.ACCEPTED,
+            Application.Status.ENROLLED,
+            getattr(Application.Status, "OFFERED", "OFFERED"),
+        }
+        if application.status not in allowed:
+            return Response(
+                {
+                    "detail": (
+                        f"Cannot enroll while status is {application.status}. "
+                        "Move the application to Accepted (or Offered) first."
+                    ),
+                    "status": application.status,
+                },
+                status=400,
+            )
 
         if application.student:
             return Response({"detail": "Already enrolled."}, status=400)
@@ -336,10 +350,19 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             #     )
 
             # Enroll the student
-            student = application.enroll_as_student(
-                created_by_user=request.user,
-                wizard_data=wizard_data
-            )
+            try:
+                student = application.enroll_as_student(
+                    created_by_user=request.user,
+                    wizard_data=wizard_data,
+                )
+            except Exception as exc:
+                import traceback
+                traceback.print_exc()
+                msg = str(exc) or exc.__class__.__name__
+                return Response(
+                    {"detail": f"Enrollment failed: {msg}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
             return Response({
                 "detail": "Student enrolled successfully",

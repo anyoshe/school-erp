@@ -763,17 +763,37 @@ class Application(models.Model):
                     pass
 
             item_amounts = wd.get('item_amounts', {}) or {}
+            if isinstance(item_amounts, str):
+                import json
+                try:
+                    item_amounts = json.loads(item_amounts)
+                except Exception:
+                    item_amounts = {}
+            if not isinstance(item_amounts, dict):
+                item_amounts = {}
+
+            plan_raw = wd.get("payment_plan")
+            plan_id = None
+            if plan_raw not in (None, "", "undefined", "null", "false"):
+                plan_id = plan_raw
+
+            if isinstance(item_amounts, str):
+                import json
+                try:
+                    item_amounts = json.loads(item_amounts)
+                except Exception:
+                    item_amounts = {}
             if not isinstance(item_amounts, dict):
                 item_amounts = {}
 
             assignment = StudentFeeAssignment.objects.create(
                 student=student,
                 fee_structure=fee_structure_obj,
-                payment_plan_id=wd.get('payment_plan'),
+                payment_plan_id=plan_id,
                 custom_due_date=custom_due_date,
-                waiver_amount=Decimal(str(wd.get('waiver_amount', 0))),
-                waiver_reason=wd.get('waiver_reason', ''),
-                is_waived=bool(wd.get('is_waived', False)),
+                waiver_amount=Decimal(str(wd.get("waiver_amount") or 0)),
+                waiver_reason=str(wd.get("waiver_reason") or ""),
+                is_waived=bool(wd.get("is_waived", False)),
                 item_amounts=item_amounts,
                 assigned_by=created_by_user,
             )

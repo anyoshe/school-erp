@@ -960,8 +960,17 @@ export default function EnrollmentWizardModal({
       onOpenChange(false);
 
     } catch (err: any) {
-      console.error("Enrollment error full response:", err.response?.data);
-      toast.error(err.response?.data?.detail || "Enrollment failed");
+      const data = err?.response?.data;
+      console.error("Enrollment error full response:", data || err?.message || err);
+      let msg = "Enrollment failed";
+      if (typeof data === "string" && data.trim()) msg = data.slice(0, 200);
+      else if (data?.detail) msg = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
+      else if (data && typeof data === "object") {
+        const parts = Object.entries(data).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`);
+        if (parts.length) msg = parts.join(" · ");
+      } else if (err?.message) msg = err.message;
+      if (err?.response?.status) msg = `[${err.response.status}] ${msg}`;
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
