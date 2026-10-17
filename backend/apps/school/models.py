@@ -220,8 +220,8 @@
 # apps/school/models.py
 import uuid
 import re
-from django.db import models
-from django.db import transaction
+from django.db import models, transaction
+from django.db.models import Q
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
