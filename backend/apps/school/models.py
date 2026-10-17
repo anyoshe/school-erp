@@ -217,6 +217,31 @@
     
 # (old commented generator removed)
 
+# apps/school/models.py
+import uuid
+import re
+from django.db import models
+from django.db import transaction
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.utils import timezone
+from django.utils.text import slugify
+
+User = settings.AUTH_USER_MODEL
+
+
+class Module(models.Model):
+    """Feature flags — which major modules this school has activated."""
+    name = models.CharField(max_length=100, unique=True)
+    code = models.CharField(max_length=50, unique=True)  # e.g. 'students', 'finance'
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 # =========================================================
 # SCHOOL MODEL (MAIN TENANT)
 # =========================================================
@@ -399,7 +424,7 @@ class School(models.Model):
     admission_number_format = models.CharField(
         max_length=20,
         choices=ADMISSION_NUMBER_FORMAT_CHOICES,
-        default='YEAR_SEQ'
+        default='PREFIX_SEQ'
     )
 
     admission_prefix = models.CharField(
