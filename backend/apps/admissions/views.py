@@ -21,6 +21,40 @@ from apps.school.support import accessible_school_ids, selected_school
 from django.utils import timezone
 
 
+
+def _ensure_application_charges(application):
+    """Create INTERVIEW/ADMISSION charges from school defaults without overwriting staff edits."""
+    from decimal import Decimal
+    from .models import ApplicationCharge
+    school = application.school
+    specs = [
+        (
+            ApplicationCharge.ChargeType.INTERVIEW,
+            bool(getattr(school, "interview_fee_enabled", False)),
+            Decimal(str(getattr(school, "interview_fee_amount", 0) or 0)),
+        ),
+        (
+            ApplicationCharge.ChargeType.ADMISSION,
+            Decimal(str(getattr(school, "admission_fee_amount", 0) or 0)) > 0,
+            Decimal(str(getattr(school, "admission_fee_amount", 0) or 0)),
+        ),
+    ]
+    for charge_type, enabled, amount in specs:
+        ApplicationCharge.objects.get_or_create(
+            application=application,
+            charge_type=charge_type,
+            defaults={
+                "policy": (
+                    ApplicationCharge.Policy.FULL
+                    if enabled and amount > 0
+                    else ApplicationCharge.Policy.NOT_APPLICABLE
+                ),
+                "list_amount": amount if enabled else Decimal("0"),
+                "amount_due": amount if enabled and amount > 0 else Decimal("0"),
+            },
+        )
+
+
 class ApplicationViewSet(viewsets.ModelViewSet):
     """
     Main ViewSet for school staff/admins - full CRUD + enrollment
@@ -112,6 +146,17 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                 )
 
         application = serializer.save(school=school)
+        # Seed interview/admission charges when pipeline reaches those stages
+        if new_status in (
+            Application.Status.TEST_SCHEDULED,
+            getattr(Application.Status, "INTERVIEW_COMPLETED", "INTERVIEW_COMPLETED"),
+            Application.Status.OFFERED,
+            Application.Status.ACCEPTED,
+        ):
+            try:
+                _ensure_application_charges(application)
+            except Exception as exc:
+                print(f"[charges] ensure failed: {exc}")
         # Timestamps (save() on model also handles these; set explicitly for clarity)
         if new_status:
             update_fields = []

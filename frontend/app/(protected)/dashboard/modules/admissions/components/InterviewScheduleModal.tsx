@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Send, MessageSquare, Mail, Phone } from "lucide-react";
 import { Application } from "@/types/admission";
+import ApplicationChargePanel from "./ApplicationChargePanel";
 
 interface InterviewFormData {
   date: string;

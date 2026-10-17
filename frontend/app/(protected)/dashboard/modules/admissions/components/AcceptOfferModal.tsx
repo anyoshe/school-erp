@@ -16,6 +16,7 @@ import { Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/utils/api";
 import { Application } from "@/types/admission";
+import ApplicationChargePanel from "./ApplicationChargePanel";
 
 interface Props {
   open: boolean;
@@ -57,7 +58,7 @@ export default function AcceptOfferModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md rounded-2xl">
+      <DialogContent className="sm:max-w-lg rounded-2xl">
         <DialogHeader>
           <DialogTitle>Mark Offer Accepted</DialogTitle>
           <DialogDescription>
@@ -66,6 +67,13 @@ export default function AcceptOfferModal({
         </DialogHeader>
 
         <div className="py-4 space-y-4">
+          <ApplicationChargePanel
+            applicationId={applicationId}
+            types={["ADMISSION"]}
+            compact
+            title="Admission / registration fee"
+            description="Record payment, discount, waive, or N/A before enrollment. Step 6 will show this as already handled when satisfied."
+          />
           <div>
             <Label>Acceptance Notes (optional)</Label>
             <Textarea

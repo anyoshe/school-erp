@@ -1496,7 +1496,7 @@ export default function EnrollmentWizardModal({
                 <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
                   <h3 className="font-semibold text-lg">Pre-enrollment charges</h3>
                   <p className="text-xs text-muted-foreground">
-                    Interview and admission fees are separate from term school fees. Defaults follow school settings; mark N/A or waived for legacy applications.
+                    Handled at interview / offer acceptance when possible. If already Satisfied, nothing more is required here — only outstanding items need action. Separate from term school fees.
                   </p>
                   {chargesLoading ? (
                     <p className="text-sm text-muted-foreground">Loading charges…</p>
