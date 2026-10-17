@@ -224,16 +224,25 @@ export default function FeeStructureForm({
         : (readFormCache(catsKey) || []);
 
       const targetId = structureId || cloneFromId;
+      const catsForMap = fetchedCats.length
+        ? fetchedCats
+        : (readFormCache(catsKey) || categories);
 
       if (targetId) {
-        const res = await api.get(`/finance/structures/${targetId}/`, {
-          headers: { "X-School-ID": currentSchool?.id },
-        });
+        const res = await softGet(`/finance/structures/${targetId}/`, 25000);
+        if (!res) {
+          toast.error("Could not load this fee structure for editing");
+          return;
+        }
         const data = res.data;
+
+        const gradeId = String(
+          data.grade_level?.id ?? data.grade_level ?? ""
+        );
 
         setFormData({
           name: cloneFromId
-            ? `${data.grade_level?.name || data.name} – ${
+            ? `${data.grade_level?.name || data.name || "Structure"} – ${
                 String(data.period_name || "").includes("1")
                   ? "Term 2"
                   : String(data.period_name || "").includes("2")
@@ -242,8 +251,8 @@ export default function FeeStructureForm({
               } – ${data.academic_year || ""}`
             : (data.name || ""),
           description: data.description || "",
-          grade_level: data.grade_level?.id || "",
-          academic_year: data.academic_year,
+          grade_level: gradeId,
+          academic_year: String(data.academic_year || new Date().getFullYear()),
           billing_period_type: data.billing_period_type || "term",
           period_name: cloneFromId
             ? (String(data.period_name || "").includes("1")
@@ -251,38 +260,82 @@ export default function FeeStructureForm({
                 : String(data.period_name || "").includes("2")
                   ? "Term 3"
                   : `${data.period_name || "Term"} (Copy)`)
-            : (data.period_name || ""),
-          is_active: data.is_active,
+            : (data.period_name || "Term 1"),
+          is_active: data.is_active !== false,
         });
 
-        const mappedGroups = fetchedCats.map((cat: FeeCategory) => {
-          const matches = (data.structure_items || []).filter((si: any) => {
-            const itemCatId = si.item_details?.category?.id || si.item_details?.category;
-            return itemCatId === cat.id;
+        // Prefill all structure lines into category groups
+        const items = Array.isArray(data.structure_items) ? data.structure_items : [];
+        const mappedGroups = (catsForMap as FeeCategory[]).map((cat) => {
+          const matches = items.filter((si: any) => {
+            const itemCatId =
+              si.item_details?.category?.id ??
+              si.item_details?.category ??
+              si.category_id;
+            return String(itemCatId) === String(cat.id);
           });
+          // Fallback: match by category_name if ids missing
+          const byName =
+            matches.length > 0
+              ? matches
+              : items.filter(
+                  (si: any) =>
+                    (si.category_name || si.item_details?.category_name) === cat.name
+                );
 
+          const use = matches.length ? matches : byName;
           return {
             category: cat,
-            selected: matches.length > 0,
-            expanded: matches.length > 0,
-            items: matches.map((si: any) => ({
-              id: String(si.item_details?.id || si.item),
-              name: si.item_details?.name || "Unknown Item",
+            selected: use.length > 0,
+            expanded: use.length > 0,
+            items: use.map((si: any) => ({
+              id: String(si.item_details?.id ?? si.item),
+              name: si.item_details?.name || si.name || "Fee item",
               description: si.item_details?.description || "",
               amount: Number(si.amount || 0),
-              is_optional: si.item_details?.is_optional || false, // Loaded from backend
-              is_new: false
-            }))
+              is_optional: !!(
+                si.item_details?.is_optional ||
+                (data.available_optional_items || []).includes(si.item) ||
+                (data.available_optional_items || []).includes(si.item_details?.id)
+              ),
+              is_new: false,
+            })),
           };
         });
+
+        // Lines whose category is missing from catalogue still show under a bucket
+        const mappedIds = new Set(
+          mappedGroups.flatMap((g) => g.items.map((i) => String(i.id)))
+        );
+        const orphans = items.filter((si: any) => {
+          const id = String(si.item_details?.id ?? si.item);
+          return !mappedIds.has(id);
+        });
+        if (orphans.length && mappedGroups.length) {
+          mappedGroups[0].items.push(
+            ...orphans.map((si: any) => ({
+              id: String(si.item_details?.id ?? si.item),
+              name: si.item_details?.name || "Fee item",
+              description: si.item_details?.description || "",
+              amount: Number(si.amount || 0),
+              is_optional: !!si.item_details?.is_optional,
+              is_new: false,
+            }))
+          );
+          mappedGroups[0].selected = true;
+          mappedGroups[0].expanded = true;
+        }
+
         setCategoryGroups(mappedGroups);
       } else {
-        setCategoryGroups(fetchedCats.map((cat: FeeCategory) => ({
-          category: cat,
-          items: [],
-          selected: false,
-          expanded: false,
-        })));
+        setCategoryGroups(
+          (catsForMap as FeeCategory[]).map((cat) => ({
+            category: cat,
+            items: [],
+            selected: false,
+            expanded: false,
+          }))
+        );
       }
     } catch (err) {
       console.warn("Load Error:", err);
@@ -478,7 +531,7 @@ export default function FeeStructureForm({
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto p-6">
         <DialogHeader>
           <DialogTitle>
-            {structureId ? "Edit Fee Structure" : cloneFromId ? "Clone Fee Structure" : "Create Fee Structure"}
+            {structureId ? "Edit fee structure" : cloneFromId ? "Clone fee structure" : "Create fee structure"}
           </DialogTitle>
         </DialogHeader>
 

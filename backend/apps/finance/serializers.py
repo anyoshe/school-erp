@@ -167,7 +167,7 @@ class FeeStructureItemWriteSerializer(serializers.Serializer):
 
 
 class FeeStructureCreateUpdateSerializer(serializers.ModelSerializer):
-    structure_items = FeeStructureItemWriteSerializer(many=True)
+    structure_items = FeeStructureItemWriteSerializer(many=True, required=False)
     available_optional_items = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=FeeItem.objects.all(),
@@ -255,23 +255,27 @@ class FeeStructureCreateUpdateSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
+        """
+        Partial-friendly update:
+        - Only fields present in validated_data are written.
+        - structure_items: if provided (including []), replace lines; if omitted, keep existing.
+        - available_optional_items: same rule.
+        """
         items_data = validated_data.pop("structure_items", None)
-        # Extract optional items IDs
         optional_items = validated_data.pop("available_optional_items", None)
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
 
-        # Update Structure Items (Delete and Re-create pattern you're using)
         if items_data is not None:
             instance.structure_items.all().delete()
-            self._save_items(instance, items_data)
-            
-        # Update Optional Items Relationship
+            if items_data:
+                self._save_items(instance, items_data)
+
         if optional_items is not None:
             instance.available_optional_items.set(optional_items)
-            
+
         return instance
 
     def _save_items(self, structure, items_data):
