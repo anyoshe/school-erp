@@ -422,10 +422,14 @@ function NewApplicationPageInner() {
     documents.forEach((file) => fd.append("documents", file));
 
     if (!currentSchool?.id) {
-      toast.error("No school selected");
+      toast.error("No school selected", {
+        description: "Use the school switcher in the top bar, then try again.",
+      });
       return;
     }
 
+    // Backend also reads X-School-ID; include body school so serializer is satisfied
+    fd.set("school", String(currentSchool.id));
     fd.append("status", action === "draft" ? "DRAFT" : "SUBMITTED");
 
     // Debug log

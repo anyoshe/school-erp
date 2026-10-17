@@ -51,10 +51,28 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
 
     def perform_create(self, serializer):
-        school = selected_school(self.request)
+        # Prefer header/context school; fall back to body "school" if present
+        school = None
+        try:
+            school = selected_school(self.request)
+        except Exception:
+            school = None
+        if school is None:
+            body_school = serializer.validated_data.get("school") or self.request.data.get("school")
+            if body_school:
+                from apps.school.models import School
+                sid = getattr(body_school, "id", body_school)
+                school = School.objects.filter(pk=sid).first()
+        if school is None:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError(
+                {"school": "No school selected. Choose a school in the header switcher and try again."}
+            )
         class_applied = serializer.validated_data.get("class_applied")
         if class_applied and class_applied.school_id != school.id:
             raise PermissionDenied("The selected class does not belong to this school.")
+        # Drop client school so save uses resolved tenant
+        serializer.validated_data.pop("school", None)
         application = serializer.save(school=school, created_by=self.request.user)
         if application.status == Application.Status.ENROLLED:
             application.enroll_as_student(self.request.user)

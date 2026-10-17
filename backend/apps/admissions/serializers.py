@@ -186,6 +186,8 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
         read_only_fields = ['id']
 
     extra_kwargs = {
+        # Staff create: school set in perform_create from X-School-ID
+        'school': {'required': False, 'allow_null': True},
         'middle_name':          {'required': False, 'allow_blank': True},
         'preferred_name':       {'required': False, 'allow_blank': True},
         'nationality':          {'required': False, 'allow_blank': True},
