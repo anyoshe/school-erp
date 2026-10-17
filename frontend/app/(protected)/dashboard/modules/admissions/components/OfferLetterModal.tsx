@@ -59,7 +59,7 @@ export default function OfferLetterModal({
       try {
         // Fee structures for THIS applicant's grade only (active)
         const structuresRes = await api.get("/finance/structures/", {
-          params: { grade_level: classId, is_active: true },
+          params: { grade_level: classId, is_active: true, include_items: 1 },
         });
         const data = structuresRes.data;
         const list = Array.isArray(data)
@@ -74,11 +74,35 @@ export default function OfferLetterModal({
             String(s.grade_level) === String(classId) ||
             String(s.grade_level?.id) === String(classId)
         );
-        setFeeStructures(forGrade);
-        if (forGrade.length === 0) {
+        // Hydrate line items: lite list has totals only; detail has structure_items
+        const detailed = await Promise.all(
+          forGrade.map(async (s: any) => {
+            if (Array.isArray(s.structure_items) && s.structure_items.length > 0) {
+              return s;
+            }
+            try {
+              const res = await api.get(`/finance/structures/${s.id}/`);
+              return res.data || s;
+            } catch (e) {
+              console.warn("Failed to load structure detail", s.id, e);
+              return s;
+            }
+          })
+        );
+        setFeeStructures(detailed.filter(Boolean));
+        if (detailed.length === 0) {
           toast.message("No fee structure for this grade", {
             description:
               "Create an active fee structure in Finance for this class before issuing the offer letter.",
+          });
+        } else if (
+          detailed.some(
+            (s) => !Array.isArray(s?.structure_items) || s.structure_items.length === 0
+          )
+        ) {
+          toast.message("Some fee structures have no saved line items", {
+            description:
+              "In Finance → Fee structures, edit each term and re-save the fee lines.",
           });
         }
       } catch (err) {
@@ -242,18 +266,30 @@ export default function OfferLetterModal({
         currentY = (doc as any).lastAutoTable.finalY + 6;
       }
 
+      const periodTotal =
+        reqTotal + optTotal > 0
+          ? reqTotal + optTotal
+          : Number(structure.total_amount || 0);
+
       if (!required.length && !optional.length) {
-        doc.setFontSize(9).setTextColor(120).text("No line items on this structure.", 20, currentY + 4);
+        doc.setFontSize(9).setTextColor(120);
+        doc.text(
+          periodTotal > 0
+            ? `Fee lines not loaded for this term. Total on file: KES ${periodTotal.toLocaleString()}`
+            : "No line items on this structure. Edit the fee structure in Finance and re-save fee lines.",
+          20,
+          currentY + 4
+        );
         currentY += 12;
       }
 
       doc.setFontSize(10).setTextColor(0).setFont("helvetica", "bold");
       doc.text(
-        `Period total (required + optional listed): KES ${(reqTotal + optTotal).toLocaleString()}`,
+        `Period total (required + optional listed): KES ${periodTotal.toLocaleString()}`,
         20,
         currentY + 2
       );
-      annualTotal += reqTotal; // annual quoted on required only
+      annualTotal += reqTotal > 0 ? reqTotal : periodTotal;
       currentY += 14;
 
       if (currentY > 230 && index !== feeStructures.length - 1) {
