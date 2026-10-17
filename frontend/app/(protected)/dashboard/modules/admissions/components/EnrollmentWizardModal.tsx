@@ -262,7 +262,6 @@ export default function EnrollmentWizardModal({
     birth_certificate_number: "",
     admission_number: "",
     auto_generate_admission: true,
-    auto_generate_admission: true,               // default: let backend generate
     profile_photo: null as File | null,
     birth_certificate_file: null as File | null,
     passport_number: "",
