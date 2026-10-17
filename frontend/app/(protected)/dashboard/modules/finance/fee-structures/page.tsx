@@ -55,8 +55,11 @@ export default function FeeStructuresList() {
     } catch (err: any) {
       console.error(err);
       setStructures([]);
-      setError(err?.response?.data?.detail || "Failed to load fee structures");
-      toast.error("Failed to load fee structures");
+      const msg = !err?.response
+        ? "Cannot reach API (Network Error). Is Django running on the API URL? Check Neon DB connection in the terminal."
+        : (err?.response?.data?.detail || `Failed to load fee structures (HTTP ${err.response.status})`);
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

@@ -105,13 +105,19 @@ class FeeItemCreateUpdateSerializer(serializers.ModelSerializer):
 class FeeStructureItemLiteSerializer(serializers.ModelSerializer):
     """Enough for edit form — no nested grade_levels trees."""
     item_name = serializers.CharField(source="item.name", read_only=True)
-    category_id = serializers.UUIDField(source="item.category_id", read_only=True)
+    category_id = serializers.SerializerMethodField()
     category_name = serializers.CharField(source="item.category.name", read_only=True)
     is_optional = serializers.BooleanField(source="item.is_optional", read_only=True)
 
     class Meta:
         model = FeeStructureItem
         fields = ["id", "item", "item_name", "category_id", "category_name", "amount", "is_optional"]
+
+    def get_category_id(self, obj):
+        try:
+            return str(obj.item.category_id)
+        except Exception:
+            return None
 
 
 class FeeStructureItemSerializer(serializers.ModelSerializer):

@@ -403,7 +403,7 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
                 ),
                 "available_optional_items",
             )
-        return qs.order_by("-academic_year", "grade_level__order", "period_name")
+        return qs.order_by("-academic_year", "period_name", "name")
 
 
     @action(detail=True, methods=['get'], url_path='preview')
