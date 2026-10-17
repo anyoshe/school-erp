@@ -152,32 +152,90 @@ export default function OfferLetterModal({
     let annualTotal = 0;
 
     feeStructures.forEach((structure, index) => {
-      // Using period_name (e.g. Term 1) to distinguish headers
       const periodLabel = structure.period_details?.name || structure.period_name || "Academic Period";
+      const { required, optional } = splitLines(structure);
+      const reqTotal = sumAmounts(required);
+      const optTotal = sumAmounts(optional);
+
       doc.setFontSize(12).setTextColor(0).setFont("helvetica", "bold");
       doc.text(`${periodLabel}: ${structure.name}`.toUpperCase(), 20, currentY);
-      doc.setFont("helvetica", "normal");
+      currentY += 6;
+      doc.setFontSize(9).setFont("helvetica", "normal").setTextColor(80);
+      doc.text(
+        `What the fee covers for ${applicationData.class_applied?.name || "this class"} (${periodLabel})`,
+        20,
+        currentY
+      );
+      currentY += 4;
 
-      const rows = (structure.structure_items || []).map((si: any) => [
-        si.item_details?.name || "Fee Item",
-        si.item_details?.category_name || "General",
-        si.item_details?.is_optional ? "Optional" : "Mandatory",
-        Number(si.amount).toLocaleString()
-      ]);
+      if (required.length) {
+        doc.setFontSize(10).setTextColor(15, 118, 110).setFont("helvetica", "bold");
+        doc.text("Required fees (must pay)", 20, currentY + 4);
+        currentY += 6;
+        autoTable(doc, {
+          startY: currentY,
+          head: [["Fee item", "Category", "Amount (KES)"]],
+          body: required.map((si: any) => [
+            lineName(si),
+            lineCategory(si),
+            Number(si.amount || 0).toLocaleString(),
+          ]),
+          foot: [[
+            { content: "Subtotal — required", colSpan: 2, styles: { halign: "right", fontStyle: "bold" } },
+            { content: reqTotal.toLocaleString(), styles: { fontStyle: "bold" } },
+          ]],
+          theme: "striped",
+          headStyles: { fillColor: [15, 118, 110], fontSize: 9 },
+          styles: { fontSize: 9 },
+          margin: { left: 20, right: 20 },
+        });
+        currentY = (doc as any).lastAutoTable.finalY + 8;
+      }
 
-      autoTable(doc, {
-        startY: currentY + 5,
-        head: [["Item Description", "Category", "Type", "Amount (KES)"]],
-        body: rows,
-        foot: [[{ content: `Total for ${periodLabel}`, colSpan: 3, styles: { halign: 'right', fontStyle: 'bold' } }, { content: Number(structure.total_amount).toLocaleString(), styles: { fontStyle: 'bold' } }]],
-        theme: "striped",
-        headStyles: { fillColor: [44, 62, 80] },
-      });
+      if (optional.length) {
+        doc.setFontSize(10).setTextColor(217, 119, 6).setFont("helvetica", "bold");
+        doc.text("Optional fees (choose if needed)", 20, currentY + 2);
+        currentY += 6;
+        autoTable(doc, {
+          startY: currentY,
+          head: [["Fee item", "Category", "Amount (KES)"]],
+          body: optional.map((si: any) => [
+            lineName(si),
+            lineCategory(si),
+            Number(si.amount || 0).toLocaleString(),
+          ]),
+          foot: [[
+            { content: "Subtotal — optional", colSpan: 2, styles: { halign: "right", fontStyle: "bold" } },
+            { content: optTotal.toLocaleString(), styles: { fontStyle: "bold" } },
+          ]],
+          theme: "striped",
+          headStyles: { fillColor: [217, 119, 6], fontSize: 9 },
+          styles: { fontSize: 9 },
+          margin: { left: 20, right: 20 },
+        });
+        currentY = (doc as any).lastAutoTable.finalY + 6;
+      }
 
-      annualTotal += Number(structure.total_amount);
-      currentY = (doc as any).lastAutoTable.finalY + 15;
-      if (currentY > 230 && index !== feeStructures.length - 1) { doc.addPage(); currentY = 20; }
+      if (!required.length && !optional.length) {
+        doc.setFontSize(9).setTextColor(120).text("No line items on this structure.", 20, currentY + 4);
+        currentY += 12;
+      }
+
+      doc.setFontSize(10).setTextColor(0).setFont("helvetica", "bold");
+      doc.text(
+        `Period total (required + optional listed): KES ${(reqTotal + optTotal).toLocaleString()}`,
+        20,
+        currentY + 2
+      );
+      annualTotal += reqTotal; // annual quoted on required only
+      currentY += 14;
+
+      if (currentY > 230 && index !== feeStructures.length - 1) {
+        doc.addPage();
+        currentY = 20;
+      }
     });
+
 
     // Totals & Banking (Restored your specific school model fields)
     doc.setFontSize(14).setFont("helvetica", "bold").text(`TOTAL ANNUAL: KES ${annualTotal.toLocaleString()}`, 190, currentY, { align: "right" });
@@ -322,21 +380,62 @@ export default function OfferLetterModal({
                   <p className="text-xs text-slate-500 mb-2">
                     Fees for <span className="font-semibold text-slate-700">{className}</span> ({feeStructures.length} period structure{feeStructures.length === 1 ? "" : "s"})
                   </p>
-                  {feeStructures.map(fs => (
-                    <div key={fs.id} className="border-l-2 border-slate-700 pl-4">
+                  {feeStructures.map((fs) => {
+                    const { required, optional } = splitLines(fs);
+                    const reqTotal = sumAmounts(required);
+                    const optTotal = sumAmounts(optional);
+                    return (
+                    <div key={fs.id} className="border-l-2 border-slate-600 pl-4 space-y-3">
                       <div className="flex justify-between items-center mb-1">
                         <span className="text-xs font-bold text-slate-400 uppercase">{fs.period_details?.name || fs.period_name || "Period"}</span>
-                        <span className="font-mono text-secondary-400">KES {Number(fs.total_amount).toLocaleString()}</span>
+                        <span className="font-mono text-secondary-400">KES {(reqTotal + optTotal || Number(fs.total_amount) || 0).toLocaleString()}</span>
                       </div>
-                      <p className="text-sm font-semibold mb-2">{fs.name}</p>
-                      {fs.structure_items?.map((si: any) => (
-                        <div key={si.id} className="flex justify-between text-[10px] text-slate-500">
-                          <span>• {si.item_details?.name}</span>
-                          <span>{Number(si.amount).toLocaleString()}</span>
+                      <p className="text-sm font-semibold">{fs.name}</p>
+
+                      {required.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-teal-300 mb-1">Required — what the fee consists of</p>
+                          {required.map((si: any) => (
+                            <div key={si.id || lineName(si)} className="flex justify-between text-[11px] text-slate-300 gap-2">
+                              <span>
+                                <span className="text-white">{lineName(si)}</span>
+                                <span className="text-slate-500"> · {lineCategory(si)}</span>
+                              </span>
+                              <span className="font-mono shrink-0">{Number(si.amount).toLocaleString()}</span>
+                            </div>
+                          ))}
+                          <div className="flex justify-between text-[11px] font-semibold text-teal-200 mt-1">
+                            <span>Required subtotal</span>
+                            <span>KES {reqTotal.toLocaleString()}</span>
+                          </div>
                         </div>
-                      ))}
+                      )}
+
+                      {optional.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-amber-300 mb-1">Optional — only if you choose</p>
+                          {optional.map((si: any) => (
+                            <div key={si.id || lineName(si)} className="flex justify-between text-[11px] text-slate-400 gap-2">
+                              <span>
+                                <span className="text-slate-200">{lineName(si)}</span>
+                                <span className="text-slate-500"> · {lineCategory(si)}</span>
+                              </span>
+                              <span className="font-mono shrink-0">{Number(si.amount).toLocaleString()}</span>
+                            </div>
+                          ))}
+                          <div className="flex justify-between text-[11px] font-semibold text-amber-200/90 mt-1">
+                            <span>Optional subtotal</span>
+                            <span>KES {optTotal.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {!required.length && !optional.length && (
+                        <p className="text-[11px] text-slate-500">No line items on this structure.</p>
+                      )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
