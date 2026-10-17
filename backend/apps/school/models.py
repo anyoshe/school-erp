@@ -119,7 +119,7 @@
 #     admission_number_format = models.CharField(
 #         max_length=20,
 #         choices=ADMISSION_NUMBER_FORMAT_CHOICES,
-#         default='YEAR_SEQ',
+#         default='PREFIX_SEQ',
 #         verbose_name="Admission Number Format",
 #         help_text="How admission/application numbers should be generated for this school"
 #     )
@@ -215,117 +215,7 @@
 #     def __str__(self):
 #         return self.short_name or self.name
     
-# def generate_unique_admission_number(school):
-#     """
-#     Generates a truly unique admission number using school's configuration.
-#     Safely handles deleted records and race conditions.
-#     """
-#     if not school.admission_number_format:
-#         raise ValidationError("School has no admission number format configured.")
-
-#     from apps.admissions.models import Application
-#     from apps.students.models import Student
-#     from django.utils import timezone
-
-#     current_year = timezone.now().year
-#     prefix = (school.admission_prefix or "").strip()
-#     padding = school.admission_seq_padding or 4
-#     format_type = school.admission_number_format
-
-#     with transaction.atomic():
-#         # Lock the school to prevent concurrent generation issues
-#         School.objects.select_for_update().filter(pk=school.pk).first()
-
-#         # Check BOTH Application and Student tables for existing numbers in this year
-#         existing_numbers = set()
-
-#         # From Applications
-#         apps = Application.objects.filter(
-#             school=school,
-#             admission_number__startswith=str(current_year)
-#         ).values_list('admission_number', flat=True)
-#         existing_numbers.update(apps)
-
-#         # From Students (in case some are already enrolled)
-#         students = Student.objects.filter(
-#             school=school,
-#             admission_number__startswith=str(current_year)
-#         ).values_list('admission_number', flat=True)
-#         existing_numbers.update(students)
-
-#         # Find the highest sequence number used this year
-#         max_seq = 0
-#         for num in existing_numbers:
-#             try:
-#                 # Extract the last part after the last '-'
-#                 seq_part = num.split('-')[-1]
-#                 seq = int(seq_part)
-#                 if seq > max_seq:
-#                     max_seq = seq
-#             except (ValueError, IndexError):
-#                 continue
-
-#         # Generate next number, incrementing until we find a free one
-#         while True:
-#             next_seq = max_seq + 1
-#             seq_str = f"{next_seq:0{padding}d}"
-
-#             if format_type == 'YEAR_SEQ':
-#                 candidate = f"{current_year}-{seq_str}"
-#             elif format_type == 'PREFIX_YEAR_SEQ':
-#                 if not prefix:
-#                     raise ValidationError("Prefix is required for PREFIX_YEAR_SEQ format.")
-#                 candidate = f"{prefix}-{current_year}-{seq_str}"
-#             else:
-#                 raise ValidationError(f"Unknown admission number format: {format_type}")
-
-#             # Final safety check
-#             if (not Application.objects.filter(school=school, admission_number=candidate).exists() and
-#                 not Student.objects.filter(school=school, admission_number=candidate).exists()):
-#                 print(f"[ADMISSION NUMBER] Generated: {candidate}")
-#                 return candidate
-
-#             max_seq = next_seq  # continue incrementing if somehow taken
-
-
-# schools/models.py
-
-import uuid
-import re
-
-from django.db import models, transaction
-from django.db.models import Q
-from django.conf import settings
-from django.core.exceptions import ValidationError
-from django.utils.text import slugify
-from django.utils import timezone
-
-User = settings.AUTH_USER_MODEL
-
-
-# =========================================================
-# MODULES (Feature Flags)
-# =========================================================
-
-class Module(models.Model):
-    """
-    Feature flags - which major modules this school has activated
-    Example:
-        students
-        finance
-        academics
-        hr
-        transport
-    """
-    name = models.CharField(max_length=100, unique=True)
-    code = models.CharField(max_length=50, unique=True)
-
-    class Meta:
-        ordering = ["name"]
-
-    def __str__(self):
-        return self.name
-
+# (old commented generator removed)
 
 # =========================================================
 # SCHOOL MODEL (MAIN TENANT)
@@ -500,9 +390,10 @@ class School(models.Model):
     # =====================================================
 
     ADMISSION_NUMBER_FORMAT_CHOICES = [
+        ('PREFIX_SEQ', 'Prefix + Sequential (PSS001)'),
         ('YEAR_SEQ', 'Year + Sequential (2026-0001)'),
         ('PREFIX_YEAR_SEQ', 'Prefix + Year + Sequential (ABC-2026-0001)'),
-        ('CUSTOM', 'Manual Entry'),
+        ('CUSTOM', 'Manual entry only'),
     ]
 
     admission_number_format = models.CharField(
@@ -513,11 +404,13 @@ class School(models.Model):
 
     admission_prefix = models.CharField(
         max_length=20,
-        blank=True
+        blank=True,
+        help_text="School code for numbers, e.g. PSS → PSS001, PSS002",
     )
 
     admission_seq_padding = models.PositiveSmallIntegerField(
-        default=4
+        default=3,
+        help_text="Digits after prefix, e.g. 3 → PSS001",
     )
 
 
@@ -723,112 +616,94 @@ class SchoolSupportAuditLog(models.Model):
 # ADMISSION NUMBER GENERATOR
 # =========================================================
 
+
 def generate_unique_admission_number(school):
     """
-    Generates unique admission number per school.
-    Safe for concurrent requests.
-    """
+    Unique admission number per school only (multi-tenant safe).
 
+    PREFIX_SEQ       -> PSS001, PSS002
+    YEAR_SEQ         -> 2026-0001
+    PREFIX_YEAR_SEQ  -> PSS-2026-0001
+    CUSTOM           -> not auto-generated
+    """
+    import re as _re
     from apps.admissions.models import Application
     from apps.students.models import Student
 
-    if not school.admission_number_format:
+    format_type = (getattr(school, "admission_number_format", None) or "PREFIX_SEQ").strip()
+    if format_type == "CUSTOM":
         raise ValidationError(
-            "Admission format not configured."
+            "This school uses manual admission numbers. Enter a number on the enroll form."
         )
+
+    prefix = (getattr(school, "admission_prefix", None) or "").strip()
+    padding = getattr(school, "admission_seq_padding", None) or 3
+    if padding < 1:
+        padding = 3
+    if padding > 8:
+        padding = 8
 
     current_year = timezone.now().year
 
-    prefix = (school.admission_prefix or "").strip()
-
-    padding = school.admission_seq_padding or 4
-
-    format_type = school.admission_number_format
-
+    if format_type in ("PREFIX_SEQ", "PREFIX_YEAR_SEQ") and not prefix:
+        raise ValidationError(
+            "Set the school's admission_prefix (e.g. PSS) before auto-generating numbers."
+        )
 
     with transaction.atomic():
+        School.objects.select_for_update().filter(pk=school.pk).first()
 
-        School.objects.select_for_update().filter(
-            pk=school.pk
-        ).first()
+        apps = Application.objects.filter(school=school).exclude(
+            admission_number__isnull=True
+        ).exclude(admission_number="").values_list("admission_number", flat=True)
+        students = Student.objects.filter(school=school).exclude(
+            admission_number__isnull=True
+        ).exclude(admission_number="").values_list("admission_number", flat=True)
 
-        existing_numbers = set()
+        existing_numbers = set(str(x) for x in apps) | set(str(x) for x in students)
 
-        apps = Application.objects.filter(
-            school=school,
-            admission_number__startswith=str(current_year)
-        ).values_list(
-            "admission_number",
-            flat=True
-        )
-
-        students = Student.objects.filter(
-            school=school,
-            admission_number__startswith=str(current_year)
-        ).values_list(
-            "admission_number",
-            flat=True
-        )
-
-        existing_numbers.update(apps)
-        existing_numbers.update(students)
+        def extract_seq(num: str) -> int:
+            m = _re.search(r"(\d+)$", str(num).strip())
+            if not m:
+                return 0
+            try:
+                return int(m.group(1))
+            except ValueError:
+                return 0
 
         max_seq = 0
-
         for num in existing_numbers:
+            n = str(num)
+            if format_type == "PREFIX_SEQ":
+                if not n.upper().startswith(prefix.upper()):
+                    continue
+            elif format_type == "YEAR_SEQ":
+                if not n.startswith(str(current_year)):
+                    continue
+            elif format_type == "PREFIX_YEAR_SEQ":
+                if not n.upper().startswith(f"{prefix.upper()}-{current_year}"):
+                    continue
+            max_seq = max(max_seq, extract_seq(n))
 
-            try:
-                seq_part = num.split("-")[-1]
-                seq = int(seq_part)
-
-                if seq > max_seq:
-                    max_seq = seq
-
-            except:
-                continue
-
-
+        next_seq = max_seq
         while True:
-
-            next_seq = max_seq + 1
-
+            next_seq += 1
             seq_str = f"{next_seq:0{padding}d}"
 
-
-            if format_type == "YEAR_SEQ":
-
+            if format_type == "PREFIX_SEQ":
+                candidate = f"{prefix}{seq_str}"
+            elif format_type == "YEAR_SEQ":
                 candidate = f"{current_year}-{seq_str}"
-
             elif format_type == "PREFIX_YEAR_SEQ":
-
-                if not prefix:
-                    raise ValidationError(
-                        "Prefix required."
-                    )
-
                 candidate = f"{prefix}-{current_year}-{seq_str}"
-
             else:
+                raise ValidationError("Unsupported admission number format.")
 
-                raise ValidationError(
-                    "Unsupported format."
-                )
+            if candidate in existing_numbers:
+                continue
+            if Application.objects.filter(school=school, admission_number=candidate).exists():
+                continue
+            if Student.objects.filter(school=school, admission_number=candidate).exists():
+                continue
+            return candidate
 
-
-            if (
-                not Application.objects.filter(
-                    school=school,
-                    admission_number=candidate
-                ).exists()
-
-                and
-
-                not Student.objects.filter(
-                    school=school,
-                    admission_number=candidate
-                ).exists()
-            ):
-
-                return candidate
-
-            max_seq = next_seq

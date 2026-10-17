@@ -261,6 +261,7 @@ export default function EnrollmentWizardModal({
 
     birth_certificate_number: "",
     admission_number: "",
+    auto_generate_admission: true,
     auto_generate_admission: true,               // default: let backend generate
     profile_photo: null as File | null,
     birth_certificate_file: null as File | null,
@@ -864,27 +865,72 @@ export default function EnrollmentWizardModal({
             {/* ── New fields ── */}
             <div className="md:col-span-2">
               <Label>Admission Number</Label>
-              <div className="flex items-center gap-3 mt-1">
-                <Checkbox
-                  id="auto-gen"
-                  checked={formData.auto_generate_admission}
-
-                  onCheckedChange={(v) =>
-                    updateForm("auto_generate_admission", v === true)
-                  }
-                />
-                <Label htmlFor="auto-gen" className="text-sm">
-                  Auto-generate (recommended – backend will create e.g. ADM-2026-0123)
-                </Label>
-              </div>
-              {!formData.auto_generate_admission && (
-                <Input
-                  className="mt-2"
-                  value={formData.admission_number}
-                  onChange={e => updateForm("admission_number", e.target.value)}
-                  placeholder="e.g. ADM-2026-001"
-                />
-              )}
+              {(() => {
+                const fmt = (currentSchool as any)?.admission_number_format || "PREFIX_SEQ";
+                const prefix = ((currentSchool as any)?.admission_prefix || "PSS").trim();
+                const pad = Number((currentSchool as any)?.admission_seq_padding || 3);
+                const example =
+                  fmt === "PREFIX_SEQ"
+                    ? `${prefix}${"1".padStart(pad, "0")}`
+                    : fmt === "YEAR_SEQ"
+                      ? `${new Date().getFullYear()}-${"1".padStart(pad, "0")}`
+                      : fmt === "PREFIX_YEAR_SEQ"
+                        ? `${prefix}-${new Date().getFullYear()}-${"1".padStart(pad, "0")}`
+                        : "manual entry";
+                const isCustom = fmt === "CUSTOM";
+                return (
+                  <>
+                    <p className="text-xs text-muted-foreground mt-1 mb-2">
+                      School format:{" "}
+                      <span className="font-medium text-foreground">
+                        {fmt === "PREFIX_SEQ"
+                          ? "Prefix + sequence"
+                          : fmt === "YEAR_SEQ"
+                            ? "Year + sequence"
+                            : fmt === "PREFIX_YEAR_SEQ"
+                              ? "Prefix + year + sequence"
+                              : "Manual only"}
+                      </span>
+                      {prefix ? (
+                        <>
+                          {" "}
+                          · prefix <span className="font-mono font-semibold">{prefix}</span>
+                        </>
+                      ) : null}
+                      {" "}
+                      · e.g. <span className="font-mono">{example}</span>
+                      . Numbers are unique per school.
+                    </p>
+                    {!isCustom && (
+                      <div className="flex items-center gap-3 mt-1">
+                        <Checkbox
+                          id="auto-gen"
+                          checked={formData.auto_generate_admission !== false}
+                          onCheckedChange={(v) =>
+                            updateForm("auto_generate_admission", v === true)
+                          }
+                        />
+                        <Label htmlFor="auto-gen" className="text-sm">
+                          Auto-generate next number for this school (e.g. {example})
+                        </Label>
+                      </div>
+                    )}
+                    {(isCustom || formData.auto_generate_admission === false) && (
+                      <Input
+                        className="mt-2 font-mono"
+                        value={formData.admission_number}
+                        onChange={(e) =>
+                          updateForm("admission_number", e.target.value.toUpperCase())
+                        }
+                        placeholder={example}
+                      />
+                    )}
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Change prefix/format under School settings (admission_prefix, format, padding).
+                    </p>
+                  </>
+                );
+              })()}
             </div>
 
             <div>

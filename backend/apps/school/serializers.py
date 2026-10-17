@@ -88,7 +88,10 @@ class SchoolSessionSerializer(serializers.ModelSerializer):
         fields = [
             "id", "owner", "name", "short_name",
             "email", "phone", "city", "country",
-            "currency", "currency_symbol", "currency_display",
+            "currency", "currency_symbol",
+            "admission_number_format",
+            "admission_prefix",
+            "admission_seq_padding", "currency_display",
             "logo", "modules", "setup_complete",
             "created_at", "updated_at",
         ]
