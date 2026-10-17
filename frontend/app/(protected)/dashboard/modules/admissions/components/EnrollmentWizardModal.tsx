@@ -838,35 +838,28 @@ export default function EnrollmentWizardModal({
         return formData.guardian_name && formData.guardian_phone && formData.guardian_national_id;
 
       case 6: {
+        const deposit = Number(formData.initial_payment_amount || 0);
         const hasPaymentProof =
-          (String(formData.initial_payment_reference || "").trim().length > 3) ||
+          deposit <= 0 ||
+          String(formData.initial_payment_reference || "").trim().length > 2 ||
           !!formData.initial_payment_proof;
 
-        const waiverIsValid = !formData.is_waived || (
-          Number(formData.waiver_amount || 0) >= 0 &&
-          String(formData.waiver_reason || "").trim().length >= 3
-        );
+        const waiverIsValid =
+          !formData.is_waived ||
+          String(formData.waiver_reason || "").trim().length >= 2;
 
         const allocationValid = isItemAllocationValid();
+        const paymentPlanOk =
+          paymentPlans.length === 0 || !!formData.payment_plan;
 
-        const isValid = !!formData.fee_structure_id &&
-          !!formData.payment_plan &&
+        const isValid =
+          !!formData.fee_structure_id &&
+          paymentPlanOk &&
           formData.terms_accepted === true &&
           formData.summary_confirmed === true &&
           hasPaymentProof &&
           waiverIsValid &&
           allocationValid;
-
-        // Temporary debug - remove after it works
-        console.log("=== STEP 6 VALIDATION ===", {
-          fee_structure: !!formData.fee_structure_id,
-          payment_plan: !!formData.payment_plan,
-          terms_accepted: formData.terms_accepted,
-          summary_confirmed: formData.summary_confirmed,
-          hasPaymentProof,
-          waiverIsValid,
-          overall: isValid
-        });
 
         return isValid;
       }
@@ -1784,7 +1777,7 @@ export default function EnrollmentWizardModal({
                               />
                               <div>
                                 <p className="font-medium text-slate-800">
-                                  {itemDetails.name || "Unnamed Optional Item"}
+                                  {lineLabel(si) || itemDetails.name || "Optional service"}
                                 </p>
                                 <p className="text-xs text-slate-500">
                                   {itemDetails.category_name || "Miscellaneous"}
@@ -1824,20 +1817,26 @@ export default function EnrollmentWizardModal({
                 {/* Payment Plan */}
                 <section className="space-y-4">
                   <Label className="text-sm font-bold">Payment Plan</Label>
-
+                  {paymentPlans.length === 0 ? (
+                    <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-3">
+                      No payment plans for this school yet. Re-open this step or create plans under Finance.
+                      Enrollment can continue with full payment once defaults seed.
+                    </p>
+                  ) : null}
                   <Select
-                    value={formData.payment_plan}
+                    value={formData.payment_plan || undefined}
                     onValueChange={(val) => updateForm("payment_plan", val)}
+                    disabled={paymentPlans.length === 0}
                   >
                     <SelectTrigger className="h-12">
-                      <SelectValue placeholder="Select payment plan" />
+                      <SelectValue placeholder={paymentPlans.length ? "Select payment plan" : "No plans available"} />
                     </SelectTrigger>
                     <SelectContent>
                       {paymentPlans
                         .filter((plan) => plan.is_active !== false)
                         .map((plan) => (
                           <SelectItem key={plan.id} value={String(plan.id)}>
-                            {plan.name} {plan.is_recommended && "⭐ Recommended"}
+                            {plan.name} {plan.is_recommended ? "· Recommended" : ""}
                           </SelectItem>
                         ))}
                     </SelectContent>
@@ -2216,6 +2215,20 @@ export default function EnrollmentWizardModal({
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             ) : (
+              <>
+              {!validateStep(6) && (
+                <p className="text-xs text-amber-700 max-w-xs text-right">
+                  To enable Confirm & Enroll: select a fee structure
+                  {paymentPlans.length > 0 && !formData.payment_plan ? ", choose a payment plan" : ""}
+                  {!formData.terms_accepted ? ", accept terms" : ""}
+                  {!formData.summary_confirmed ? ", confirm summary" : ""}
+                  {Number(formData.initial_payment_amount || 0) > 0 &&
+                  !(String(formData.initial_payment_reference || "").trim().length > 2 || formData.initial_payment_proof)
+                    ? ", add payment reference or proof (or set initial payment to 0)"
+                    : ""}
+                  .
+                </p>
+              )}
               <Button
                 onClick={handleSubmit}
                 disabled={loading || !validateStep(currentStep)}
@@ -2233,6 +2246,7 @@ export default function EnrollmentWizardModal({
                   </>
                 )}
               </Button>
+              </>
             )}
           </div>
         </DialogFooter>

@@ -663,6 +663,7 @@ class PaymentPlanViewSet(viewsets.ModelViewSet):
     queryset = PaymentPlan.objects.prefetch_related('installments').all()
     serializer_class = PaymentPlanSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None
 
     def get_queryset(self):
         return self.queryset.filter(
@@ -671,3 +672,47 @@ class PaymentPlanViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(school=selected_school(self.request))
+
+    def list(self, request, *args, **kwargs):
+        """Auto-seed sensible defaults when school has no plans yet."""
+        try:
+            school = selected_school(request)
+        except Exception:
+            school = None
+            ids = list(accessible_school_ids(request) or [])
+            if ids:
+                from apps.school.models import School
+                school = School.objects.filter(pk=ids[0]).first()
+        qs = self.filter_queryset(self.get_queryset())
+        if school:
+            qs = qs.filter(school=school)
+        if school and not qs.exists():
+            PaymentPlan.objects.get_or_create(
+                school=school,
+                name="Full payment",
+                defaults={
+                    "plan_type": "full",
+                    "number_of_installments": 1,
+                    "days_interval": 0,
+                    "is_active": True,
+                    "is_recommended": True,
+                    "description": "Pay the full term amount",
+                    "first_installment_percentage": 100,
+                },
+            )
+            PaymentPlan.objects.get_or_create(
+                school=school,
+                name="Two installments",
+                defaults={
+                    "plan_type": "custom",
+                    "number_of_installments": 2,
+                    "days_interval": 30,
+                    "is_active": True,
+                    "is_recommended": False,
+                    "description": "Split the term balance into two payments",
+                    "first_installment_percentage": 50,
+                },
+            )
+            qs = self.filter_queryset(self.get_queryset()).filter(school=school)
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)
