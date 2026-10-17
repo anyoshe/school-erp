@@ -360,7 +360,8 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return FeeStructureCreateUpdateSerializer
-        if self.action == "list":
+        # Offer letter / forms need line items on list: ?include_items=1
+        if self.action == "list" and self.request.query_params.get("include_items") != "1":
             return FeeStructureListSerializer
         return FeeStructureSerializer
 
@@ -395,11 +396,15 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
 
         qs = qs.annotate(items_total=Sum("structure_items__amount"))
 
-        if self.action != "list":
+        need_items = (
+            self.action != "list"
+            or self.request.query_params.get("include_items") == "1"
+        )
+        if need_items:
             qs = qs.prefetch_related(
                 Prefetch(
                     "structure_items",
-                    queryset=FeeStructureItem.objects.select_related("item__category"),
+                    queryset=FeeStructureItem.objects.select_related("item", "item__category"),
                 ),
                 "available_optional_items",
             )

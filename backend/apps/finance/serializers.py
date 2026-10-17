@@ -192,6 +192,15 @@ class FeeStructureSerializer(serializers.ModelSerializer):
             return None
         return {"id": str(g.id), "name": g.name, "short_name": getattr(g, "short_name", "") or ""}
 
+    def get_available_optional_items(self, obj):
+        return [str(i.id) for i in obj.available_optional_items.all()]
+
+    def get_total_amount(self, obj):
+        annotated = getattr(obj, "items_total", None)
+        if annotated is not None:
+            return annotated
+        return obj.total_amount
+
     class Meta:
         model = FeeStructure
         fields = [

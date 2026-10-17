@@ -286,17 +286,20 @@ export default function FeeStructureForm({
             category: cat,
             selected: use.length > 0,
             expanded: use.length > 0,
-            items: use.map((si: any) => ({
-              id: String(si.item_details?.id ?? si.item),
-              name: si.item_name || si.item_details?.name || si.name || "Fee item",
-              description: si.item_details?.description || "",
-              amount: Number(si.amount || 0),
-              is_optional: !!(
-                si.is_optional ??
-                si.item_details?.is_optional
-              ),
-              is_new: false,
-            })),
+            items: use.map((si: any) => {
+              const itemId = String(si.item_details?.id ?? si.item);
+              const optSet = new Set(
+                (data.available_optional_items || []).map((o: any) => String(o?.id ?? o))
+              );
+              return {
+                id: itemId,
+                name: si.item_name || si.item_details?.name || si.name || "Fee item",
+                description: si.item_details?.description || "",
+                amount: Number(si.amount || 0),
+                is_optional: optSet.has(itemId) || !!(si.is_optional ?? si.item_details?.is_optional),
+                is_new: false,
+              };
+            }),
           };
         });
 
@@ -448,6 +451,17 @@ export default function FeeStructureForm({
               { headers: { "X-School-ID": currentSchool.id } }
             );
             itemId = itemRes.data.id;
+          } else if (item.is_optional != null) {
+            // Persist optional flag on the catalogue item so it sticks on next edit
+            try {
+              await api.patch(
+                `/finance/items/${itemId}/`,
+                { is_optional: !!item.is_optional },
+                { headers: { "X-School-ID": currentSchool.id } }
+              );
+            } catch {
+              /* non-fatal — structure M2M still stores optional set */
+            }
           }
 
           const amount = Number(item.amount);

@@ -100,11 +100,12 @@ export default function OfferLetterModal({
   const lineCategory = (si: any) =>
     si.category_name || si.item_details?.category_name || si.item_details?.category?.name || "Fees";
   const isOptionalLine = (si: any, structure: any) => {
+    const itemId = String(si.item_details?.id ?? si.item ?? "");
+    const opts = structure?.available_optional_items || [];
+    if (opts.some((o: any) => String(o?.id ?? o) === itemId)) return true;
     if (si.is_optional != null) return !!si.is_optional;
     if (si.item_details?.is_optional != null) return !!si.item_details.is_optional;
-    const itemId = si.item_details?.id ?? si.item;
-    const opts = structure?.available_optional_items || [];
-    return opts.some((o: any) => String(o?.id ?? o) === String(itemId));
+    return false;
   };
   const splitLines = (structure: any) => {
     const items = Array.isArray(structure?.structure_items) ? structure.structure_items : [];
