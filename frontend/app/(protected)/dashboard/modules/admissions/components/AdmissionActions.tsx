@@ -396,8 +396,9 @@ Admissions Team
     if (status === "OFFERED") {
       return (
         <Button
+          type="button"
           onClick={() => setIsAcceptOfferOpen(true)}
-          className="w-full h-12 bg-primary hover:bg-primary-700 text-white rounded-xl shadow-lg animate-pulse"
+          className="w-full h-12 rounded-xl shadow-md font-semibold text-white bg-teal-600 hover:bg-teal-700 border border-teal-700"
         >
           <CheckCircle2 className="mr-2 h-5 w-5" />
           Mark Offer Accepted
@@ -405,21 +406,27 @@ Admissions Team
       );
     }
 
-    // This is the key part: Open the wizard instead of direct enroll
+    // Open enrollment wizard — high-contrast so it is never “invisible”
     if (status === "ACCEPTED") {
       return (
-        <Button
-          disabled={!!loading}
-          onClick={() => setIsEnrollmentWizardOpen(true)}
-          className="w-full h-12 bg-gradient-to-r from-primary-600 to-primary-800 hover:from-primary-700 hover:to-primary-800 text-white rounded-xl shadow-xl animate-pulse"
-        >
-          {loading ? (
-            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          ) : (
-            <UserPlus className="mr-2 h-5 w-5" />
-          )}
-          Finalize Enrollment
-        </Button>
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+            Offer accepted — complete enrollment to create the student record.
+          </p>
+          <Button
+            type="button"
+            disabled={!!loading}
+            onClick={() => setIsEnrollmentWizardOpen(true)}
+            className="w-full h-12 rounded-xl shadow-md font-semibold text-white bg-emerald-600 hover:bg-emerald-700 border border-emerald-700"
+          >
+            {loading ? (
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            ) : (
+              <UserPlus className="mr-2 h-5 w-5" />
+            )}
+            Finalize Enrollment
+          </Button>
+        </div>
       );
     }
 

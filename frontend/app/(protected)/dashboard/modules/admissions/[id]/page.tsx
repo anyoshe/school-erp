@@ -166,13 +166,10 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
               </div>
             </div>
 
-            <div className="flex justify-center md:block print:hidden bg-slate-50/50 p-4 rounded-3xl border border-slate-100 backdrop-blur-sm">
-              {/* <AdmissionActions
-                applicationId={id}
-                currentStatus={application.status}
-                onUpdated={fetchApplication}
-                onEnrolled={(student) => router.push(`/dashboard/modules/students/${student.id}`)}
-              /> */}
+            <div className="print:hidden sticky top-20 z-20 w-full max-w-md md:max-w-none mx-auto md:mx-0 rounded-2xl border-2 border-emerald-200 bg-white p-4 shadow-md">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+                Next action
+              </p>
               <AdmissionActions
                 applicationId={id}
                 currentStatus={application.status}

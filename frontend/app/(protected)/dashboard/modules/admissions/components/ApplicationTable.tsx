@@ -261,13 +261,15 @@ export default function ApplicationTable({
               </Link>
 
               {app.status === "ACCEPTED" && !app.student && (
-                <Button
-                  onClick={() => handleEnroll(app.id)}
-                  disabled={enrollingId === app.id}
-                  className="bg-primary h-10 px-4 rounded-xl shadow-md"
-                >
-                  <UserPlus className="h-4 w-4 text-white" />
-                </Button>
+                <Link href={`/dashboard/modules/admissions/${app.id}`}>
+                  <Button
+                    type="button"
+                    className="h-10 px-3 rounded-xl shadow-md font-semibold text-white bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    <UserPlus className="h-4 w-4 mr-1" />
+                    Enroll
+                  </Button>
+                </Link>
               )}
 
               <ActionMenu
@@ -382,12 +384,13 @@ function ActionMenu({
           <>
             <DropdownMenuSeparator className="my-1" />
             <DropdownMenuItem
-              onClick={() => onEnroll(app.id)}
-              disabled={loadingEnroll}
-              className="rounded-xl bg-secondary-50 text-secondary-700 focus:bg-secondary-100 focus:text-secondary-800 font-bold cursor-pointer text-sm"
+              onClick={() => {
+                window.location.href = `/dashboard/modules/admissions/${app.id}`;
+              }}
+              className="rounded-xl bg-emerald-50 text-emerald-800 focus:bg-emerald-100 focus:text-emerald-900 font-bold cursor-pointer text-sm"
             >
               <UserPlus className="h-4 w-4 mr-2" />
-              {loadingEnroll ? "Enrolling..." : "Enroll Now"}
+              Finalize enrollment
             </DropdownMenuItem>
           </>
         )}
