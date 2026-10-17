@@ -2,12 +2,13 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Info, MapPin, Book, Image, Grid, Users } from "lucide-react";
+import { Info, MapPin, Book, Image, Grid, Users, Hash } from "lucide-react";
 
 const links = [
   { label: "Basic Info", href: "/dashboard/settings/school/basic-info", icon: Info },
   { label: "Contact & Address", href: "/dashboard/settings/school/contact", icon: MapPin },
   { label: "Academic Config", href: "/dashboard/settings/school/academic", icon: Book },
+  { label: "Admission numbers", href: "/dashboard/settings/school/admission-numbers", icon: Hash },
   { label: "Branding", href: "/dashboard/settings/school/branding", icon: Image },
   { label: "Modules", href: "/dashboard/settings/modules", icon: Grid },
   { label: "Users & Roles", href: "/dashboard/settings/users", icon: Users },

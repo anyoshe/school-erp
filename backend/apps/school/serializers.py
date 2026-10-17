@@ -126,6 +126,7 @@ class SchoolSerializer(serializers.ModelSerializer):
             'modules', 'grade_levels', 'logo',
             'bank_name', 'branch_name', 'bank_account_name', 
             'bank_account_number', 'paybill_number', 'payment_instructions',
+            'admission_number_format', 'admission_prefix', 'admission_seq_padding',
             'created_at', 'updated_at'
         ]
 
@@ -178,6 +179,9 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
             'module_ids',
             'modules',
             'setup_complete',
+            'admission_number_format',
+            'admission_prefix',
+            'admission_seq_padding',
         ]
         extra_kwargs = {
             'logo': {'required': False, 'allow_null': True},

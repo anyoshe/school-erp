@@ -925,7 +925,7 @@ export default function EnrollmentWizardModal({
                       />
                     )}
                     <p className="text-[11px] text-muted-foreground mt-1">
-                      Change prefix/format under School settings (admission_prefix, format, padding).
+                      Change prefix/format under Settings → Admission numbers.
                     </p>
                   </>
                 );

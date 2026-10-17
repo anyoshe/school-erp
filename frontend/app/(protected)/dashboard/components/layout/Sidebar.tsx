@@ -3,7 +3,7 @@
 import { resolveMediaUrl } from "@/utils/media";
 
 import Link from "next/link";
-import {
+import { Hash,
   Home, Settings, LogOut, Shield,
   Users, BookOpen, DollarSign, Calendar, Library, BarChart3, Info, MapPin, Book, Image, Grid, ChevronDown, GraduationCap, FileText
 } from "lucide-react";
@@ -67,6 +67,7 @@ const SETTINGS_LINKS: MenuItem[] = [
   { label: "Contact & Address", href: "/dashboard/settings/school/contact", icon: MapPin },
   { label: "Academic Departments", href: "/dashboard/settings/school/departments", icon: Book },
   { label: "Academic Config", href: "/dashboard/settings/school/academic", icon: Book },
+  { label: "Admission numbers", href: "/dashboard/settings/school/admission-numbers", icon: Hash },
   { label: "Branding", href: "/dashboard/settings/school/branding", icon: Image },
   { label: "Modules", href: "/dashboard/settings/modules", icon: Grid },
   { label: "Users & Roles", href: "/dashboard/settings/users", icon: Users },
