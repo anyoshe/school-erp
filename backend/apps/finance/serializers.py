@@ -103,21 +103,39 @@ class FeeItemCreateUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 class FeeStructureItemLiteSerializer(serializers.ModelSerializer):
-    """Enough for edit form — no nested grade_levels trees."""
-    item_name = serializers.CharField(source="item.name", read_only=True)
+    """Enough for edit form / offer letter — no nested grade_levels trees."""
+    item_name = serializers.SerializerMethodField()
     category_id = serializers.SerializerMethodField()
-    category_name = serializers.CharField(source="item.category.name", read_only=True)
-    is_optional = serializers.BooleanField(source="item.is_optional", read_only=True)
+    category_name = serializers.SerializerMethodField()
+    is_optional = serializers.SerializerMethodField()
 
     class Meta:
         model = FeeStructureItem
         fields = ["id", "item", "item_name", "category_id", "category_name", "amount", "is_optional"]
+
+    def get_item_name(self, obj):
+        try:
+            return obj.item.name
+        except Exception:
+            return "Fee item"
 
     def get_category_id(self, obj):
         try:
             return str(obj.item.category_id)
         except Exception:
             return None
+
+    def get_category_name(self, obj):
+        try:
+            return obj.item.category.name
+        except Exception:
+            return "Fees"
+
+    def get_is_optional(self, obj):
+        try:
+            return bool(obj.item.is_optional)
+        except Exception:
+            return False
 
 
 class FeeStructureItemSerializer(serializers.ModelSerializer):
@@ -182,9 +200,9 @@ class FeeStructureSerializer(serializers.ModelSerializer):
     grade_level = serializers.SerializerMethodField()
 
     structure_items = FeeStructureItemLiteSerializer(many=True, read_only=True)
-    available_optional_items = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    available_optional_items = serializers.SerializerMethodField()
 
-    total_amount = serializers.ReadOnlyField()
+    total_amount = serializers.SerializerMethodField()
 
     def get_grade_level(self, obj):
         g = obj.grade_level
