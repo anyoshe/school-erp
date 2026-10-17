@@ -45,18 +45,19 @@ const studentSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
   middle_name: z.string().optional(),
   last_name: z.string().min(1, "Last name is required"),
-  gender: z.enum(["MALE", "FEMALE", "OTHER"]).optional(),
+  preferred_name: z.string().optional(),
+  gender: z.string().optional(),
   date_of_birth: z.string().optional(),
   nationality: z.string().optional(),
-  county: z.string().optional(),
-  sub_county: z.string().optional(),
   religion: z.string().optional(),
-  current_class: z.string().optional(), // UUID of GradeLevel/Class
-  stream: z.string().optional(),
-  boarding_status: z.enum(["DAY", "BOARDING", "MIXED"]).optional(),
-  special_needs: z.string().optional(),
+  address: z.string().optional(),
+  region: z.string().optional(),
+  district: z.string().optional(),
+  current_class: z.string().optional(),
+  boarding_status: z.string().optional(),
+  special_needs_category: z.string().optional(),
   notes: z.string().optional(),
-  // photo would be handled separately (File upload)
+  status: z.string().optional(),
 });
 
 type StudentFormValues = z.infer<typeof studentSchema>;
@@ -121,37 +122,81 @@ export default function StudentFormDialog({
   useEffect(() => {
     if (open && student) {
       form.reset({
-        first_name: student.first_name,
-        middle_name: student.middle_name || "",
-        last_name: student.last_name,
-        gender: student.gender,
-        date_of_birth: student.date_of_birth || "",
-        nationality: student.nationality || "Kenyan",
-        county: student.county || "",
-        sub_county: student.sub_county || "",
-        religion: student.religion || "",
-        current_class: student.current_class?.id || "",
-        stream: student.stream || "",
-        boarding_status: student.boarding_status,
-        special_needs: student.special_needs || "",
-        notes: student.notes || "",
-      });
+      first_name: student?.first_name || "",
+      middle_name: student?.middle_name || "",
+      last_name: student?.last_name || "",
+      preferred_name: (student as any)?.preferred_name || "",
+      gender: student?.gender || "",
+      date_of_birth: student?.date_of_birth
+        ? String(student.date_of_birth).slice(0, 10)
+        : "",
+      nationality: student?.nationality || "",
+      religion: student?.religion || "",
+      address: (student as any)?.address || "",
+      region: (student as any)?.region || (student as any)?.county || "",
+      district: (student as any)?.district || (student as any)?.sub_county || "",
+      current_class:
+        typeof student?.current_class === "object" && student?.current_class
+          ? String((student.current_class as any).id)
+          : student?.current_class
+            ? String(student.current_class)
+            : "",
+      boarding_status: student?.boarding_status || "",
+      special_needs_category:
+        (student as any)?.special_needs_category ||
+        (student as any)?.special_needs ||
+        "",
+      notes: student?.notes || "",
+      status: student?.status || "ACTIVE",
+    });
     }
   }, [open, student, form]);
 
   const onSubmit = async (values: StudentFormValues) => {
     try {
+      const payload: Record<string, unknown> = {};
+      const setVal = (key: string, value: unknown) => {
+        if (value === undefined || value === null) return;
+        if (typeof value === "string" && value.trim() === "") return;
+        payload[key] = typeof value === "string" ? value.trim() : value;
+      };
+      setVal("first_name", values.first_name);
+      setVal("middle_name", values.middle_name);
+      setVal("last_name", values.last_name);
+      setVal("preferred_name", values.preferred_name);
+      setVal("gender", values.gender);
+      setVal("date_of_birth", values.date_of_birth);
+      setVal("nationality", values.nationality);
+      setVal("religion", values.religion);
+      setVal("address", values.address);
+      setVal("region", values.region);
+      setVal("district", values.district);
+      setVal("boarding_status", values.boarding_status);
+      setVal("special_needs_category", values.special_needs_category);
+      setVal("notes", values.notes);
+      setVal("status", values.status);
+      if (values.current_class && String(values.current_class).trim()) {
+        payload.current_class = String(values.current_class).trim();
+      }
       if (isEdit && student?.id) {
-        await studentService.update(student.id, values);
+        await studentService.update(student.id, payload);
         toast.success("Student updated successfully");
       } else {
-        await studentService.create(values);
+        await studentService.create(payload);
         toast.success("Student created successfully");
       }
-
       onSuccess();
     } catch (error: any) {
-      toast.error(error?.response?.data?.detail || "Failed to save student");
+      const data = error?.response?.data;
+      let msg = "Failed to save student";
+      if (typeof data?.detail === "string") msg = data.detail;
+      else if (data && typeof data === "object") {
+        const parts = Object.entries(data).map(
+          ([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`
+        );
+        if (parts.length) msg = parts.slice(0, 4).join(" · ");
+      }
+      toast.error(msg);
     }
   };
 
@@ -275,7 +320,7 @@ export default function StudentFormDialog({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}
-                name="county"
+                name="region"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>County</FormLabel>
@@ -289,7 +334,7 @@ export default function StudentFormDialog({
 
               <FormField
                 control={form.control}
-                name="sub_county"
+                name="district"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Sub-County</FormLabel>

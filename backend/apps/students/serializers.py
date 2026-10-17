@@ -151,12 +151,30 @@ class StudentCreateUpdateSerializer(serializers.ModelSerializer):
             'alumni': {'read_only': True},
         }
 
+    FK_NULLABLE = (
+        "current_class", "section", "pathway", "track", "stream",
+        "academic_year", "fee_structure",
+    )
+
+    def _clean_fk_blanks(self, validated_data):
+        for field in self.FK_NULLABLE:
+            if field in validated_data and validated_data[field] in ("", None):
+                validated_data[field] = None
+        # Profile edits must not wipe guardians / medical via nested empty writes
+        validated_data.pop("guardians", None)
+        validated_data.pop("student_medical_record", None)
+        return validated_data
+
     def create(self, validated_data):
+        validated_data = self._clean_fk_blanks(validated_data)
         validated_data['created_by'] = self.context['request'].user
-        # Auto-generate admission_number if missing
         if not validated_data.get('admission_number'):
             school = validated_data.get('school')
             if school:
                 from apps.school.models import generate_unique_admission_number
                 validated_data['admission_number'] = generate_unique_admission_number(school)
         return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data = self._clean_fk_blanks(validated_data)
+        return super().update(instance, validated_data)

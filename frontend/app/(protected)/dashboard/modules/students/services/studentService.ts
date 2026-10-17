@@ -86,17 +86,17 @@ export const studentService = {
   /* ---------- UPDATE ---------- */
 async update(id: string, payload: any) {
   try {
-    const { data } = await api.patch(`/students/${id}/`, payload);
+    const { data } = await api.patch(`/students/${id}/`, payload, {
+      headers: { "Content-Type": "application/json" },
+    });
     const cached = readJSON(LOCAL_KEY);
-
     writeJSON(
       LOCAL_KEY,
-      cached.map((s: any) => (s.id === id ? data : s))
+      cached.map((s: any) => (s.id === id ? { ...s, ...data } : s))
     );
-
     return data;
   } catch (err: any) {
-    console.error("PATCH FAILED:", err.response?.data);
+    console.error("PATCH FAILED:", err.response?.data || err.message);
     throw err;
   }
 },
