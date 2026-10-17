@@ -362,6 +362,18 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
             return FeeStructureCreateUpdateSerializer
         return FeeStructureSerializer
 
+    def perform_create(self, serializer):
+        school = selected_school(self.request)
+        serializer.save(school=school)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        # Fast response body (avoid re-serializing heavy nested trees)
+        out = FeeStructureSerializer(serializer.instance, context={"request": request})
+        headers = self.get_success_headers(out.data)
+        return Response(out.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def get_queryset(self):
         queryset = self.queryset.filter(

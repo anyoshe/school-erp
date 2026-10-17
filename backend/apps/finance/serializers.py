@@ -122,8 +122,8 @@ class FeeStructureItemSerializer(serializers.ModelSerializer):
 
 class FeeStructureSerializer(serializers.ModelSerializer):
 
-    school = SchoolSerializer(read_only=True)
-    grade_level = GradeLevelSerializer(read_only=True)
+    school = serializers.UUIDField(source="school_id", read_only=True)
+    grade_level = serializers.SerializerMethodField()
 
     structure_items = FeeStructureItemSerializer(many=True, read_only=True)
     available_optional_items_details = FeeItemSerializer(
@@ -133,6 +133,12 @@ class FeeStructureSerializer(serializers.ModelSerializer):
     )
 
     total_amount = serializers.ReadOnlyField()
+
+    def get_grade_level(self, obj):
+        g = obj.grade_level
+        if not g:
+            return None
+        return {"id": str(g.id), "name": g.name, "short_name": getattr(g, "short_name", "") or ""}
 
     class Meta:
         model = FeeStructure
@@ -154,12 +160,18 @@ class FeeStructureSerializer(serializers.ModelSerializer):
             "updated_at"
         ]
 
+class FeeStructureItemWriteSerializer(serializers.Serializer):
+    """Minimal write shape for structure lines — avoids nested read-only fields."""
+    item = serializers.PrimaryKeyRelatedField(queryset=FeeItem.objects.all())
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
+
+
 class FeeStructureCreateUpdateSerializer(serializers.ModelSerializer):
-    structure_items = FeeStructureItemSerializer(many=True)
+    structure_items = FeeStructureItemWriteSerializer(many=True)
     available_optional_items = serializers.PrimaryKeyRelatedField(
-        many=True, 
-        queryset=FeeItem.objects.all(), # Remove the .filter(is_optional=True)
-        required=False
+        many=True,
+        queryset=FeeItem.objects.all(),
+        required=False,
     )
     class Meta:
         model = FeeStructure
@@ -214,19 +226,31 @@ class FeeStructureCreateUpdateSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        from django.db import IntegrityError
+
         items_data = validated_data.pop("structure_items", [])
-        # Extract optional items IDs
         optional_items = validated_data.pop("available_optional_items", [])
-        
-        structure = FeeStructure.objects.create(**validated_data)
-        
-        # 1. Save the Mandatory/Fixed Items
+
+        if not items_data:
+            raise serializers.ValidationError(
+                {"structure_items": "Add at least one fee line with an amount."}
+            )
+
+        try:
+            structure = FeeStructure.objects.create(**validated_data)
+        except IntegrityError:
+            raise serializers.ValidationError(
+                {
+                    "detail": (
+                        "A fee structure already exists for this grade, period, and academic year. "
+                        "Change the period name (e.g. Term 2) or edit the existing structure."
+                    )
+                }
+            )
+
         self._save_items(structure, items_data)
-        
-        # 2. Save the Optional Items Relationship
         if optional_items:
             structure.available_optional_items.set(optional_items)
-            
         return structure
 
     @transaction.atomic

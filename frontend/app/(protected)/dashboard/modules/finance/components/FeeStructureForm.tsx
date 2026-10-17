@@ -404,8 +404,10 @@ export default function FeeStructureForm({
           if (!amount || amount <= 0) {
             throw new Error(`Amount required for ${item.name}`);
           }
-          structureItems.push({ item: itemId, amount });
-          if (item.is_optional) optionalIds.push(itemId);
+          const normalizedId =
+            typeof itemId === "string" && /^\d+$/.test(itemId) ? Number(itemId) : itemId;
+          structureItems.push({ item: normalizedId, amount });
+          if (item.is_optional) optionalIds.push(normalizedId);
         }
       }
 
@@ -441,18 +443,29 @@ export default function FeeStructureForm({
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {
-      console.error("Save structure failed", error?.response?.data || error);
+      console.error("Save structure failed", {
+        status: error?.response?.status,
+        data: error?.response?.data,
+        message: error?.message,
+        code: error?.code,
+      });
       const d = error?.response?.data;
-      let msg = error?.message || "Failed to save structure";
-      if (d) {
-        if (typeof d === "string") msg = d;
-        else if (d.detail) msg = String(d.detail);
-        else if (typeof d === "object") {
-          // DRF field errors: { grade_level: ["..."], structure_items: [...] }
-          msg = Object.entries(d)
-            .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : JSON.stringify(v)}`)
-            .join(" · ");
-        }
+      let msg = "Failed to save structure";
+      if (!error?.response) {
+        msg =
+          "Network error — is the API running? Check Django terminal and NEXT_PUBLIC_API_URL.";
+      } else if (typeof d === "string" && d.trim()) {
+        msg = d;
+      } else if (d?.detail) {
+        msg = String(d.detail);
+      } else if (d && typeof d === "object" && Object.keys(d).length) {
+        msg = Object.entries(d)
+          .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : JSON.stringify(v)}`)
+          .join(" · ");
+      } else if (error?.response?.status) {
+        msg = `Save failed (HTTP ${error.response.status}). Check Django logs.`;
+      } else if (error?.message) {
+        msg = error.message;
       }
       toast.error(msg);
     } finally {
