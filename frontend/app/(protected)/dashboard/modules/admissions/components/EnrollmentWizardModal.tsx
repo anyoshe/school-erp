@@ -1474,8 +1474,8 @@ export default function EnrollmentWizardModal({
             const cost = getAllocationItemCost(si, netAdmissionByItem);
             return {
               itemId,
-              name: si.item_details?.name || si.description || "Unnamed Item",
-              category: si.category_name || si.item_details?.category_name || "",
+              name: si.item_name || si.item_details?.name || si.name || si.description || "Fee item",
+              category: si.category_name || si.item_details?.category_name || si.item_details?.category?.name || "Fees",
               cost,
               allocated: Number(formData.item_amounts?.[itemId] || 0),
               isAdmission: admissionItemIds.has(itemId),
