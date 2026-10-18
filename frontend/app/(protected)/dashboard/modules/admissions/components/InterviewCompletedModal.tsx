@@ -104,7 +104,20 @@ export default function InterviewCompletedModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-6 py-4">
+        <div className="grid gap-6 py-4 max-h-[70vh] overflow-y-auto pr-1">
+          {/* Interview fee — required on this step (no need to go back) */}
+          <div className="rounded-xl border-2 border-amber-200 bg-amber-50/50 p-4">
+            <ApplicationChargePanel
+              applicationId={applicationId}
+              types={["INTERVIEW"]}
+              compact
+              required
+              title="Interview fee"
+              description="Set this here — you do not need to go back to Schedule interview. Choose Not applicable, Waived, Discounted, or Full (mark paid if money is due)."
+              onSatisfiedChange={(ok) => setChargeOk(ok)}
+            />
+          </div>
+
           {/* Pre-filled applicant summary */}
           <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
             <h4 className="font-medium text-gray-800 mb-2">Applicant Details</h4>
@@ -197,7 +210,7 @@ export default function InterviewCompletedModal({
           </Button>
           <Button
             onClick={handleSubmit}
-            disabled={loading || !form.completedDate || !form.outcome}
+            disabled={loading || !chargeOk || !form.completedDate || !form.outcome}
             className="bg-secondary hover:bg-secondary-700"
           >
             {loading ? (
