@@ -40,20 +40,30 @@ def _ensure_application_charges(application):
         ),
     ]
     for charge_type, enabled, amount in specs:
-        ApplicationCharge.objects.get_or_create(
+        list_amt = amount if enabled else Decimal("0")
+        if charge_type == ApplicationCharge.ChargeType.INTERVIEW and amount > 0:
+            list_amt = amount
+            enabled = True
+        charge, created = ApplicationCharge.objects.get_or_create(
             application=application,
             charge_type=charge_type,
             defaults={
                 "policy": (
                     ApplicationCharge.Policy.FULL
-                    if enabled and amount > 0
+                    if enabled and list_amt > 0
                     else ApplicationCharge.Policy.NOT_APPLICABLE
                 ),
-                "list_amount": amount if enabled else Decimal("0"),
-                "amount_due": amount if enabled and amount > 0 else Decimal("0"),
+                "list_amount": list_amt,
+                "amount_due": list_amt if enabled and list_amt > 0 else Decimal("0"),
                 "decision_made": False,
             },
         )
+        if not created and not charge.decision_made:
+            charge.list_amount = list_amt
+            if list_amt > 0 and charge.policy == ApplicationCharge.Policy.NOT_APPLICABLE:
+                charge.policy = ApplicationCharge.Policy.FULL
+            charge.recompute_due()
+            charge.save(update_fields=["list_amount", "policy", "amount_due", "updated_at"])
 
 
 class ApplicationViewSet(viewsets.ModelViewSet):
@@ -197,23 +207,43 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         ]
 
         for charge_type, enabled, amount in specs:
+            list_amt = amount if enabled else Decimal("0")
+            # If interview amount set but toggle off, still expose the amount so staff can decide
+            if charge_type == ApplicationCharge.ChargeType.INTERVIEW and amount > 0:
+                list_amt = amount
+                enabled = True
             charge, was_created = ApplicationCharge.objects.get_or_create(
                 application=application,
                 charge_type=charge_type,
                 defaults={
                     "policy": (
                         ApplicationCharge.Policy.FULL
-                        if enabled and amount > 0
+                        if enabled and list_amt > 0
                         else ApplicationCharge.Policy.NOT_APPLICABLE
                     ),
-                    "list_amount": amount if enabled else Decimal("0"),
-                    "amount_due": amount if enabled and amount > 0 else Decimal("0"),
+                    "list_amount": list_amt,
+                    "amount_due": list_amt if enabled and list_amt > 0 else Decimal("0"),
                     "decision_made": False,
                 },
             )
             if was_created:
                 created.append(charge_type)
-            # Do not overwrite staff-adjusted policies on re-call
+            else:
+                # Sync list price from school settings until staff has decided
+                if not charge.decision_made:
+                    charge.list_amount = list_amt
+                    if list_amt > 0 and charge.policy == ApplicationCharge.Policy.NOT_APPLICABLE:
+                        # Prefer FULL as suggested default when school has a price
+                        charge.policy = ApplicationCharge.Policy.FULL
+                    charge.recompute_due()
+                    charge.save(
+                        update_fields=[
+                            "list_amount",
+                            "policy",
+                            "amount_due",
+                            "updated_at",
+                        ]
+                    )
         from .serializers import ApplicationChargeSerializer
         qs = application.charges.all()
         return Response(

@@ -217,6 +217,9 @@ export default function ApplicationChargePanel({
                   </SelectContent>
                 </Select>
                 <span className="text-sm font-mono">
+                  List {currencySymbol}{" "}
+                  {Number(c.list_amount || 0).toLocaleString()}
+                  {" · "}
                   Due {currencySymbol}{" "}
                   {Number(c.amount_due || 0).toLocaleString()}
                   {Number(c.amount_paid) > 0
