@@ -76,7 +76,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'gender',
             'date_of_birth',
             'nationality',
-            'passport_number',
+            'passport_number', 'birth_certificate_number',
             'region',
             'district',
             'address',
@@ -155,7 +155,7 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'first_name', 'middle_name', 'last_name', 'preferred_name',
-            'gender', 'date_of_birth', 'nationality', 'passport_number',
+            'gender', 'date_of_birth', 'nationality', 'passport_number', 'birth_certificate_number',
             'class_applied',
             'primary_guardian_name', 'primary_guardian_phone',
             'primary_guardian_email', 'primary_guardian_relationship',

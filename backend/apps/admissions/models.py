@@ -457,6 +457,11 @@ class Application(models.Model):
     date_of_birth = models.DateField(null=True, blank=True)
     nationality = models.CharField(max_length=100, blank=True)
     passport_number = models.CharField(max_length=50, blank=True)
+    birth_certificate_number = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name="Birth Certificate Number",
+    )
 
     # Class / Level
     class_applied = models.ForeignKey(

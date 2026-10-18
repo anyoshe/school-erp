@@ -44,11 +44,12 @@ const formSchema = z.object({
   preferred_name: z.string().optional(),
   gender: z.preprocess(
     emptyToUndefined,
-    z.enum(["MALE", "FEMALE", "OTHER"]).optional()
+    z.enum(["MALE", "FEMALE", "OTHER"], { required_error: "Gender is required" })
   ),
-  date_of_birth: z.string().optional(),
+  date_of_birth: z.string().min(1, "Date of birth is required"),
   nationality: z.string().min(1, "Nationality is required"),
   passport_number: z.string().optional(),
+  birth_certificate_number: z.string().optional(),
   class_applied: z.string().min(1, "Class/Grade is required"),
   primary_guardian_name: z.string().min(1, "Guardian name is required"),
   primary_guardian_phone: z.string().min(9, "Valid phone number required"),
@@ -75,7 +76,18 @@ const formSchema = z.object({
   emergency_relationship: z.string().optional(),
   notes: z.string().optional(),
   photo: z.any().optional(),
-});
+}).refine(
+  (data) => {
+    const bc = String((data as any).birth_certificate_number || "").trim();
+    const pp = String((data as any).passport_number || "").trim();
+    return Boolean(bc || pp);
+  },
+  {
+    message: "Birth certificate number or passport number is required",
+    path: ["birth_certificate_number"],
+  }
+);
+
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -99,6 +111,7 @@ const FIELD_LABELS: Record<string, string> = {
   primary_guardian_relationship: "Guardian relationship",
   gender: "Gender",
   date_of_birth: "Date of birth",
+  birth_certificate_number: "Birth certificate number",
 };
 
 const FIELD_STEP: Record<string, number> = {
@@ -108,6 +121,7 @@ const FIELD_STEP: Record<string, number> = {
   class_applied: 0,
   gender: 0,
   date_of_birth: 0,
+  birth_certificate_number: 0,
   preferred_name: 0,
   middle_name: 0,
   primary_guardian_name: 1,
@@ -162,6 +176,7 @@ function NewApplicationPageInner() {
       preferred_name: "",
       gender: "",
       date_of_birth: "",
+      birth_certificate_number: "",
       nationality: "",
       passport_number: "",
       class_applied: "",
@@ -230,6 +245,7 @@ function NewApplicationPageInner() {
           preferred_name: app.preferred_name || "",
           gender: app.gender || "",
           date_of_birth: app.date_of_birth || "",
+          birth_certificate_number: app.birth_certificate_number || "",
           nationality: app.nationality || "",
           passport_number: app.passport_number || "",
           class_applied: classId,
@@ -353,6 +369,8 @@ function NewApplicationPageInner() {
         const order = [
           "first_name",
           "last_name",
+          "gender",
+          "date_of_birth",
           "nationality",
           "class_applied",
           "primary_guardian_name",
@@ -368,6 +386,8 @@ function NewApplicationPageInner() {
         const req: (keyof FormValues)[] = [
           "first_name",
           "last_name",
+          "gender",
+          "date_of_birth",
           "nationality",
           "class_applied",
           "primary_guardian_name",
@@ -578,13 +598,13 @@ function NewApplicationPageInner() {
                     <Controller name="preferred_name" control={control} render={({ field }) => <Input {...field} />} />
                   </div>
                   <div>
-                    <Label>Gender</Label>
+                    <Label>Gender *</Label>
                     <Controller
                       name="gender"
                       control={control}
                       render={({ field }) => (
                         <Select onValueChange={field.onChange} value={field.value}>
-                          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectTrigger className={fieldErrorClass(!!errors.gender)}><SelectValue placeholder="Select" /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="MALE">Male</SelectItem>
                             <SelectItem value="FEMALE">Female</SelectItem>
@@ -593,10 +613,18 @@ function NewApplicationPageInner() {
                         </Select>
                       )}
                     />
+                    {errors.gender && <p data-field-error="true" className="text-red-500 text-sm mt-1 font-medium">{String(errors.gender.message)}</p>}
                   </div>
                   <div>
-                    <Label>Date of Birth</Label>
-                    <Controller name="date_of_birth" control={control} render={({ field }) => <Input type="date" {...field} />} />
+                    <Label>Date of Birth *</Label>
+                    <Controller name="date_of_birth" control={control} render={({ field }) => <Input type="date" {...field} className={fieldErrorClass(!!errors.date_of_birth)} />} />
+                    {errors.date_of_birth && <p data-field-error="true" className="text-red-500 text-sm mt-1 font-medium">{String(errors.date_of_birth.message)}</p>}
+                  </div>
+                  <div>
+                    <Label>Birth Certificate Number *</Label>
+                    <Controller name="birth_certificate_number" control={control} render={({ field }) => <Input {...field} placeholder="Or use passport if non-citizen" className={fieldErrorClass(!!errors.birth_certificate_number)} />} />
+                    {errors.birth_certificate_number && <p data-field-error="true" className="text-red-500 text-sm mt-1 font-medium">{String(errors.birth_certificate_number.message)}</p>}
+                    <p className="text-xs text-muted-foreground mt-1">Required for enrollment (or passport for non-citizens)</p>
                   </div>
                   <div>
                     <Label>Nationality *</Label>

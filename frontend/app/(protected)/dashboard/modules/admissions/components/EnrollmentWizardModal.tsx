@@ -259,7 +259,7 @@ export default function EnrollmentWizardModal({
     religion: applicationData.religion || "",
     learner_id: applicationData.learner_id || "",
 
-    birth_certificate_number: "",
+    birth_certificate_number: (applicationData as any).birth_certificate_number || "",
     admission_number: "",
     auto_generate_admission: true,
     profile_photo: null as File | null,
@@ -764,8 +764,64 @@ export default function EnrollmentWizardModal({
     return allocations;
   };
 
-  const updateForm = (field: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  // Fields loaded from admission — edits need confirmation (esp. required identity data)
+  const PROTECTED_IDENTITY_FIELDS = new Set([
+    "first_name",
+    "middle_name",
+    "last_name",
+    "gender",
+    "date_of_birth",
+    "nationality",
+    "birth_certificate_number",
+    "passport_number",
+    "guardian_name",
+    "guardian_phone",
+    "guardian_email",
+    "guardian_national_id",
+    "guardian_relationship",
+  ]);
+
+  const FIELD_HUMAN: Record<string, string> = {
+    first_name: "First name",
+    middle_name: "Middle name",
+    last_name: "Last name",
+    gender: "Gender",
+    date_of_birth: "Date of birth",
+    nationality: "Nationality",
+    birth_certificate_number: "Birth certificate number",
+    passport_number: "Passport number",
+    guardian_name: "Guardian name",
+    guardian_phone: "Guardian phone",
+    guardian_email: "Guardian email",
+    guardian_national_id: "Guardian ID",
+    guardian_relationship: "Guardian relationship",
+  };
+
+  const updateForm = (field: string, value: any, opts?: { skipConfirm?: boolean }) => {
+    setFormData((prev) => {
+      if (opts?.skipConfirm || !PROTECTED_IDENTITY_FIELDS.has(field)) {
+        return { ...prev, [field]: value };
+      }
+      const prevVal = prev[field];
+      const prevEmpty =
+        prevVal === undefined ||
+        prevVal === null ||
+        String(prevVal).trim() === "";
+      const nextEmpty =
+        value === undefined || value === null || String(value).trim() === "";
+      if (String(prevVal ?? "") === String(value ?? "")) {
+        return prev;
+      }
+      const label = FIELD_HUMAN[field] || field;
+      const action = prevEmpty ? "set" : "change";
+      const ok = window.confirm(
+        prevEmpty
+          ? `You are about to set required field "${label}" during enrollment. This was missing on the admission form. Continue?`
+          : `You are about to ${action} "${label}" which was loaded from the admission application.\n\nPrevious: ${prevVal || "(empty)"}\nNew: ${nextEmpty ? "(empty)" : value}\n\nAre you sure?`
+      );
+      if (!ok) return prev;
+      return { ...prev, [field]: value };
+    });
   };
 
   const updateApplicationCharge = async (
@@ -795,17 +851,21 @@ export default function EnrollmentWizardModal({
 
   const validateStep = (step: number) => {
     switch (step) {
-      case 1:
+      case 1: {
+        // identity step
+
         const hasPhoto = !!formData.profile_photo || !!applicationData.photo;
         return (
           formData.first_name &&
           formData.last_name &&
           formData.date_of_birth &&
           formData.gender &&
+          formData.nationality &&
           (formData.birth_certificate_number || formData.passport_number) &&
           hasPhoto &&
           formData.birth_certificate_file
         );
+      }
       case 2:
         return true;
 
@@ -972,26 +1032,35 @@ export default function EnrollmentWizardModal({
             <h3 className="text-lg font-semibold">Student Identification</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {[
-                { label: "First Name *", key: "first_name", disabled: true },
-                { label: "Middle Name", key: "middle_name", disabled: true },
-                { label: "Last Name *", key: "last_name", disabled: true },
+                { label: "First Name *", key: "first_name" },
+                { label: "Middle Name", key: "middle_name" },
+                { label: "Last Name *", key: "last_name" },
                 { label: "Preferred Name", key: "preferred_name" },
-                { label: "Gender *", key: "gender", disabled: true },
-                { label: "Date of Birth *", key: "date_of_birth", type: "date", disabled: true },
-                { label: "Nationality", key: "nationality", disabled: true },
-                { label: "Learner ID / UPI", key: "learner_id", disabled: false },
+                { label: "Gender *", key: "gender" },
+                { label: "Date of Birth *", key: "date_of_birth", type: "date" },
+                { label: "Nationality *", key: "nationality" },
+                { label: "Learner ID / UPI", key: "learner_id" },
                 { label: "Birth Certificate Number *", key: "birth_certificate_number" },
                 { label: "Passport Number (non-Citizen)", key: "passport_number" },
-              ].map(({ label, key, type = "text", disabled = false }) => (
+              ].map(({ label, key, type = "text" }) => (
                 <div key={key}>
                   <Label>{label}</Label>
                   <Input
                     type={type}
                     value={(formData[key] ?? "") as string}
-                    onChange={(e) => !disabled && updateForm(key, e.target.value)}
-                    placeholder={disabled ? undefined : `Enter ${label.toLowerCase().replace("*", "")}`}
-                    disabled={disabled}
+                    onChange={(e) => updateForm(key, e.target.value)}
+                    placeholder={`Enter ${label.toLowerCase().replace("*", "").trim()}`}
+                    className={
+                      PROTECTED_IDENTITY_FIELDS.has(key)
+                        ? "border-amber-200 bg-amber-50/30"
+                        : undefined
+                    }
                   />
+                  {PROTECTED_IDENTITY_FIELDS.has(key) && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      From admission — changing asks for confirmation
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
@@ -1272,22 +1341,35 @@ export default function EnrollmentWizardModal({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label>Name *</Label>
-                    <Input value={formData.guardian_name ?? ""} disabled />
+                    <Input
+                      value={formData.guardian_name ?? ""}
+                      onChange={(e) => updateForm("guardian_name", e.target.value)}
+                      className="border-amber-200 bg-amber-50/30"
+                    />
                   </div>
                   <div>
                     <Label>National ID / Passport *</Label>
                     <Input
                       value={formData.guardian_national_id ?? ""}
-                      disabled
+                      onChange={(e) => updateForm("guardian_national_id", e.target.value)}
+                      className="border-amber-200 bg-amber-50/30"
                     />
                   </div>
                   <div>
                     <Label>Phone *</Label>
-                    <Input value={formData.guardian_phone ?? ""} disabled />
+                    <Input
+                      value={formData.guardian_phone ?? ""}
+                      onChange={(e) => updateForm("guardian_phone", e.target.value)}
+                      className="border-amber-200 bg-amber-50/30"
+                    />
                   </div>
                   <div>
                     <Label>Email</Label>
-                    <Input value={formData.guardian_email ?? ""} disabled />
+                    <Input
+                      value={formData.guardian_email ?? ""}
+                      onChange={(e) => updateForm("guardian_email", e.target.value)}
+                      className="border-amber-200 bg-amber-50/30"
+                    />
                   </div>
                 </div>
               </div>
