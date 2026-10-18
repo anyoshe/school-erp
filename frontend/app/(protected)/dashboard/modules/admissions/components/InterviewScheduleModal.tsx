@@ -230,6 +230,18 @@ Admissions Team
           </div>
         </div>
 
+        <div className="border-t pt-4 mt-2 px-1">
+          <ApplicationChargePanel
+            applicationId={applicationId}
+            types={["INTERVIEW"]}
+            compact
+            required
+            title="Interview fee"
+            description="Required when scheduling. You can also complete this later on Mark Interview Completed if needed."
+            onSatisfiedChange={(ok) => setChargeOk(ok)}
+          />
+        </div>
+
         <DialogFooter className="flex-col sm:flex-row gap-3 pt-4 border-t">
           <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-center sm:justify-start">
             <Button
@@ -279,7 +291,7 @@ Admissions Team
 
           <Button
             onClick={handleSubmit}
-            disabled={loading || !form.date || !form.time}
+            disabled={loading || !chargeOk || !form.date || !form.time}
             className="bg-primary hover:bg-primary-700 w-full sm:w-auto min-w-[160px]"
           >
             {loading ? (
