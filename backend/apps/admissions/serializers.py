@@ -37,6 +37,7 @@ class ApplicationChargeSerializer(serializers.ModelSerializer):
             "amount_paid",
             "waiver_reason",
             "notes",
+            "decision_made",
             "is_satisfied",
             "updated_at",
         ]

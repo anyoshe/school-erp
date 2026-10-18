@@ -898,6 +898,15 @@ export default function EnrollmentWizardModal({
         const paymentPlanOk =
           paymentPlans.length === 0 || !!formData.payment_plan;
 
+        const chargesOk =
+          applicationCharges.length === 0 ||
+          ["INTERVIEW", "ADMISSION"].every((t) => {
+            const c = applicationCharges.find(
+              (x) => String(x.charge_type).toUpperCase() === t
+            );
+            return c ? !!c.is_satisfied : true;
+          });
+
         const isValid =
           !!formData.fee_structure_id &&
           paymentPlanOk &&
@@ -905,7 +914,8 @@ export default function EnrollmentWizardModal({
           formData.summary_confirmed === true &&
           hasPaymentProof &&
           waiverIsValid &&
-          allocationValid;
+          allocationValid &&
+          chargesOk;
 
         return isValid;
       }
@@ -1578,7 +1588,7 @@ export default function EnrollmentWizardModal({
                 <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
                   <h3 className="font-semibold text-lg">Pre-enrollment charges</h3>
                   <p className="text-xs text-muted-foreground">
-                    Handled at interview / offer acceptance when possible. If already Satisfied, nothing more is required here — only outstanding items need action. Separate from term school fees.
+                    Interview fee is decided when scheduling/completing the interview; admission fee when accepting the offer. If both show Decided, you only handle term fees below. Any undecided charge must be completed here before enroll.
                   </p>
                   {chargesLoading ? (
                     <p className="text-sm text-muted-foreground">Loading charges…</p>

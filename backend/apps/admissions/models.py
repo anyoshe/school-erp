@@ -935,6 +935,11 @@ class ApplicationCharge(models.Model):
     amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     waiver_reason = models.CharField(max_length=255, blank=True)
     notes = models.TextField(blank=True)
+    # Staff must explicitly choose policy / payment before stage can proceed
+    decision_made = models.BooleanField(
+        default=False,
+        help_text="True after staff sets policy (N/A, waive, discount, or pay)",
+    )
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -947,6 +952,9 @@ class ApplicationCharge(models.Model):
 
     @property
     def is_satisfied(self) -> bool:
+        # Must be an explicit staff decision, not just default N/A
+        if not self.decision_made:
+            return False
         if self.policy in (
             self.Policy.WAIVED,
             self.Policy.NOT_APPLICABLE,

@@ -1,5 +1,6 @@
 "use client";
 
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -18,6 +19,7 @@ import { CalendarIcon, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/utils/api";
 import { Application } from "@/types/admission";
+import ApplicationChargePanel from "./ApplicationChargePanel";
 import { format } from "date-fns"; // For date formatting, install if needed: npm i date-fns
 
 interface InterviewCompletedFormData {
@@ -44,6 +46,7 @@ export default function InterviewCompletedModal({
   onCompleted,
 }: Props) {
   const [loading, setLoading] = useState(false);
+  const [chargeOk, setChargeOk] = useState(false);
   const [form, setForm] = useState<InterviewCompletedFormData>({
     completedDate: format(new Date(), "yyyy-MM-dd"),
     interviewerName: "",
@@ -53,6 +56,13 @@ export default function InterviewCompletedModal({
   });
 
   const handleSubmit = async () => {
+    if (!chargeOk) {
+      toast.error("Interview fee decision is required", {
+        description: "Choose Not applicable, Waived, Discounted, or Full (and mark paid if due).",
+      });
+      return;
+    }
+
     if (!form.outcome) {
       toast.error("Outcome is required");
       return;

@@ -51,6 +51,7 @@ def _ensure_application_charges(application):
                 ),
                 "list_amount": amount if enabled else Decimal("0"),
                 "amount_due": amount if enabled and amount > 0 else Decimal("0"),
+                "decision_made": False,
             },
         )
 
@@ -206,7 +207,8 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                         else ApplicationCharge.Policy.NOT_APPLICABLE
                     ),
                     "list_amount": amount if enabled else Decimal("0"),
-                    "amount_due": amount if enabled else Decimal("0"),
+                    "amount_due": amount if enabled and amount > 0 else Decimal("0"),
+                    "decision_made": False,
                 },
             )
             if was_created:
@@ -231,6 +233,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
         policy = request.data.get("policy", charge.policy)
         charge.policy = policy
+        charge.decision_made = True
         if "list_amount" in request.data:
             charge.list_amount = Decimal(str(request.data.get("list_amount") or 0))
         if "discount_amount" in request.data:

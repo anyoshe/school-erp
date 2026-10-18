@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "@/utils/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { Loader2 } from "lucide-react";
 
 export type ChargeType = "INTERVIEW" | "ADMISSION";
 
-type Charge = {
+export type Charge = {
   id?: string;
   charge_type: ChargeType | string;
   policy: string;
@@ -26,19 +26,20 @@ type Charge = {
   amount_due?: number | string;
   amount_paid?: number | string;
   waiver_reason?: string;
+  decision_made?: boolean;
   is_satisfied?: boolean;
 };
 
 type Props = {
   applicationId: string;
-  /** Which charges to show in this panel */
   types: ChargeType[];
   currencySymbol?: string;
-  /** Compact layout for modals */
   compact?: boolean;
   title?: string;
   description?: string;
-  onChargesChange?: (charges: Charge[]) => void;
+  /** When true, parent should block submit until all listed charges are satisfied */
+  required?: boolean;
+  onSatisfiedChange?: (allSatisfied: boolean, charges: Charge[]) => void;
 };
 
 const LABELS: Record<string, string> = {
@@ -53,7 +54,8 @@ export default function ApplicationChargePanel({
   compact = false,
   title = "Pre-enrollment charges",
   description,
-  onChargesChange,
+  required = true,
+  onSatisfiedChange,
 }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -70,8 +72,7 @@ export default function ApplicationChargePanel({
       const filtered = all.filter((c) =>
         types.includes(String(c.charge_type).toUpperCase() as ChargeType)
       );
-      setCharges(filtered.length ? filtered : all.filter((c) => types.includes(c.charge_type as ChargeType)));
-      onChargesChange?.(all);
+      setCharges(filtered);
     } catch (e) {
       console.warn("ensure-charges", e);
       setCharges([]);
@@ -84,28 +85,34 @@ export default function ApplicationChargePanel({
     load();
   }, [load]);
 
+  const allSatisfied = useMemo(() => {
+    if (types.length === 0) return true;
+    return types.every((t) => {
+      const c = charges.find(
+        (x) => String(x.charge_type).toUpperCase() === t
+      );
+      return !!c?.is_satisfied;
+    });
+  }, [charges, types]);
+
+  useEffect(() => {
+    onSatisfiedChange?.(allSatisfied, charges);
+  }, [allSatisfied, charges, onSatisfiedChange]);
+
   const updateCharge = async (
     chargeType: string,
     payload: Record<string, unknown>
   ) => {
     setSaving(chargeType);
     try {
-      const res = await api.patch(
+      await api.patch(
         `/admissions/applications/${applicationId}/charges/${chargeType}/`,
-        payload
+        { ...payload, decision_made: true }
       );
-      setCharges((prev) => {
-        const rest = prev.filter(
-          (c) => String(c.charge_type).toUpperCase() !== chargeType.toUpperCase()
-        );
-        return [...rest, res.data];
-      });
       toast.success(`${LABELS[chargeType] || chargeType} updated`);
       await load();
     } catch (e: any) {
-      toast.error(
-        e?.response?.data?.detail || "Could not update charge"
-      );
+      toast.error(e?.response?.data?.detail || "Could not update charge");
     } finally {
       setSaving(null);
     }
@@ -120,24 +127,26 @@ export default function ApplicationChargePanel({
     );
   }
 
-  if (!charges.length) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        No charges configured. Set amounts under Settings → Admission numbers, or mark N/A here after reopening.
-      </p>
-    );
-  }
-
   return (
     <div className={compact ? "space-y-3" : "space-y-4"}>
       {(title || description) && (
         <div>
           {title ? (
-            <h4 className="font-semibold text-sm text-slate-900">{title}</h4>
+            <h4 className="font-semibold text-sm text-slate-900">
+              {title}
+              {required ? (
+                <span className="text-red-600 font-bold"> *</span>
+              ) : null}
+            </h4>
           ) : null}
           {description ? (
             <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
           ) : null}
+          {required && !allSatisfied && (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 mt-2">
+              Required: choose Not applicable, Waived, Discounted, or Full — and mark paid if money is due — before you can continue.
+            </p>
+          )}
         </div>
       )}
 
@@ -146,7 +155,13 @@ export default function ApplicationChargePanel({
           const c = charges.find(
             (x) => String(x.charge_type).toUpperCase() === ctype
           );
-          if (!c) return null;
+          if (!c) {
+            return (
+              <p key={ctype} className="text-sm text-muted-foreground">
+                {LABELS[ctype]} not created yet — reopen this step.
+              </p>
+            );
+          }
           const satisfied = !!c.is_satisfied;
           return (
             <div
@@ -154,11 +169,14 @@ export default function ApplicationChargePanel({
               className={`rounded-lg border p-3 space-y-2 ${
                 satisfied
                   ? "bg-emerald-50/80 border-emerald-200"
-                  : "bg-slate-50 border-slate-200"
+                  : "bg-amber-50/40 border-amber-200"
               }`}
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-medium text-sm">{LABELS[ctype]}</span>
+                <span className="font-medium text-sm">
+                  {LABELS[ctype]}
+                  {required ? <span className="text-red-600"> *</span> : null}
+                </span>
                 <span
                   className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
                     satisfied
@@ -166,26 +184,30 @@ export default function ApplicationChargePanel({
                       : "bg-amber-100 text-amber-900"
                   }`}
                 >
-                  {satisfied ? "Satisfied" : "Outstanding"}
+                  {satisfied
+                    ? "Decided ✓"
+                    : c.decision_made
+                      ? "Outstanding payment"
+                      : "Not decided yet"}
                 </span>
               </div>
 
               <div className="flex flex-wrap gap-2 items-center">
                 <Select
-                  value={c.policy}
+                  value={c.decision_made ? c.policy : undefined}
                   disabled={saving === ctype}
                   onValueChange={(v) =>
                     updateCharge(ctype, {
                       policy: v,
                       waiver_reason:
                         v === "WAIVED" || v === "DISCOUNTED"
-                          ? c.waiver_reason || "Staff adjustment"
+                          ? c.waiver_reason || "Staff decision"
                           : "",
                     })
                   }
                 >
-                  <SelectTrigger className="h-9 w-[180px] bg-white">
-                    <SelectValue />
+                  <SelectTrigger className="h-9 w-[200px] bg-white">
+                    <SelectValue placeholder="Select decision…" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="NOT_APPLICABLE">Not applicable</SelectItem>
@@ -204,6 +226,7 @@ export default function ApplicationChargePanel({
               </div>
 
               {(c.policy === "FULL" || c.policy === "DISCOUNTED") &&
+                c.decision_made &&
                 !satisfied && (
                   <div className="flex gap-2 items-end">
                     <div className="flex-1">

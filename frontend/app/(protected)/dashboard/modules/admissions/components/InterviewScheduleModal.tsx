@@ -44,6 +44,7 @@ export default function InterviewScheduleModal({
   onScheduled,
 }: Props) {
   const [loading, setLoading] = useState(false);
+  const [chargeOk, setChargeOk] = useState(false);
   const [form, setForm] = useState<InterviewFormData>({
     date: "",
     time: "",
@@ -56,6 +57,12 @@ export default function InterviewScheduleModal({
   const handleSubmit = async () => {
     if (!form.date || !form.time) {
       toast.error("Interview date and time are required");
+      return;
+    }
+    if (!chargeOk) {
+      toast.error("Interview fee decision is required", {
+        description: "Choose Not applicable, Waived, Discounted, or Full (and mark paid if due).",
+      });
       return;
     }
 

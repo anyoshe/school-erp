@@ -34,9 +34,16 @@ export default function AcceptOfferModal({
   onAccepted,
 }: Props) {
   const [loading, setLoading] = useState(false);
+  const [chargeOk, setChargeOk] = useState(false);
   const [acceptanceNotes, setAcceptanceNotes] = useState("");
 
   const handleAccept = async () => {
+    if (!chargeOk) {
+      toast.error("Admission fee decision is required", {
+        description: "Choose Not applicable, Waived, Discounted, or Full (and mark paid if due).",
+      });
+      return;
+    }
     setLoading(true);
 
     try {
@@ -71,8 +78,10 @@ export default function AcceptOfferModal({
             applicationId={applicationId}
             types={["ADMISSION"]}
             compact
+            required
             title="Admission / registration fee"
-            description="Record payment, discount, waive, or N/A before enrollment. Step 6 will show this as already handled when satisfied."
+            description="Required before accepting the offer. Enrollment Step 6 only shows the result of this decision."
+            onSatisfiedChange={(ok) => setChargeOk(ok)}
           />
           <div>
             <Label>Acceptance Notes (optional)</Label>
@@ -91,7 +100,7 @@ export default function AcceptOfferModal({
           </Button>
           <Button
             onClick={handleAccept}
-            disabled={loading}
+            disabled={loading || !chargeOk}
             className="bg-primary hover:bg-primary-700"
           >
             {loading ? (
