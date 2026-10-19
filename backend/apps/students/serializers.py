@@ -92,6 +92,8 @@ class StudentSerializer(serializers.ModelSerializer):
     school = SchoolSerializer(read_only=True)
     current_class = GradeLevelSerializer(read_only=True)
     medical_record = serializers.PrimaryKeyRelatedField(source='student_medical_record', read_only=True)
+    guardians = serializers.SerializerMethodField()
+    photo_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Student
@@ -100,6 +102,35 @@ class StudentSerializer(serializers.ModelSerializer):
             'id', 'created_at', 'updated_at', 'created_by',
             'admission_number'
         ]
+
+    def get_guardians(self, obj):
+        links = obj.guardians.select_related("guardian").all()
+        out = []
+        for link in links:
+            g = link.guardian
+            out.append({
+                "id": str(link.id),
+                "is_primary": link.is_primary,
+                "guardian_id": str(g.id) if g else None,
+                "full_name": getattr(g, "full_name", "") or "",
+                "phone": getattr(g, "phone", "") or "",
+                "email": getattr(g, "email", "") or "",
+                "relationship": getattr(g, "relationship", "") or "",
+                "id_number": getattr(g, "id_number", "") or "",
+            })
+        return out
+
+    def get_photo_url(self, obj):
+        if not obj.photo:
+            return None
+        try:
+            url = obj.photo.url
+        except Exception:
+            return None
+        request = self.context.get("request")
+        if request and url and not str(url).startswith("http"):
+            return request.build_absolute_uri(url)
+        return url
 
 
 # ── NESTED SERIALIZERS (AFTER BASE) ─────────────────────────────────────────
@@ -243,4 +274,50 @@ class StudentCreateUpdateSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         validated_data = self._clean_fk_blanks(validated_data)
-        return super().update(instance, validated_data)
+        # Flat guardian fields from edit form (not nested write)
+        g_name = validated_data.pop("primary_guardian_name", None)
+        g_phone = validated_data.pop("primary_guardian_phone", None)
+        g_email = validated_data.pop("primary_guardian_email", None)
+        g_rel = validated_data.pop("primary_guardian_relationship", None)
+        g_id = validated_data.pop("primary_guardian_id_number", None)
+        # These are not model fields — strip if serializer included extras
+        for k in list(validated_data.keys()):
+            if k.startswith("primary_guardian_"):
+                validated_data.pop(k, None)
+
+        instance = super().update(instance, validated_data)
+
+        # Update or create primary guardian when any guardian field sent
+        if any(v is not None for v in (g_name, g_phone, g_email, g_rel, g_id)):
+            from .models import Guardian, StudentGuardian
+            link = (
+                StudentGuardian.objects.filter(student=instance, is_primary=True)
+                .select_related("guardian")
+                .first()
+            )
+            if link and link.guardian:
+                g = link.guardian
+                if g_name is not None:
+                    g.full_name = g_name
+                if g_phone is not None and str(g_phone).strip():
+                    g.phone = str(g_phone).strip()
+                if g_email is not None:
+                    g.email = g_email
+                if g_rel is not None:
+                    g.relationship = g_rel
+                if g_id is not None:
+                    g.id_number = g_id
+                g.save()
+            elif g_phone or g_name:
+                g = Guardian.objects.create(
+                    school=instance.school,
+                    full_name=g_name or "Guardian",
+                    phone=str(g_phone or "unknown"),
+                    email=g_email or "",
+                    relationship=g_rel or "",
+                    id_number=g_id or "",
+                )
+                StudentGuardian.objects.create(
+                    student=instance, guardian=g, is_primary=True
+                )
+        return instance
