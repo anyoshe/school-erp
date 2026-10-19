@@ -53,7 +53,7 @@ export default function PromoteStudentsPage() {
     queryKey: ["years-promote", schoolId],
     enabled: !!schoolId,
     queryFn: async () => {
-      const res = await api.get("/academics/years/", { headers });
+      const res = await api.get("/academics/academic-years/", { headers });
       return asList(res.data);
     },
   });
