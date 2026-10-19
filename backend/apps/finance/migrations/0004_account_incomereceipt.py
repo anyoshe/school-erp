@@ -7,7 +7,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("school", "0004_pre_enrollment_fee_settings"),
-        ("students", "0001_initial"),
+        ("students", "0002_initial"),
         ("finance", "0003_invoice_number_per_school"),
     ]
 
