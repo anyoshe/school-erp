@@ -32,12 +32,14 @@ function writeJSON(key: string, value: any[]) {
 
 /* ---------------- Student Service ---------------- */
 export const studentService = {
+  async getCached() {
+    return readJSON(LOCAL_KEY, []);
+  },
+
   /* ---------- GET ALL ---------- */
   async getAll() {
     try {
-      console.log("[studentService] Making API call to /students/");
       const { data } = await api.get("/students/");
-      console.log("[studentService] API response received:", data);
       const list = normalizeList(data);
       writeJSON(LOCAL_KEY, list);
       return list;

@@ -21,6 +21,72 @@ class GuardianSerializer(serializers.ModelSerializer):
         }
 
 
+class StudentListSerializer(serializers.ModelSerializer):
+    """Lightweight payload for students table — avoids nested school/grade trees."""
+    full_name = serializers.ReadOnlyField()
+    current_class = serializers.SerializerMethodField()
+    section = serializers.SerializerMethodField()
+    pathway = serializers.SerializerMethodField()
+    track = serializers.SerializerMethodField()
+    stream = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Student
+        fields = [
+            "id",
+            "school_id",
+            "admission_number",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "full_name",
+            "preferred_name",
+            "gender",
+            "date_of_birth",
+            "status",
+            "boarding_status",
+            "current_class",
+            "section",
+            "pathway",
+            "track",
+            "stream",
+            "learner_id",
+            "nationality",
+            "admission_date",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_current_class(self, obj):
+        gl = obj.current_class
+        if not gl:
+            return None
+        return {
+            "id": str(gl.id),
+            "name": gl.name,
+            "short_name": getattr(gl, "short_name", "") or "",
+            "order": getattr(gl, "order", 0),
+        }
+
+    def _name(self, obj, attr):
+        rel = getattr(obj, attr, None)
+        if not rel:
+            return None
+        return getattr(rel, "name", None) or str(rel)
+
+    def get_section(self, obj):
+        return self._name(obj, "section")
+
+    def get_pathway(self, obj):
+        return self._name(obj, "pathway")
+
+    def get_track(self, obj):
+        return self._name(obj, "track")
+
+    def get_stream(self, obj):
+        return self._name(obj, "stream")
+
+
 class StudentSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
     school = SchoolSerializer(read_only=True)

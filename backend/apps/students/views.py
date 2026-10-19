@@ -8,7 +8,7 @@ from django.db.models import Q, Sum
 from decimal import Decimal
 from .models import Student, Guardian, StudentGuardian, MedicalRecord
 from .serializers import (
-    StudentSerializer, StudentCreateUpdateSerializer,
+    StudentSerializer, StudentListSerializer, StudentCreateUpdateSerializer,
     GuardianSerializer,
     StudentGuardianSerializer, LinkExistingGuardianSerializer,
     MedicalRecordSerializer, MedicalRecordCreateUpdateSerializer
@@ -21,10 +21,8 @@ class StudentViewSet(viewsets.ModelViewSet):
     """
     API endpoint for students - full CRUD + reports
     """
-    queryset = Student.objects.select_related(
-        'school', 'current_class', 'fee_structure'
-    ).prefetch_related('guardians__guardian', 'student_medical_record__documents')
-    
+    # Base queryset kept lean; list uses even lighter select_related
+    queryset = Student.objects.select_related("current_class")
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = [
@@ -33,22 +31,47 @@ class StudentViewSet(viewsets.ModelViewSet):
     ]
     search_fields = [
         'first_name', 'last_name', 'admission_number', 'learner_id',
-        'full_name', 'national_student_id'
+        'national_student_id'
     ]
     ordering_fields = ['admission_number', 'admission_date', 'status', 'current_class']
+    ordering = ['last_name', 'first_name']
 
-    # def get_queryset(self):
-    #     # Multi-tenancy: only show students from user's school
-    #     return self.queryset.filter(school=self.request.user.school)
     def get_queryset(self):
         if not self.request.user.is_authenticated:
             return Student.objects.none()
 
-        return self.queryset.filter(school_id__in=accessible_school_ids(self.request))
+        qs = Student.objects.filter(school_id__in=accessible_school_ids(self.request))
+
+        # Prefer active school header when present (smaller result set)
+        school = selected_school(self.request)
+        if school is not None:
+            qs = qs.filter(school_id=school.id)
+
+        if self.action == "list":
+            return qs.select_related(
+                "current_class", "section", "pathway", "track", "stream"
+            ).defer(
+                "photo",
+                "allergies",
+                "chronic_conditions",
+                "special_needs",
+                "notes",
+                "address",
+            )
+
+        # Detail / reports: load related graphs once
+        return qs.select_related(
+            "school", "current_class", "fee_structure", "created_by"
+        ).prefetch_related(
+            "guardians__guardian",
+            "student_medical_record__documents",
+        )
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return StudentCreateUpdateSerializer
+        if self.action == "list":
+            return StudentListSerializer
         return StudentSerializer
 
     def _validate_school_relations(self, validated_data, school):
