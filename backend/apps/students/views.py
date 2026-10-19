@@ -456,6 +456,144 @@ class StudentViewSet(viewsets.ModelViewSet):
         return Response({"results": results, "count": len(results)})
 
 
+    @action(detail=True, methods=["get"], url_path="fee-overview")
+    def fee_overview(self, request, pk=None):
+        """Single source of truth: current + arrears + income receipts."""
+        from decimal import Decimal
+        from django.db.models import Sum
+        from apps.finance.models import Invoice, Payment
+        try:
+            from apps.finance.models import IncomeReceipt
+        except Exception:
+            IncomeReceipt = None
+
+        student = self.get_object()
+        invs = Invoice.objects.filter(student=student).order_by("-due_date")
+        open_inv = invs.filter(is_paid=False)
+        total_outstanding = open_inv.aggregate(t=Sum("balance"))["t"] or Decimal("0")
+        # Q objects better
+        from django.db.models import Q
+        arrears_qs = open_inv.filter(
+            Q(term__icontains="Arrear")
+            | Q(term__icontains="brought")
+            | Q(installment_number__gte=90)
+        )
+        arrears_total = arrears_qs.aggregate(t=Sum("balance"))["t"] or Decimal("0")
+        current_total = total_outstanding - arrears_total
+        if current_total < 0:
+            current_total = Decimal("0")
+        paid_total = (
+            Payment.objects.filter(invoice__student=student)
+            .exclude(payment_method="TRANSFER")
+            .aggregate(t=Sum("amount"))["t"]
+            or Decimal("0")
+        )
+        income = []
+        if IncomeReceipt is not None:
+            income = list(
+                IncomeReceipt.objects.filter(student=student).values(
+                    "source", "amount", "paid_at", "reference_number"
+                )[:20]
+            )
+        return Response(
+            {
+                "student_id": str(student.id),
+                "full_name": student.full_name,
+                "admission_number": student.admission_number,
+                "outstanding_total": str(total_outstanding),
+                "arrears_total": str(arrears_total),
+                "current_fees_total": str(current_total),
+                "paid_total": str(paid_total),
+                "open_invoices": [
+                    {
+                        "id": str(i.id),
+                        "invoice_number": i.invoice_number,
+                        "term": i.term,
+                        "academic_year": i.academic_year,
+                        "amount_due": str(i.amount_due),
+                        "amount_paid": str(i.amount_paid),
+                        "balance": str(i.balance),
+                        "due_date": i.due_date,
+                        "is_arrears": i.id in set(arrears_qs.values_list("id", flat=True)),
+                    }
+                    for i in open_inv[:30]
+                ],
+                "pre_enrollment_income": [
+                    {
+                        "source": r["source"],
+                        "amount": str(r["amount"]),
+                        "paid_at": r["paid_at"],
+                        "reference": r.get("reference_number") or "",
+                    }
+                    for r in income
+                ],
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="transfer")
+    def transfer(self, request, pk=None):
+        """Mark student transferred out with optional note and destination school name."""
+        student = self.get_object()
+        dest = (request.data.get("destination_school") or "").strip()
+        reason = (request.data.get("reason") or "").strip()
+        student.status = "TRANSFERRED"
+        note = student.notes or ""
+        extra = f"Transferred out"
+        if dest:
+            extra += f" to {dest}"
+        if reason:
+            extra += f" — {reason}"
+        student.notes = (note + "\n" + extra).strip() if note else extra
+        student.save(update_fields=["status", "notes"])
+        return Response(
+            {
+                "id": str(student.id),
+                "status": student.status,
+                "message": extra,
+            }
+        )
+
+    @action(detail=False, methods=["get"], url_path="export-csv")
+    def export_csv(self, request):
+        import csv
+        from django.http import HttpResponse
+        qs = self.get_queryset().select_related("current_class")
+        status_f = request.query_params.get("status")
+        if status_f:
+            qs = qs.filter(status=status_f)
+        response = HttpResponse(content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="students.csv"'
+        w = csv.writer(response)
+        w.writerow(
+            [
+                "admission_number",
+                "first_name",
+                "middle_name",
+                "last_name",
+                "gender",
+                "status",
+                "class",
+                "boarding_status",
+                "nationality",
+            ]
+        )
+        for s in qs.iterator(chunk_size=200):
+            w.writerow(
+                [
+                    s.admission_number,
+                    s.first_name,
+                    s.middle_name,
+                    s.last_name,
+                    s.gender,
+                    s.status,
+                    getattr(s.current_class, "name", "") if s.current_class_id else "",
+                    s.boarding_status,
+                    s.nationality,
+                ]
+            )
+        return response
+
+
 class GuardianViewSet(viewsets.ModelViewSet):
     queryset = Guardian.objects.select_related('school')
     serializer_class = GuardianSerializer

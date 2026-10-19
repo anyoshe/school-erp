@@ -3,6 +3,7 @@ from django.urls import path, include
 from apps.finance import views 
 from rest_framework.routers import DefaultRouter
 from .views import (
+    IncomeReceiptListView,
     FeeCategoryViewSet, FeeItemViewSet, FeeStructureViewSet,
     StudentFeeAssignmentViewSet, InvoiceViewSet, PaymentViewSet, PaymentPlanViewSet,
     FinanceDashboardSummaryView,
@@ -19,6 +20,7 @@ router.register(r'payments', PaymentViewSet, basename='payment')
 router.register(r'payment-plans', PaymentPlanViewSet, basename='payment-plan')
 
 urlpatterns = [
+    path('income-receipts/', IncomeReceiptListView.as_view(), name='income-receipts'),
     path('dashboard-summary/', FinanceDashboardSummaryView.as_view(), name='finance-dashboard-summary'),
     path('', include(router.urls)),
 ]

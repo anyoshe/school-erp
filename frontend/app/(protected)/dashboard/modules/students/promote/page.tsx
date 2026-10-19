@@ -40,6 +40,8 @@ export default function PromoteStudentsPage() {
   const [fromGradeFilter, setFromGradeFilter] = useState("all");
   const [carryFees, setCarryFees] = useState(true);
   const [carryTerm, setCarryTerm] = useState("Term 1");
+  const [feeStructureId, setFeeStructureId] = useState("");
+
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
 
@@ -54,6 +56,15 @@ export default function PromoteStudentsPage() {
     enabled: !!schoolId,
     queryFn: async () => {
       const res = await api.get("/academics/academic-years/", { headers });
+      return asList(res.data);
+    },
+  });
+
+  const structuresQ = useQuery({
+    queryKey: ["fee-structures-promote", schoolId],
+    enabled: !!schoolId,
+    queryFn: async () => {
+      const res = await api.get("/finance/structures/", { headers });
       return asList(res.data);
     },
   });
@@ -118,6 +129,7 @@ export default function PromoteStudentsPage() {
           target_grade_id: targetGradeId || undefined,
           carry_fees: carryFees,
           carry_term: carryTerm,
+          fee_structure_id: feeStructureId || undefined,
         },
         { headers }
       );
@@ -230,6 +242,20 @@ export default function PromoteStudentsPage() {
             <div>
               <Label>Arrears term label on new year</Label>
               <Input value={carryTerm} onChange={(e) => setCarryTerm(e.target.value)} placeholder="Term 1" />
+            </div>
+            <div>
+              <Label>Assign fee structure (optional)</Label>
+              <Select value={feeStructureId || "none"} onValueChange={(v) => setFeeStructureId(v === "none" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="None — assign later" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None — assign later</SelectItem>
+                  {(structuresQ.data || []).map((s: any) => (
+                    <SelectItem key={String(s.id)} value={String(s.id)}>
+                      {s.name || s.grade_level?.name || s.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex items-end gap-2 pb-2">
               <Checkbox id="carry" checked={carryFees} onCheckedChange={(v) => setCarryFees(v === true)} />

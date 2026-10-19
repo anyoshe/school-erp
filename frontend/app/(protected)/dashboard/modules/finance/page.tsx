@@ -52,6 +52,22 @@ interface DashboardSummaryResponse {
   feeGroupBreakdown: FeeItemTotal[];
 }
 
+function IncomeReceiptsLink() {
+  return (
+    <>
+      <IncomeReceiptsLink />
+
+    <div className="mb-4">
+      <Link
+        href="/dashboard/modules/finance/income-receipts"
+        className="text-sm font-medium text-amber-800 underline underline-offset-2"
+      >
+        Pre-enrollment income (interview / admission) →
+      </Link>
+    </div>
+  );
+}
+
 export default function FinanceDashboard() {
   const { currentSchool } = useCurrentSchool();
   const currency = currentSchool?.currency_symbol || currentSchool?.currency || "KES";
@@ -365,5 +381,6 @@ export default function FinanceDashboard() {
         </CardContent>
       </Card>
     </div>
-  );
+      </>
+);
 }

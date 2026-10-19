@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
@@ -105,6 +106,92 @@ type FinanceSummary = {
   payments: PaymentSummary[];
   admission_payments: AdmissionPayment[];
 };
+
+function StudentFeeOverview({ studentId }: { studentId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["student-fee-overview", studentId],
+    enabled: !!studentId,
+    queryFn: async () => {
+      const res = await api.get(`/students/${studentId}/fee-overview/`);
+      return res.data;
+    },
+  });
+  if (isLoading) {
+    return (
+      <Card className="mt-4">
+        <CardContent className="p-4 text-sm text-muted-foreground">Loading fees…</CardContent>
+      </Card>
+      {student?.id ? <StudentFeeOverview studentId={String(student.id)} /> : null}
+    );
+  }
+  if (!data) return null;
+  return (
+    <Card className="mt-4 border-amber-100">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Fees overview</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="rounded-lg bg-slate-50 p-3">
+            <p className="text-xs text-muted-foreground">Outstanding total</p>
+            <p className="font-bold text-lg">{Number(data.outstanding_total || 0).toLocaleString()}</p>
+          </div>
+          <div className="rounded-lg bg-amber-50 p-3">
+            <p className="text-xs text-muted-foreground">Arrears (BF)</p>
+            <p className="font-bold text-lg">{Number(data.arrears_total || 0).toLocaleString()}</p>
+          </div>
+          <div className="rounded-lg bg-teal-50 p-3">
+            <p className="text-xs text-muted-foreground">Current period</p>
+            <p className="font-bold text-lg">{Number(data.current_fees_total || 0).toLocaleString()}</p>
+          </div>
+          <div className="rounded-lg bg-emerald-50 p-3">
+            <p className="text-xs text-muted-foreground">Paid (excl. transfers)</p>
+            <p className="font-bold text-lg">{Number(data.paid_total || 0).toLocaleString()}</p>
+          </div>
+        </div>
+        {(data.open_invoices || []).length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left border-b">
+                  <th className="py-1">Invoice</th>
+                  <th className="py-1">Term</th>
+                  <th className="py-1">Year</th>
+                  <th className="py-1">Balance</th>
+                  <th className="py-1">Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.open_invoices.map((inv: any) => (
+                  <tr key={inv.id} className="border-b border-slate-100">
+                    <td className="py-1 font-mono">{inv.invoice_number}</td>
+                    <td className="py-1">{inv.term}</td>
+                    <td className="py-1">{inv.academic_year}</td>
+                    <td className="py-1 font-medium">{Number(inv.balance || 0).toLocaleString()}</td>
+                    <td className="py-1">{inv.is_arrears ? "Arrears" : "Current"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {(data.pre_enrollment_income || []).length > 0 && (
+          <div>
+            <p className="text-xs font-semibold mb-1">Pre-enrollment income</p>
+            <ul className="text-xs space-y-1">
+              {data.pre_enrollment_income.map((r: any, i: number) => (
+                <li key={i}>
+                  {r.source}: {Number(r.amount || 0).toLocaleString()}
+                  {r.paid_at ? ` · ${String(r.paid_at).slice(0, 10)}` : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function StudentProfilePage() {
   const router = useRouter();

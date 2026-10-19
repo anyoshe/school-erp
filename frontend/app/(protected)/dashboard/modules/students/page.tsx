@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import api from "@/utils/api";
+import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 
 import { useStudents } from "./hooks/useStudents";
 import StudentTable from "./components/StudentTable";
@@ -20,6 +22,7 @@ import { studentService } from "./services/studentService";
 import { Student } from "./types/student";
 
 export default function StudentsPage() {
+  const { currentSchool } = useCurrentSchool();
   const { students, isLoading, isError, refetch } = useStudents();
 
   const [openForm, setOpenForm] = useState(false);
@@ -161,6 +164,32 @@ export default function StudentsPage() {
                 <ArrowRightLeft className="h-4 w-4 mr-2" />
                 Promote / carry fees
               </Link>
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="bg-white/15 text-white border-0 hover:bg-white/25"
+              onClick={async () => {
+                try {
+                  const res = await api.get("/students/export-csv/", {
+                    responseType: "blob",
+                    headers: currentSchool?.id
+                      ? { "X-School-ID": String(currentSchool.id) }
+                      : undefined,
+                    params: statusFilter !== "all" ? { status: statusFilter } : undefined,
+                  });
+                  const url = window.URL.createObjectURL(new Blob([res.data]));
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = "students.csv";
+                  a.click();
+                  window.URL.revokeObjectURL(url);
+                } catch {
+                  toast.error("Export failed");
+                }
+              }}
+            >
+              Export CSV
             </Button>
             <Button asChild variant="secondary" className="bg-white/15 text-white border-0 hover:bg-white/25">
               <Link href="/dashboard/modules/admissions">

@@ -603,7 +603,17 @@ class Application(models.Model):
                 if not self.accepted_at:
                     self.accepted_at = timezone.now()
 
+        prev_status = getattr(old, "status", None) if self.pk else None
         super().save(*args, **kwargs)
+        try:
+            if prev_status is not None and prev_status != self.status:
+                ApplicationStatusLog.objects.create(
+                    application=self,
+                    from_status=prev_status or "",
+                    to_status=self.status or "",
+                )
+        except Exception:
+            pass
 
     @transaction.atomic
     def enroll_as_student(self, created_by_user, wizard_data=None):
@@ -898,8 +908,8 @@ class Application(models.Model):
         )
 
         # Secondary guardian (optional)
-        sg_name = str(wd.get("secondary_guardian_name") or "").strip()
-        sg_phone = str(wd.get("secondary_guardian_phone") or "").strip()
+        sg_name = str(wd.get("secondary_guardian_name") or self.secondary_guardian_name or "").strip()
+        sg_phone = str(wd.get("secondary_guardian_phone") or self.secondary_guardian_phone or "").strip()
         if sg_name and sg_phone:
             sec_guardian, _ = Guardian.objects.get_or_create(
                 school=self.school,
@@ -1077,3 +1087,27 @@ class ApplicationCharge(models.Model):
         else:
             self.amount_due = Decimal(str(self.list_amount or 0))
 
+
+class ApplicationStatusLog(models.Model):
+    """Audit trail for admissions pipeline status changes."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    application = models.ForeignKey(
+        Application, on_delete=models.CASCADE, related_name="status_logs"
+    )
+    from_status = models.CharField(max_length=30, blank=True)
+    to_status = models.CharField(max_length=30)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="admission_status_changes",
+    )
+    note = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.application_id}: {self.from_status} → {self.to_status}"

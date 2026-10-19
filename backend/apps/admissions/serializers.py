@@ -89,7 +89,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'primary_guardian_phone',
             'primary_guardian_email',
             'primary_guardian_relationship',
-            'primary_guardian_id_number',
+            'primary_guardian_id_number', 'secondary_guardian_id_number', 'secondary_guardian_relationship', 'secondary_guardian_email', 'secondary_guardian_phone', 'secondary_guardian_name',
             'guardian_contact',
             'placement_type',              
             'blood_group',                 

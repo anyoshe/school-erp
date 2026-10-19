@@ -36,6 +36,18 @@ const AdmissionsPage = () => {
     "ADMISSIONS_OFFICER",
   ];
 
+  const { data: pipelineStats } = useQuery({
+    queryKey: ['admissions-pipeline-stats', currentSchool?.id],
+    queryFn: async () => {
+      const res = await api.get('/admissions/applications/pipeline-stats/', {
+        headers: { 'X-School-ID': currentSchool!.id },
+      });
+      return res.data;
+    },
+    enabled: !!currentSchool?.id && !schoolLoading,
+    staleTime: 60_000,
+  });
+
   const { data: applications = [], isLoading } = useQuery({
     queryKey: ['applications', currentSchool?.id],
     queryFn: async () => {
@@ -52,6 +64,8 @@ const AdmissionsPage = () => {
   });
 
   const applicationList = Array.isArray(applications) ? applications : [];
+  const feeCollected = Number(pipelineStats?.admission_fees_collected || 0) + Number(pipelineStats?.interview_fees_collected || 0);
+
 
   // Memoized stats to prevent re-calculation jumps
   const { counts, readyToEnrollCount } = useMemo(() => {
@@ -274,7 +288,27 @@ const AdmissionsPage = () => {
               </p>
             </div>
           ) : (
-            <ApplicationTable
+            {(pipelineStats) && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+          <div className="rounded-xl border bg-white p-3 shadow-sm">
+            <p className="text-xs text-muted-foreground">Waitlist</p>
+            <p className="text-lg font-bold">{pipelineStats.waitlist ?? 0}</p>
+          </div>
+          <div className="rounded-xl border bg-white p-3 shadow-sm">
+            <p className="text-xs text-muted-foreground">Interview failed</p>
+            <p className="text-lg font-bold">{pipelineStats.interview_failed ?? 0}</p>
+          </div>
+          <div className="rounded-xl border bg-white p-3 shadow-sm">
+            <p className="text-xs text-muted-foreground">Interview fees collected</p>
+            <p className="text-lg font-bold">{Number(pipelineStats.interview_fees_collected || 0).toLocaleString()}</p>
+          </div>
+          <div className="rounded-xl border bg-white p-3 shadow-sm">
+            <p className="text-xs text-muted-foreground">Admission fees collected</p>
+            <p className="text-lg font-bold">{Number(pipelineStats.admission_fees_collected || 0).toLocaleString()}</p>
+          </div>
+        </div>
+      )}
+      <ApplicationTable
               searchTerm={searchTerm}
               applications={applicationList}
               statusFilter={activeTab === 'ALL' ? undefined : activeTab}

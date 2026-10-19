@@ -716,3 +716,38 @@ class PaymentPlanViewSet(viewsets.ModelViewSet):
             qs = self.filter_queryset(self.get_queryset()).filter(school=school)
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
+
+
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+
+
+class IncomeReceiptListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from .models import IncomeReceipt
+        from apps.school.support import selected_school
+        school = selected_school(request)
+        qs = IncomeReceipt.objects.all()
+        if school:
+            qs = qs.filter(school=school)
+        source = request.query_params.get("source")
+        if source:
+            qs = qs.filter(source=source.upper())
+        data = [
+            {
+                "id": str(r.id),
+                "source": r.source,
+                "amount": str(r.amount),
+                "payment_method": r.payment_method,
+                "reference_number": r.reference_number,
+                "notes": r.notes,
+                "paid_at": r.paid_at,
+                "application_id": str(r.application_id) if r.application_id else None,
+                "student_id": str(r.student_id) if r.student_id else None,
+                "account": str(r.account_id) if r.account_id else None,
+            }
+            for r in qs.order_by("-paid_at")[:200]
+        ]
+        return Response(data)

@@ -27,6 +27,7 @@ def promote_student(
     stream=None,
     carry_fees: bool = True,
     carry_term_label: str = "Term 1",
+    fee_structure=None,
     user=None,
 ):
     """
@@ -46,7 +47,7 @@ def promote_student(
 
     if action == "GRADUATE":
         student.status = "GRADUATED"
-        student.save(update_fields=["status", "updated_at"] if hasattr(student, "updated_at") else ["status"])
+        student.save()
         arrears = None
         if carry_fees and student_outstanding(student) > 0:
             arrears = carry_forward_outstanding(
@@ -104,6 +105,23 @@ def promote_student(
     if student.status != "ACTIVE":
         student.status = "ACTIVE"
     student.save()
+
+    if fee_structure is not None:
+        from apps.finance.models import StudentFeeAssignment
+        from apps.finance.signals import regenerate_invoices_for_assignment
+        assignment, _ = StudentFeeAssignment.objects.update_or_create(
+            student=student,
+            defaults={
+                "fee_structure": fee_structure,
+                "assigned_by": user,
+            },
+        )
+        try:
+            regenerate_invoices_for_assignment(assignment)
+        except Exception as e:
+            print(f"[promote] invoice regen: {e}")
+        student.fee_structure = fee_structure
+        student.save(update_fields=["fee_structure"])
 
     arrears = None
     outstanding_before = student_outstanding(student)

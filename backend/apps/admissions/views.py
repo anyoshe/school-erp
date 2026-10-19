@@ -555,6 +555,86 @@ class PublicApplicationSubmissionViewSet(viewsets.GenericViewSet):
             return Response({"detail": "Draft not found"}, status=status.HTTP_404_NOT_FOUND)
 
 # Optional: Separate ViewSets for documents/payments if needed later
+    @action(detail=False, methods=["get"], url_path="pipeline-stats")
+    def pipeline_stats(self, request):
+        """Admissions funnel + fee metrics for the active school."""
+        from django.db.models import Count, Sum, Q
+        from .models import ApplicationCharge
+        school = selected_school(request)
+        qs = self.get_queryset()
+        by_status = dict(
+            qs.values_list("status").annotate(c=Count("id")).values_list("status", "c")
+        )
+        # rebuild properly
+        by_status = {
+            row["status"]: row["c"]
+            for row in qs.values("status").annotate(c=Count("id"))
+        }
+        charges = ApplicationCharge.objects.filter(application__in=qs)
+        interview_paid = (
+            charges.filter(charge_type="INTERVIEW", amount_paid__gt=0).aggregate(
+                t=Sum("amount_paid")
+            )["t"]
+            or 0
+        )
+        admission_paid = (
+            charges.filter(charge_type="ADMISSION", amount_paid__gt=0).aggregate(
+                t=Sum("amount_paid")
+            )["t"]
+            or 0
+        )
+        interview_waived = charges.filter(
+            charge_type="INTERVIEW", policy__in=["WAIVED", "NOT_APPLICABLE"]
+        ).count()
+        admission_waived = charges.filter(
+            charge_type="ADMISSION", policy__in=["WAIVED", "NOT_APPLICABLE"]
+        ).count()
+        waitlist = qs.filter(interview_outcome="WAITLIST").count()
+        failed = qs.filter(interview_outcome="FAIL").count()
+        return Response(
+            {
+                "by_status": by_status,
+                "total": qs.count(),
+                "waitlist": waitlist,
+                "interview_failed": failed,
+                "interview_fees_collected": str(interview_paid),
+                "admission_fees_collected": str(admission_paid),
+                "interview_waived_or_na": interview_waived,
+                "admission_waived_or_na": admission_waived,
+            }
+        )
+
+    @action(detail=True, methods=["get"], url_path="document-checklist")
+    def document_checklist(self, request, pk=None):
+        """Required documents vs uploaded for an application."""
+        app = self.get_object()
+        required = [
+            {"key": "photo", "label": "Student photo", "required": True},
+            {"key": "birth_cert", "label": "Birth certificate", "required": True},
+            {"key": "report", "label": "Previous school report", "required": False},
+            {"key": "guardian_id", "label": "Guardian ID copy", "required": False},
+        ]
+        docs = list(app.documents.all())
+        desc = " ".join((d.description or "").lower() for d in docs)
+        uploaded = {
+            "photo": bool(app.photo) or "photo" in desc,
+            "birth_cert": "birth" in desc or "certificate" in desc,
+            "report": "report" in desc or "transcript" in desc,
+            "guardian_id": "id" in desc or "passport" in desc or "national" in desc,
+        }
+        items = []
+        for r in required:
+            ok = uploaded.get(r["key"], False)
+            items.append({**r, "uploaded": ok, "satisfied": ok or not r["required"]})
+        return Response(
+            {
+                "items": items,
+                "all_required_met": all(i["satisfied"] for i in items if i["required"]),
+                "document_count": len(docs),
+            }
+        )
+
+
 class ApplicationDocumentViewSet(viewsets.ModelViewSet):
     queryset = ApplicationDocument.objects.all()
     serializer_class = ApplicationDocumentSerializer
