@@ -212,24 +212,81 @@ class SchoolViewSet(ModelViewSet):
             "this_month": apps.filter(submitted_at__gte=month_start).count() if hasattr(Application, "submitted_at") else apps.filter(created_at__gte=month_start).count() if hasattr(Application, "created_at") else 0,
         }
 
-        # Finance (best-effort)
+        # Finance (best-effort) — term fees + pre-enrollment admission/interview
         finance = {
             "outstanding": "0.00",
             "collected_month": "0.00",
+            "collected_fees_month": "0.00",
+            "collected_admission_month": "0.00",
+            "collected_interview_month": "0.00",
+            "collected_admission_total": "0.00",
+            "collected_interview_total": "0.00",
+            "collected_fees_total": "0.00",
             "overdue_invoices": 0,
             "invoices_unpaid": 0,
         }
         try:
             from apps.finance.models import Invoice, Payment
+            from apps.admissions.models import ApplicationCharge, AdmissionFeePayment
+            from django.utils import timezone as dj_tz
+
             inv = Invoice.objects.filter(Q(school=school) | Q(student__school=school))
             outstanding = inv.filter(is_paid=False).aggregate(t=Sum("balance"))["t"] or Decimal("0")
             overdue = inv.filter(is_paid=False, due_date__lt=today).count()
             unpaid = inv.filter(is_paid=False).count()
-            collected = (
-                Payment.objects.filter(Q(school=school) | Q(invoice__student__school=school), paid_at__date__gte=month_start)
-                .aggregate(t=Sum("amount"))["t"]
+
+            pay_qs = Payment.objects.filter(
+                Q(school=school) | Q(invoice__student__school=school) | Q(invoice__school=school)
+            )
+            collected_fees_month = (
+                pay_qs.filter(paid_at__gte=month_start).aggregate(t=Sum("amount"))["t"]
                 or Decimal("0")
             )
+            collected_fees_total = pay_qs.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+
+            # ApplicationCharge.amount_paid (interview / admission pipeline)
+            charges = ApplicationCharge.objects.filter(application__school=school)
+            interview_total = (
+                charges.filter(charge_type=ApplicationCharge.ChargeType.INTERVIEW)
+                .aggregate(t=Sum("amount_paid"))["t"]
+                or Decimal("0")
+            )
+            admission_from_charges = (
+                charges.filter(charge_type=ApplicationCharge.ChargeType.ADMISSION)
+                .aggregate(t=Sum("amount_paid"))["t"]
+                or Decimal("0")
+            )
+            # Month window on charge updates (best available timestamp)
+            interview_month = (
+                charges.filter(
+                    charge_type=ApplicationCharge.ChargeType.INTERVIEW,
+                    updated_at__gte=month_start,
+                    amount_paid__gt=0,
+                ).aggregate(t=Sum("amount_paid"))["t"]
+                or Decimal("0")
+            )
+            admission_charges_month = (
+                charges.filter(
+                    charge_type=ApplicationCharge.ChargeType.ADMISSION,
+                    updated_at__gte=month_start,
+                    amount_paid__gt=0,
+                ).aggregate(t=Sum("amount_paid"))["t"]
+                or Decimal("0")
+            )
+
+            # Legacy AdmissionFeePayment rows
+            adm_pay = AdmissionFeePayment.objects.filter(application__school=school)
+            admission_legacy_total = adm_pay.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            admission_legacy_month = (
+                adm_pay.filter(payment_date__gte=month_start).aggregate(t=Sum("amount"))["t"]
+                or Decimal("0")
+            )
+
+            admission_total = admission_from_charges + admission_legacy_total
+            admission_month = admission_charges_month + admission_legacy_month
+
+            collected_month = collected_fees_month + admission_month + interview_month
+
             billed = inv.aggregate(t=Sum("amount_due"))["t"] or Decimal("0")
             paid_total = inv.aggregate(t=Sum("amount_paid"))["t"] or Decimal("0")
             collection_rate = float((paid_total / billed * 100) if billed > 0 else 0)
@@ -239,16 +296,22 @@ class SchoolViewSet(ModelViewSet):
             )
             finance = {
                 "outstanding": f"{outstanding:.2f}",
-                "collected_month": f"{collected:.2f}",
+                "collected_month": f"{collected_month:.2f}",
+                "collected_fees_month": f"{collected_fees_month:.2f}",
+                "collected_admission_month": f"{admission_month:.2f}",
+                "collected_interview_month": f"{interview_month:.2f}",
+                "collected_fees_total": f"{collected_fees_total:.2f}",
+                "collected_admission_total": f"{admission_total:.2f}",
+                "collected_interview_total": f"{interview_total:.2f}",
                 "overdue_invoices": overdue,
                 "invoices_unpaid": unpaid,
                 "billed": f"{billed:.2f}",
-                "collected_total": f"{paid_total:.2f}",
+                "collected_total": f"{(collected_fees_total + admission_total + interview_total):.2f}",
                 "collection_rate": round(collection_rate, 1),
                 "overdue_balance": f"{overdue_balance:.2f}",
             }
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[pulse] finance breakdown failed: {exc}")
 
         # Academics structure
         years = AcademicYear.objects.filter(school=school)

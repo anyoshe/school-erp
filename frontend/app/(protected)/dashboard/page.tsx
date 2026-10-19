@@ -90,7 +90,11 @@ export default function DashboardHome() {
         <Kpi
           label="Collected this month"
           value={pulseQ.isLoading ? "…" : `${currency} ${Number(pulse?.finance?.collected_month || 0).toLocaleString()}`}
-          sub={`${pulse?.finance?.collection_rate ?? 0}% collection rate · ${pulse?.finance?.overdue_invoices ?? 0} overdue`}
+          sub={
+            pulseQ.isLoading
+              ? "Loading…"
+              : `Fees ${Number(pulse?.finance?.collected_fees_month || 0).toLocaleString()} · Adm ${Number(pulse?.finance?.collected_admission_month || 0).toLocaleString()} · Int ${Number(pulse?.finance?.collected_interview_month || 0).toLocaleString()}`
+          }
           icon={DollarSign}
           tone="amber"
           onClick={() => router.push("/dashboard/modules/finance")}
@@ -120,6 +124,64 @@ export default function DashboardHome() {
           onClick={() => router.push("/dashboard/modules/admissions")}
         />
       </div>
+
+      {/* Collection breakdown */}
+      <Card className="border-0 rounded-2xl shadow-md overflow-hidden"
+        style={{ background: "linear-gradient(180deg, #FFFBEB 0%, #FFFFFF 50%)" }}>
+        <CardContent className="p-5">
+          <h2 className="font-semibold text-stone-900 flex items-center gap-2 mb-1">
+            <DollarSign className="h-4 w-4" style={{ color: "#D97706" }} />
+            Collections breakdown
+          </h2>
+          <p className="text-xs text-stone-500 mb-4">
+            Term school fees vs pre-enrollment admission and interview fees.
+          </p>
+          <div className="grid sm:grid-cols-3 gap-3">
+            {[
+              {
+                label: "School fees",
+                month: pulse?.finance?.collected_fees_month,
+                total: pulse?.finance?.collected_fees_total,
+                hint: "Invoice payments this month / all time",
+              },
+              {
+                label: "Admission fees",
+                month: pulse?.finance?.collected_admission_month,
+                total: pulse?.finance?.collected_admission_total,
+                hint: "Registration / admission charges paid",
+              },
+              {
+                label: "Interview fees",
+                month: pulse?.finance?.collected_interview_month,
+                total: pulse?.finance?.collected_interview_total,
+                hint: "Interview assessment charges paid",
+              },
+            ].map((row) => (
+              <div
+                key={row.label}
+                className="rounded-xl border border-amber-100 bg-white p-3 shadow-sm"
+              >
+                <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">
+                  {row.label}
+                </p>
+                <p className="text-lg font-bold text-stone-900 mt-1">
+                  {pulseQ.isLoading
+                    ? "…"
+                    : `${currency} ${Number(row.month || 0).toLocaleString()}`}
+                  <span className="text-xs font-medium text-stone-400 ml-1">this month</span>
+                </p>
+                <p className="text-xs text-stone-500 mt-1">
+                  All time:{" "}
+                  {pulseQ.isLoading
+                    ? "…"
+                    : `${currency} ${Number(row.total || 0).toLocaleString()}`}
+                </p>
+                <p className="text-[10px] text-stone-400 mt-1">{row.hint}</p>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-1 border-0 rounded-2xl shadow-md overflow-hidden"
