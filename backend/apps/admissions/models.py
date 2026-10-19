@@ -698,26 +698,40 @@ class Application(models.Model):
         ) if grade else None
 
         # Create Student - Build on existing data
+        def _w(key, fallback=""):
+            v = wd.get(key)
+            if v is None or (isinstance(v, str) and not str(v).strip()):
+                return fallback
+            return v
+
+        # Prefer enrollment wizard overrides, else application record
+        dob = _w("date_of_birth", self.date_of_birth)
+        if isinstance(dob, str) and dob:
+            try:
+                from datetime import date as date_cls
+                dob = date_cls.fromisoformat(dob[:10])
+            except Exception:
+                dob = self.date_of_birth
+
         student = Student.objects.create(
             school=self.school,
             admission_number=self.admission_number,
 
-            # Core personal info (from Application)
-            learner_id=wd.get('learner_id') or self.learner_id,
-            entry_exam_id=self.entry_exam_id,           # ← Retained from Application
-            entry_exam_year=self.entry_exam_year,       # ← Retained from Application
-            first_name=self.first_name,
-            middle_name=self.middle_name,
-            last_name=self.last_name,
-            preferred_name=self.preferred_name,
-            gender=str(self.gender or '').strip()[:10],
-            date_of_birth=self.date_of_birth,
-            nationality=self.nationality,
-            religion=self.religion,
+            learner_id=_w("learner_id", self.learner_id),
+            entry_exam_id=self.entry_exam_id,
+            entry_exam_year=self.entry_exam_year,
+            first_name=_w("first_name", self.first_name),
+            middle_name=_w("middle_name", self.middle_name),
+            last_name=_w("last_name", self.last_name),
+            preferred_name=_w("preferred_name", self.preferred_name),
+            gender=str(_w("gender", self.gender) or "").strip()[:10],
+            date_of_birth=dob,
+            nationality=_w("nationality", self.nationality),
+            religion=_w("religion", self.religion),
             photo=self.photo,
-            address=self.address,
-            region=self.region,
-            district=self.district,
+            address=_w("address", self.address),
+            region=_w("region", self.region),
+            district=_w("district", self.district),
             blood_group=self.blood_group,
             allergies=self.allergies,
             chronic_conditions=self.chronic_conditions,
@@ -814,6 +828,40 @@ class Application(models.Model):
             except Exception as e:
                 print(f"[ENROLL] Failed to regenerate invoices: {e}")
 
+            # Apply enrollment school-fee deposit onto the first invoice (Finance ledger)
+            if initial_amount > 0:
+                try:
+                    from apps.finance.models import Invoice, Payment
+                    invoice = (
+                        Invoice.objects.filter(
+                            student=student,
+                            fee_assignment=assignment,
+                        )
+                        .order_by("due_date", "id")
+                        .first()
+                    )
+                    if invoice:
+                        already = Payment.objects.filter(
+                            invoice=invoice,
+                            notes__icontains="Enrollment school fee deposit",
+                        ).exists()
+                        if not already:
+                            method = str(wd.get("initial_payment_method") or "CASH").upper()
+                            if method not in {"CASH", "M-PESA", "BANK", "CHEQUE", "WAIVER", "SCHOLARSHIP"}:
+                                method = "CASH"
+                            pay_amt = min(initial_amount, Decimal(str(invoice.current_total_due or invoice.amount_due or initial_amount)))
+                            if pay_amt > 0:
+                                Payment.objects.create(
+                                    school=self.school,
+                                    invoice=invoice,
+                                    amount=pay_amt,
+                                    payment_method=method,
+                                    reference_number=reference[:100] if reference else "",
+                                    notes="Enrollment school fee deposit",
+                                )
+                except Exception as e:
+                    print(f"[ENROLL] Failed to post school fee deposit to invoice: {e}")
+
         # Medical Record
         MedicalRecord.objects.update_or_create(
             student=student,
@@ -828,14 +876,19 @@ class Application(models.Model):
         )
 
         # Primary Guardian
+        g_phone = _w("guardian_phone", self.primary_guardian_phone) or self.primary_guardian_phone
+        g_name = _w("guardian_name", self.primary_guardian_name) or self.primary_guardian_name
+        g_email = _w("guardian_email", self.primary_guardian_email) or self.primary_guardian_email
+        g_rel = _w("guardian_relationship", self.primary_guardian_relationship) or self.primary_guardian_relationship
+        g_id = _w("guardian_national_id", self.primary_guardian_id_number) or self.primary_guardian_id_number
         primary_guardian, _ = Guardian.objects.get_or_create(
             school=self.school,
-            phone=self.primary_guardian_phone,
+            phone=g_phone or "unknown",
             defaults={
-                'full_name': self.primary_guardian_name,
-                'email': self.primary_guardian_email,
-                'relationship': self.primary_guardian_relationship,
-                'id_number': self.primary_guardian_id_number,
+                'full_name': g_name or "Guardian",
+                'email': g_email,
+                'relationship': g_rel,
+                'id_number': g_id,
             }
         )
         StudentGuardian.objects.get_or_create(
