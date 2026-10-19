@@ -82,39 +82,24 @@ export default function StudentFormDialog({
 
   const form = useForm<StudentFormValues>({
     resolver: zodResolver(studentSchema),
-    defaultValues: student
-      ? {
-          first_name: student.first_name,
-          middle_name: student.middle_name || "",
-          last_name: student.last_name,
-          gender: student.gender,
-          date_of_birth: student.date_of_birth || "",
-          nationality: student.nationality || "Kenyan",
-          county: student.county || "",
-          sub_county: student.sub_county || "",
-          religion: student.religion || "",
-          current_class: student.current_class?.id || "",
-          stream: student.stream || "",
-          boarding_status: student.boarding_status,
-          special_needs: student.special_needs || "",
-          notes: student.notes || "",
-        }
-      : {
-          first_name: "",
-          middle_name: "",
-          last_name: "",
-          gender: undefined,
-          date_of_birth: "",
-          nationality: "Kenyan",
-          county: "",
-          sub_county: "",
-          religion: "",
-          current_class: "",
-          stream: "",
-          boarding_status: undefined,
-          special_needs: "",
-          notes: "",
-        },
+    defaultValues: {
+      first_name: "",
+      middle_name: "",
+      last_name: "",
+      preferred_name: "",
+      gender: "",
+      date_of_birth: "",
+      nationality: "",
+      religion: "",
+      address: "",
+      region: "",
+      district: "",
+      current_class: "",
+      boarding_status: "",
+      special_needs_category: "",
+      notes: "",
+      status: "ACTIVE",
+    },
   });
 
   const isSubmitting = form.formState.isSubmitting;
@@ -154,15 +139,27 @@ export default function StudentFormDialog({
 
   const onSubmit = async (values: StudentFormValues) => {
     try {
+      // Field-level patch: only send dirty fields (plus required names on create)
+      const dirty = form.formState.dirtyFields as Record<string, boolean>;
       const payload: Record<string, unknown> = {};
-      const setVal = (key: string, value: unknown) => {
+      const setVal = (key: string, value: unknown, force = false) => {
+        if (!force && isEdit && !dirty[key]) return;
         if (value === undefined || value === null) return;
-        if (typeof value === "string" && value.trim() === "") return;
+        if (typeof value === "string" && value.trim() === "") {
+          if (force || dirty[key]) payload[key] = "";
+          return;
+        }
         payload[key] = typeof value === "string" ? value.trim() : value;
       };
-      setVal("first_name", values.first_name);
+
+      if (!isEdit) {
+        setVal("first_name", values.first_name, true);
+        setVal("last_name", values.last_name, true);
+      } else {
+        setVal("first_name", values.first_name);
+        setVal("last_name", values.last_name);
+      }
       setVal("middle_name", values.middle_name);
-      setVal("last_name", values.last_name);
       setVal("preferred_name", values.preferred_name);
       setVal("gender", values.gender);
       setVal("date_of_birth", values.date_of_birth);
@@ -175,10 +172,15 @@ export default function StudentFormDialog({
       setVal("special_needs_category", values.special_needs_category);
       setVal("notes", values.notes);
       setVal("status", values.status);
-      if (values.current_class && String(values.current_class).trim()) {
+      if ((!isEdit || dirty.current_class) && values.current_class && String(values.current_class).trim()) {
         payload.current_class = String(values.current_class).trim();
       }
+
       if (isEdit && student?.id) {
+        if (Object.keys(payload).length === 0) {
+          toast.message("No changes to save");
+          return;
+        }
         await studentService.update(student.id, payload);
         toast.success("Student updated successfully");
       } else {
@@ -366,6 +368,30 @@ export default function StudentFormDialog({
               )}
             />
 
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value || "ACTIVE"}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="ACTIVE">Active</SelectItem>
+                      <SelectItem value="SUSPENDED">Suspended</SelectItem>
+                      <SelectItem value="TRANSFERRED">Transferred</SelectItem>
+                      <SelectItem value="GRADUATED">Graduated</SelectItem>
+                      <SelectItem value="EXPELLED">Expelled</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <DialogFooter>
               <Button
                 type="button"

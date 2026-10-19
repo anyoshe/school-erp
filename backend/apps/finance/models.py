@@ -492,3 +492,62 @@ class LateFeeRule(models.Model):
     days_after_due = models.IntegerField()
 
     penalty_amount = models.DecimalField(max_digits=12, decimal_places=2)
+
+
+class Account(models.Model):
+    """Lightweight chart of accounts per school (income / cash foundation)."""
+
+    class AccountType(models.TextChoices):
+        INCOME = "INCOME", "Income"
+        ASSET = "ASSET", "Asset"
+        LIABILITY = "LIABILITY", "Liability"
+        EXPENSE = "EXPENSE", "Expense"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="accounts")
+    code = models.CharField(max_length=20)
+    name = models.CharField(max_length=120)
+    account_type = models.CharField(max_length=20, choices=AccountType.choices)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = [("school", "code")]
+        ordering = ["code"]
+
+    def __str__(self):
+        return f"{self.code} {self.name}"
+
+
+class IncomeReceipt(models.Model):
+    """
+    Pre-enrollment / one-time income (interview, admission) posted to finance
+    without requiring a term fee invoice.
+    """
+
+    class Source(models.TextChoices):
+        INTERVIEW = "INTERVIEW", "Interview fee"
+        ADMISSION = "ADMISSION", "Admission / registration fee"
+        OTHER = "OTHER", "Other"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="income_receipts")
+    account = models.ForeignKey(
+        Account, on_delete=models.SET_NULL, null=True, blank=True, related_name="income_receipts"
+    )
+    application_id = models.UUIDField(null=True, blank=True, db_index=True)
+    student = models.ForeignKey(
+        "students.Student", on_delete=models.SET_NULL, null=True, blank=True, related_name="income_receipts"
+    )
+    source = models.CharField(max_length=20, choices=Source.choices)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    payment_method = models.CharField(max_length=50, blank=True, default="CASH")
+    reference_number = models.CharField(max_length=100, blank=True)
+    notes = models.TextField(blank=True)
+    paid_at = models.DateTimeField(auto_now_add=True)
+    charge_id = models.UUIDField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        ordering = ["-paid_at"]
+
+    def __str__(self):
+        return f"{self.source} {self.amount} ({self.school_id})"

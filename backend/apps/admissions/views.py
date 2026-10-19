@@ -276,6 +276,11 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             charge.notes = str(request.data.get("notes") or "")
         charge.recompute_due()
         charge.save()
+        try:
+            from apps.finance.pre_enrollment import post_charge_to_finance
+            post_charge_to_finance(charge, student=getattr(application, "student", None))
+        except Exception as exc:
+            print(f"[finance] post_charge_to_finance: {exc}")
         from .serializers import ApplicationChargeSerializer
         return Response(ApplicationChargeSerializer(charge).data)
 

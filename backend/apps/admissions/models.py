@@ -897,6 +897,53 @@ class Application(models.Model):
             defaults={'is_primary': True}
         )
 
+        # Secondary guardian (optional)
+        sg_name = str(wd.get("secondary_guardian_name") or "").strip()
+        sg_phone = str(wd.get("secondary_guardian_phone") or "").strip()
+        if sg_name and sg_phone:
+            sec_guardian, _ = Guardian.objects.get_or_create(
+                school=self.school,
+                phone=sg_phone,
+                defaults={
+                    "full_name": sg_name,
+                    "email": str(wd.get("secondary_guardian_email") or ""),
+                    "relationship": str(wd.get("secondary_guardian_relationship") or "Guardian"),
+                    "id_number": str(wd.get("secondary_guardian_national_id") or ""),
+                },
+            )
+            StudentGuardian.objects.get_or_create(
+                student=student,
+                guardian=sec_guardian,
+                defaults={"is_primary": False},
+            )
+
+        # Copy admission documents onto student medical record as attachments
+        try:
+            medical = getattr(student, "student_medical_record", None) or MedicalRecord.objects.filter(student=student).first()
+            if medical:
+                for doc in self.documents.all():
+                    try:
+                        if not doc.file:
+                            continue
+                        MedicalDocument.objects.create(
+                            medical_record=medical,
+                            file=doc.file,
+                            document_type="OTHER",
+                            description=(doc.description or "Admission document")[:255],
+                        )
+                    except Exception as de:
+                        print(f"[ENROLL] doc copy skip: {de}")
+        except Exception as e:
+            print(f"[ENROLL] document copy failed: {e}")
+
+        # Post any already-paid interview/admission charges into finance income
+        try:
+            from apps.finance.pre_enrollment import post_charge_to_finance
+            for ch in self.charges.all():
+                post_charge_to_finance(ch, student=student)
+        except Exception as e:
+            print(f"[ENROLL] finance income post failed: {e}")
+
         self.student = student
         self.status = self.Status.ENROLLED
         self.save()

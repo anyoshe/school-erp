@@ -2283,21 +2283,36 @@ export default function EnrollmentWizardModal({
           {renderStep()}
         </div>
 
-        <DialogFooter className="flex flex-col sm:flex-row justify-between gap-4 pt-6 border-t">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="sticky bottom-0 z-20 flex flex-col sm:flex-row justify-between gap-4 pt-6 pb-2 border-t bg-white">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="border-slate-300 text-slate-800 bg-white hover:bg-slate-50"
+          >
             Cancel
           </Button>
 
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
             {currentStep > 1 && (
-              <Button variant="outline" onClick={handlePrev}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handlePrev}
+                className="border-slate-300 text-slate-800 bg-white hover:bg-slate-50 min-w-[120px]"
+              >
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Previous
               </Button>
             )}
 
             {currentStep < totalSteps ? (
-              <Button onClick={handleNext} disabled={!validateStep(currentStep) || loading}>
+              <Button
+                type="button"
+                onClick={handleNext}
+                disabled={!validateStep(currentStep) || loading}
+                className="min-w-[140px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 border border-emerald-700 disabled:opacity-60"
+              >
                 Next
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
@@ -2319,7 +2334,7 @@ export default function EnrollmentWizardModal({
               <Button
                 onClick={handleSubmit}
                 disabled={loading || !validateStep(currentStep)}
-                className="bg-secondary hover:bg-secondary-700 min-w-[180px]"
+                className="min-w-[180px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 border border-emerald-700 disabled:opacity-60"
               >
                 {loading ? (
                   <>
