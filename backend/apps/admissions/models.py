@@ -629,11 +629,12 @@ class Application(models.Model):
                 amount=initial_amount,
                 receipt_number=reference
             ).exists():
+                # Enrollment deposit is toward school/term fees — NOT admission/registration fee
                 AdmissionFeePayment.objects.create(
                     application=self,
                     amount=initial_amount,
-                    payment_method=reference or "Initial Enrollment Payment",
-                    receipt_number=reference,
+                    payment_method="School fee deposit (enrollment)",
+                    receipt_number=reference or "",
                 )
 
         # Generate admission number if missing

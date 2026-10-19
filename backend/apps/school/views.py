@@ -244,46 +244,64 @@ class SchoolViewSet(ModelViewSet):
             )
             collected_fees_total = pay_qs.aggregate(t=Sum("amount"))["t"] or Decimal("0")
 
-            # ApplicationCharge.amount_paid (interview / admission pipeline)
+            # Pre-enrollment charges: ONLY ApplicationCharge paid amounts
+            # when policy is Full/Discounted (N/A and Waived are not "collected")
             charges = ApplicationCharge.objects.filter(application__school=school)
-            interview_total = (
-                charges.filter(charge_type=ApplicationCharge.ChargeType.INTERVIEW)
-                .aggregate(t=Sum("amount_paid"))["t"]
-                or Decimal("0")
+            paid_policies = [
+                ApplicationCharge.Policy.FULL,
+                ApplicationCharge.Policy.DISCOUNTED,
+            ]
+            interview_qs = charges.filter(
+                charge_type=ApplicationCharge.ChargeType.INTERVIEW,
+                policy__in=paid_policies,
+                amount_paid__gt=0,
             )
-            admission_from_charges = (
-                charges.filter(charge_type=ApplicationCharge.ChargeType.ADMISSION)
-                .aggregate(t=Sum("amount_paid"))["t"]
-                or Decimal("0")
+            admission_qs = charges.filter(
+                charge_type=ApplicationCharge.ChargeType.ADMISSION,
+                policy__in=paid_policies,
+                amount_paid__gt=0,
             )
-            # Month window on charge updates (best available timestamp)
+            interview_total = interview_qs.aggregate(t=Sum("amount_paid"))["t"] or Decimal("0")
+            admission_total = admission_qs.aggregate(t=Sum("amount_paid"))["t"] or Decimal("0")
             interview_month = (
-                charges.filter(
-                    charge_type=ApplicationCharge.ChargeType.INTERVIEW,
-                    updated_at__gte=month_start,
-                    amount_paid__gt=0,
-                ).aggregate(t=Sum("amount_paid"))["t"]
+                interview_qs.filter(updated_at__gte=month_start).aggregate(t=Sum("amount_paid"))["t"]
                 or Decimal("0")
             )
-            admission_charges_month = (
-                charges.filter(
-                    charge_type=ApplicationCharge.ChargeType.ADMISSION,
-                    updated_at__gte=month_start,
-                    amount_paid__gt=0,
-                ).aggregate(t=Sum("amount_paid"))["t"]
+            admission_month = (
+                admission_qs.filter(updated_at__gte=month_start).aggregate(t=Sum("amount_paid"))["t"]
                 or Decimal("0")
             )
 
-            # Legacy AdmissionFeePayment rows
-            adm_pay = AdmissionFeePayment.objects.filter(application__school=school)
-            admission_legacy_total = adm_pay.aggregate(t=Sum("amount"))["t"] or Decimal("0")
-            admission_legacy_month = (
-                adm_pay.filter(payment_date__gte=month_start).aggregate(t=Sum("amount"))["t"]
+            # Enrollment-time deposits were stored on AdmissionFeePayment but are SCHOOL FEES
+            # (part/full term fee at enroll), not admission/registration income.
+            enroll_deposits = AdmissionFeePayment.objects.filter(application__school=school).filter(
+                Q(payment_method__icontains="enrollment")
+                | Q(payment_method__icontains="school fee")
+                | Q(payment_method__icontains="Initial")
+            )
+            # Also: any AdmissionFeePayment on apps where admission charge is N/A or waived
+            na_admission_app_ids = charges.filter(
+                charge_type=ApplicationCharge.ChargeType.ADMISSION,
+                policy__in=[
+                    ApplicationCharge.Policy.NOT_APPLICABLE,
+                    ApplicationCharge.Policy.WAIVED,
+                ],
+            ).values_list("application_id", flat=True)
+            na_deposits = AdmissionFeePayment.objects.filter(
+                application_id__in=na_admission_app_ids
+            )
+            school_deposit_ids = set(
+                enroll_deposits.values_list("id", flat=True)
+            ) | set(na_deposits.values_list("id", flat=True))
+            deposit_qs = AdmissionFeePayment.objects.filter(id__in=school_deposit_ids)
+            deposit_total = deposit_qs.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            deposit_month = (
+                deposit_qs.filter(payment_date__gte=month_start).aggregate(t=Sum("amount"))["t"]
                 or Decimal("0")
             )
 
-            admission_total = admission_from_charges + admission_legacy_total
-            admission_month = admission_charges_month + admission_legacy_month
+            collected_fees_month = collected_fees_month + deposit_month
+            collected_fees_total = collected_fees_total + deposit_total
 
             collected_month = collected_fees_month + admission_month + interview_month
 

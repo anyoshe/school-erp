@@ -142,13 +142,13 @@ export default function DashboardHome() {
                 label: "School fees",
                 month: pulse?.finance?.collected_fees_month,
                 total: pulse?.finance?.collected_fees_total,
-                hint: "Invoice payments this month / all time",
+                hint: "Term invoices + enrollment school-fee deposits",
               },
               {
                 label: "Admission fees",
                 month: pulse?.finance?.collected_admission_month,
                 total: pulse?.finance?.collected_admission_total,
-                hint: "Registration / admission charges paid",
+                hint: "Only when admission fee was charged and paid (not N/A)",
               },
               {
                 label: "Interview fees",
