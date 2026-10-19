@@ -253,6 +253,21 @@ class StudentCreateUpdateSerializer(serializers.ModelSerializer):
         "academic_year", "fee_structure",
     )
 
+    def to_internal_value(self, data):
+        # Ensure guardian keys survive even if not in model __all__ edge cases
+        ret = super().to_internal_value(data)
+        if hasattr(data, "keys"):
+            for key in (
+                "primary_guardian_name",
+                "primary_guardian_phone",
+                "primary_guardian_email",
+                "primary_guardian_relationship",
+                "primary_guardian_id_number",
+            ):
+                if key in data and key not in ret:
+                    ret[key] = data.get(key)
+        return ret
+
     def _clean_fk_blanks(self, validated_data):
         for field in self.FK_NULLABLE:
             if field in validated_data and validated_data[field] in ("", None):
@@ -272,50 +287,106 @@ class StudentCreateUpdateSerializer(serializers.ModelSerializer):
                 validated_data['admission_number'] = generate_unique_admission_number(school)
         return super().create(validated_data)
 
+    def _normalize_relationship(self, value):
+        if value is None:
+            return None
+        raw = str(value).strip()
+        if not raw:
+            return ""
+        key = raw.upper().replace(" ", "_")
+        allowed = {"FATHER", "MOTHER", "GUARDIAN", "OTHER"}
+        if key in allowed:
+            return key
+        # free text from admission forms
+        low = raw.lower()
+        if "father" in low or "dad" in low:
+            return "FATHER"
+        if "mother" in low or "mum" in low or "mom" in low:
+            return "MOTHER"
+        if "guardian" in low:
+            return "GUARDIAN"
+        return "OTHER"
+
     def update(self, instance, validated_data):
         validated_data = self._clean_fk_blanks(validated_data)
-        # Flat guardian fields from edit form (not nested write)
-        g_name = validated_data.pop("primary_guardian_name", None)
-        g_phone = validated_data.pop("primary_guardian_phone", None)
-        g_email = validated_data.pop("primary_guardian_email", None)
-        g_rel = validated_data.pop("primary_guardian_relationship", None)
-        g_id = validated_data.pop("primary_guardian_id_number", None)
-        # These are not model fields — strip if serializer included extras
+
+        # Prefer validated_data; also accept raw request for guardian fields
+        # (ensures write_only extras always reach the update path)
+        raw = getattr(self, "initial_data", {}) or {}
+        if not isinstance(raw, dict):
+            try:
+                raw = dict(raw)
+            except Exception:
+                raw = {}
+
+        def pick(key):
+            if key in validated_data:
+                return validated_data.pop(key)
+            if key in raw:
+                return raw.get(key)
+            return None
+
+        g_name = pick("primary_guardian_name")
+        g_phone = pick("primary_guardian_phone")
+        g_email = pick("primary_guardian_email")
+        g_rel = pick("primary_guardian_relationship")
+        g_id = pick("primary_guardian_id_number")
+
         for k in list(validated_data.keys()):
-            if k.startswith("primary_guardian_"):
+            if str(k).startswith("primary_guardian_"):
                 validated_data.pop(k, None)
+
+        # Empty email must be null for EmailField
+        if "email" not in validated_data and False:
+            pass
 
         instance = super().update(instance, validated_data)
 
-        # Update or create primary guardian when any guardian field sent
-        if any(v is not None for v in (g_name, g_phone, g_email, g_rel, g_id)):
+        touched = any(v is not None for v in (g_name, g_phone, g_email, g_rel, g_id))
+        if touched:
             from .models import Guardian, StudentGuardian
+
+            rel = self._normalize_relationship(g_rel)
+            email_val = g_email
+            if email_val is not None and str(email_val).strip() == "":
+                email_val = None
+
             link = (
                 StudentGuardian.objects.filter(student=instance, is_primary=True)
                 .select_related("guardian")
                 .first()
             )
+            if not link:
+                link = (
+                    StudentGuardian.objects.filter(student=instance)
+                    .select_related("guardian")
+                    .first()
+                )
+                if link:
+                    link.is_primary = True
+                    link.save(update_fields=["is_primary"])
+
             if link and link.guardian:
                 g = link.guardian
                 if g_name is not None:
-                    g.full_name = g_name
+                    g.full_name = str(g_name).strip() or g.full_name
                 if g_phone is not None and str(g_phone).strip():
                     g.phone = str(g_phone).strip()
                 if g_email is not None:
-                    g.email = g_email
-                if g_rel is not None:
-                    g.relationship = g_rel
+                    g.email = email_val
+                if rel is not None and rel != "":
+                    g.relationship = rel
                 if g_id is not None:
-                    g.id_number = g_id
+                    g.id_number = str(g_id).strip()
                 g.save()
-            elif g_phone or g_name:
+            else:
                 g = Guardian.objects.create(
                     school=instance.school,
-                    full_name=g_name or "Guardian",
-                    phone=str(g_phone or "unknown"),
-                    email=g_email or "",
-                    relationship=g_rel or "",
-                    id_number=g_id or "",
+                    full_name=(str(g_name).strip() if g_name else "") or "Guardian",
+                    phone=(str(g_phone).strip() if g_phone else "") or "unknown",
+                    email=email_val,
+                    relationship=rel or "GUARDIAN",
+                    id_number=(str(g_id).strip() if g_id else ""),
                 )
                 StudentGuardian.objects.create(
                     student=instance, guardian=g, is_primary=True

@@ -218,55 +218,52 @@ export default function StudentFormDialog({
 
   const onSubmit = async (values: StudentFormValues) => {
     try {
-      const dirty = form.formState.dirtyFields as Record<string, boolean>;
+      // Always send the full editable snapshot so fields like guardian ID always persist.
+      // (dirtyFields alone can miss Select/controlled edge cases after async reset.)
       const payload: Record<string, unknown> = {};
-      const setVal = (key: keyof StudentFormValues, force = false) => {
-        if (isEdit && !force && !dirty[key]) return;
+      const keys: (keyof StudentFormValues)[] = [
+        "first_name",
+        "last_name",
+        "middle_name",
+        "preferred_name",
+        "gender",
+        "date_of_birth",
+        "nationality",
+        "religion",
+        "address",
+        "region",
+        "district",
+        "learner_id",
+        "birth_certificate_number",
+        "passport_number",
+        "boarding_status",
+        "house",
+        "dorm_room",
+        "blood_group",
+        "allergies",
+        "chronic_conditions",
+        "disability",
+        "special_needs",
+        "emergency_name",
+        "emergency_phone",
+        "emergency_relation",
+        "notes",
+        "status",
+        "primary_guardian_name",
+        "primary_guardian_phone",
+        "primary_guardian_email",
+        "primary_guardian_relationship",
+        "primary_guardian_id_number",
+      ];
+      for (const key of keys) {
         const value = values[key];
-        if (value === undefined || value === null) return;
-        payload[key as string] =
-          typeof value === "string" ? value.trim() : value;
-      };
-
-      (
-        [
-          "first_name",
-          "last_name",
-          "middle_name",
-          "preferred_name",
-          "gender",
-          "date_of_birth",
-          "nationality",
-          "religion",
-          "address",
-          "region",
-          "district",
-          "learner_id",
-          "birth_certificate_number",
-          "passport_number",
-          "boarding_status",
-          "house",
-          "dorm_room",
-          "blood_group",
-          "allergies",
-          "chronic_conditions",
-          "disability",
-          "special_needs",
-          "emergency_name",
-          "emergency_phone",
-          "emergency_relation",
-          "notes",
-          "status",
-          "primary_guardian_name",
-          "primary_guardian_phone",
-          "primary_guardian_email",
-          "primary_guardian_relationship",
-          "primary_guardian_id_number",
-        ] as (keyof StudentFormValues)[]
-      ).forEach((k) => setVal(k, !isEdit && (k === "first_name" || k === "last_name")));
-
-      if ((!isEdit || dirty.current_class) && values.current_class) {
-        payload.current_class = values.current_class;
+        if (value === undefined || value === null) continue;
+        payload[key as string] = typeof value === "string" ? value.trim() : value;
+      }
+      if (values.current_class && String(values.current_class).trim()) {
+        payload.current_class = String(values.current_class).trim();
+      } else if (isEdit) {
+        payload.current_class = null;
       }
 
       if (photoFile) {
