@@ -157,6 +157,12 @@ export default function StudentsPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="secondary" className="bg-white/15 text-white border-0 hover:bg-white/25">
+              <Link href="/dashboard/modules/students/promote">
+                <ArrowRightLeft className="h-4 w-4 mr-2" />
+                Promote / carry fees
+              </Link>
+            </Button>
+            <Button asChild variant="secondary" className="bg-white/15 text-white border-0 hover:bg-white/25">
               <Link href="/dashboard/modules/admissions">
                 <UserPlus className="h-4 w-4 mr-2" /> From admissions
               </Link>
