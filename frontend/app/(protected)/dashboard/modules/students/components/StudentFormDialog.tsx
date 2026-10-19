@@ -340,8 +340,8 @@ export default function StudentFormDialog({
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               {isEdit && (
                 <div>
-                  <FormLabel>Admission Number</FormLabel>
-                  <Input value={admissionNumber} disabled className="bg-slate-50 font-mono" />
+                  <label className="text-sm font-medium leading-none">Admission Number</label>
+                  <Input value={admissionNumber} disabled className="bg-slate-50 font-mono mt-2" />
                   <p className="text-xs text-muted-foreground mt-1">
                     Locked — school admission number cannot be edited here.
                   </p>
