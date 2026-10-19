@@ -347,6 +347,103 @@ class StudentViewSet(viewsets.ModelViewSet):
             'payments': payments_data,
             'admission_payments': admission_payments_data,
         })
+    @action(detail=False, methods=["post"], url_path="promote")
+    def promote(self, request):
+        """
+        Bulk promote / repeat / graduate students into a target academic year.
+        Body: {
+          student_ids: [uuid],
+          academic_year_id: uuid,
+          action: PROMOTE|REPEAT|GRADUATE,
+          target_grade_id?: uuid,
+          carry_fees?: true,
+          carry_term?: "Term 1"
+        }
+        """
+        from apps.academics.models import AcademicYear, GradeLevel
+        from .promotion import promote_student
+
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "School context required"}, status=400)
+
+        ids = request.data.get("student_ids") or []
+        year_id = request.data.get("academic_year_id")
+        action = (request.data.get("action") or "PROMOTE").upper()
+        carry_fees = request.data.get("carry_fees", True) is not False
+        carry_term = request.data.get("carry_term") or "Term 1"
+        target_grade_id = request.data.get("target_grade_id")
+
+        if not ids:
+            return Response({"detail": "student_ids required"}, status=400)
+        if not year_id:
+            return Response({"detail": "academic_year_id required"}, status=400)
+
+        try:
+            year = AcademicYear.objects.get(id=year_id, school=school)
+        except AcademicYear.DoesNotExist:
+            return Response({"detail": "Academic year not found"}, status=404)
+
+        target_grade = None
+        if target_grade_id:
+            try:
+                target_grade = GradeLevel.objects.get(id=target_grade_id, school=school)
+            except GradeLevel.DoesNotExist:
+                return Response({"detail": "Target grade not found"}, status=404)
+
+        students = self.get_queryset().filter(id__in=ids)
+        results = []
+        errors = []
+        for student in students:
+            try:
+                results.append(
+                    promote_student(
+                        student,
+                        academic_year=year,
+                        action=action,
+                        target_grade=target_grade,
+                        carry_fees=carry_fees,
+                        carry_term_label=carry_term,
+                        user=request.user,
+                    )
+                )
+            except Exception as e:
+                errors.append({"student_id": str(student.id), "error": str(e)})
+
+        return Response({"results": results, "errors": errors, "count": len(results)})
+
+    @action(detail=False, methods=["post"], url_path="carry-term-balances")
+    def carry_term_balances(self, request):
+        """
+        Carry unpaid balances into a target term label for active students.
+        Body: { academic_year: "2026/2027", to_term: "Term 2", student_ids?: [] }
+        """
+        from .promotion import carry_term_balances_for_school
+
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "School context required"}, status=400)
+
+        year_label = request.data.get("academic_year") or request.data.get("academic_year_label")
+        to_term = request.data.get("to_term") or request.data.get("term")
+        ids = request.data.get("student_ids")
+
+        if not year_label or not to_term:
+            return Response(
+                {"detail": "academic_year and to_term are required"},
+                status=400,
+            )
+
+        results = carry_term_balances_for_school(
+            school,
+            academic_year_label=str(year_label),
+            to_term=str(to_term),
+            student_ids=ids,
+            user=request.user,
+        )
+        return Response({"results": results, "count": len(results)})
+
+
 class GuardianViewSet(viewsets.ModelViewSet):
     queryset = Guardian.objects.select_related('school')
     serializer_class = GuardianSerializer

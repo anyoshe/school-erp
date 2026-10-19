@@ -450,6 +450,7 @@ class Payment(models.Model):
             ('CHEQUE', 'Cheque'),
             ('WAIVER', 'Waiver'),
             ('SCHOLARSHIP', 'Scholarship'),
+            ('TRANSFER', 'Balance transfer'),
         ],
         default='CASH'
     )

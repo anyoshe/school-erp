@@ -238,11 +238,12 @@ class SchoolViewSet(ModelViewSet):
             pay_qs = Payment.objects.filter(
                 Q(school=school) | Q(invoice__student__school=school) | Q(invoice__school=school)
             )
+            pay_real = pay_qs.exclude(payment_method="TRANSFER")
             collected_fees_month = (
-                pay_qs.filter(paid_at__gte=month_start).aggregate(t=Sum("amount"))["t"]
+                pay_real.filter(paid_at__gte=month_start).aggregate(t=Sum("amount"))["t"]
                 or Decimal("0")
             )
-            collected_fees_total = pay_qs.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            collected_fees_total = pay_real.aggregate(t=Sum("amount"))["t"] or Decimal("0")
 
             # Pre-enrollment charges: ONLY ApplicationCharge paid amounts
             # when policy is Full/Discounted (N/A and Waived are not "collected")
