@@ -180,25 +180,31 @@ export default function StudentFormDialog({
 
     (async () => {
       if (isEdit && student?.id) {
+        // 1) Open immediately with list-row data (no blank spinner wait)
+        setDetail(student);
+        setAdmissionNumber((student as any)?.admission_number || "");
+        form.reset(mapStudentToForm(student));
+        setPhotoPreview(null);
+        setPhotoFile(null);
         setLoadingDetail(true);
+
+        // 2) Hydrate with lightweight edit payload in background
         try {
-          const full = await studentService.getById(String(student.id));
-          if (cancelled) return;
-          const data = full || student;
-          setDetail(data);
-          setAdmissionNumber((data as any)?.admission_number || "");
-          form.reset(mapStudentToForm(data));
+          const full = await studentService.getById(String(student.id), {
+            mode: "edit",
+          });
+          if (cancelled || !full) return;
+          setDetail(full);
+          setAdmissionNumber((full as any)?.admission_number || "");
+          form.reset(mapStudentToForm(full));
           const url =
-            (data as any)?.photo_url ||
-            (typeof (data as any)?.photo === "string" ? (data as any).photo : null);
+            (full as any)?.photo_url ||
+            (typeof (full as any)?.photo === "string"
+              ? (full as any).photo
+              : null);
           setPhotoPreview(url);
-          setPhotoFile(null);
         } catch {
-          if (!cancelled) {
-            setDetail(student);
-            setAdmissionNumber((student as any)?.admission_number || "");
-            form.reset(mapStudentToForm(student));
-          }
+          /* keep list-row values */
         } finally {
           if (!cancelled) setLoadingDetail(false);
         }
@@ -208,6 +214,7 @@ export default function StudentFormDialog({
         form.reset(mapStudentToForm({}));
         setPhotoPreview(null);
         setPhotoFile(null);
+        setLoadingDetail(false);
       }
     })();
 
@@ -327,14 +334,14 @@ export default function StudentFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {loadingDetail ? (
-          <div className="flex items-center justify-center py-12 text-sm text-muted-foreground gap-2">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            Loading full student profile…
-          </div>
-        ) : (
-          <Form {...form}>
+        <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {loadingDetail && (
+                <div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+                  Loading remaining details (guardians, health)…
+                </div>
+              )}
               {isEdit && (
                 <div>
                   <label className="text-sm font-medium leading-none">Admission Number</label>
@@ -625,7 +632,6 @@ export default function StudentFormDialog({
               </DialogFooter>
             </form>
           </Form>
-        )}
       </DialogContent>
     </Dialog>
   );

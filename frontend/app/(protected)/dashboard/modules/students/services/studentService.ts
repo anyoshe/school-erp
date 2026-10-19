@@ -52,21 +52,23 @@ export const studentService = {
     }
   },
 
-   getById: async (id: string) => {
-  if (!id || id === "undefined" || id === "null") {
-    throw new Error("Invalid student ID");
-  }
-
-  try {
-    const { data } = await api.get(`/students/${id}/`);
-    return data;
-  } catch (err: any) {
-    if (err?.response?.status === 404) {
-      return null;
+  getById: async (id: string, opts?: { mode?: "edit" | "full" }) => {
+    if (!id || id === "undefined" || id === "null") {
+      throw new Error("Invalid student ID");
     }
-    throw err;
-  }
-},
+    try {
+      const mode = opts?.mode || "full";
+      const { data } = await api.get(`/students/${id}/`, {
+        params: mode === "edit" ? { mode: "edit" } : undefined,
+      });
+      return data;
+    } catch (err: any) {
+      if (err?.response?.status === 404) {
+        return null;
+      }
+      throw err;
+    }
+  },
 
   /* ---------- CREATE ---------- */
   async create(payload: any) {

@@ -8,7 +8,7 @@ from django.db.models import Q, Sum
 from decimal import Decimal
 from .models import Student, Guardian, StudentGuardian, MedicalRecord
 from .serializers import (
-    StudentSerializer, StudentListSerializer, StudentCreateUpdateSerializer,
+    StudentSerializer, StudentListSerializer, StudentEditSerializer, StudentCreateUpdateSerializer,
     GuardianSerializer,
     StudentGuardianSerializer, LinkExistingGuardianSerializer,
     MedicalRecordSerializer, MedicalRecordCreateUpdateSerializer
@@ -59,7 +59,14 @@ class StudentViewSet(viewsets.ModelViewSet):
                 "address",
             )
 
-        # Detail / reports: load related graphs once
+        # Detail: full profile vs lightweight edit form
+        mode = ""
+        if getattr(self, "request", None) is not None:
+            mode = (self.request.query_params.get("mode") or "").lower()
+        if self.action == "retrieve" and mode in ("edit", "lite", "form"):
+            return qs.select_related("current_class").prefetch_related(
+                "guardians__guardian"
+            )
         return qs.select_related(
             "school", "current_class", "fee_structure", "created_by"
         ).prefetch_related(
@@ -72,6 +79,11 @@ class StudentViewSet(viewsets.ModelViewSet):
             return StudentCreateUpdateSerializer
         if self.action == "list":
             return StudentListSerializer
+        # Edit dialog / lightweight profile: ?mode=edit
+        if self.action == "retrieve":
+            mode = (self.request.query_params.get("mode") or "").lower()
+            if mode in ("edit", "lite", "form"):
+                return StudentEditSerializer
         return StudentSerializer
 
     def _validate_school_relations(self, validated_data, school):

@@ -87,6 +87,95 @@ class StudentListSerializer(serializers.ModelSerializer):
         return self._name(obj, "stream")
 
 
+class StudentEditSerializer(serializers.ModelSerializer):
+    """Medium payload for edit dialog — full student fields, no nested school tree."""
+    full_name = serializers.ReadOnlyField()
+    current_class = serializers.SerializerMethodField()
+    guardians = serializers.SerializerMethodField()
+    photo_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Student
+        fields = [
+            "id",
+            "school_id",
+            "admission_number",
+            "first_name",
+            "middle_name",
+            "last_name",
+            "full_name",
+            "preferred_name",
+            "gender",
+            "date_of_birth",
+            "nationality",
+            "religion",
+            "address",
+            "region",
+            "district",
+            "learner_id",
+            "birth_certificate_number",
+            "passport_number",
+            "status",
+            "boarding_status",
+            "house",
+            "dorm_room",
+            "current_class",
+            "blood_group",
+            "allergies",
+            "chronic_conditions",
+            "disability",
+            "special_needs",
+            "emergency_name",
+            "emergency_phone",
+            "emergency_relation",
+            "notes",
+            "guardians",
+            "photo_url",
+            "admission_date",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_current_class(self, obj):
+        gl = obj.current_class
+        if not gl:
+            return None
+        return {
+            "id": str(gl.id),
+            "name": gl.name,
+            "short_name": getattr(gl, "short_name", "") or "",
+        }
+
+    def get_guardians(self, obj):
+        links = obj.guardians.select_related("guardian").all()[:8]
+        out = []
+        for link in links:
+            g = link.guardian
+            out.append({
+                "id": str(link.id),
+                "is_primary": link.is_primary,
+                "guardian_id": str(g.id) if g else None,
+                "full_name": getattr(g, "full_name", "") or "",
+                "phone": getattr(g, "phone", "") or "",
+                "email": getattr(g, "email", "") or "",
+                "relationship": getattr(g, "relationship", "") or "",
+                "id_number": getattr(g, "id_number", "") or "",
+            })
+        return out
+
+    def get_photo_url(self, obj):
+        if not obj.photo:
+            return None
+        try:
+            url = obj.photo.url
+        except Exception:
+            return None
+        request = self.context.get("request")
+        if request and url and not str(url).startswith("http"):
+            return request.build_absolute_uri(url)
+        return url
+
+
 class StudentSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
     school = SchoolSerializer(read_only=True)
