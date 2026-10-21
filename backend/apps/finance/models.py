@@ -574,7 +574,7 @@ class ExpenseCategory(models.Model):
 class Vendor(models.Model):
     """Suppliers / payees for bills and expenses."""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="vendors")
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="finance_vendors")
     name = models.CharField(max_length=200)
     phone = models.CharField(max_length=40, blank=True)
     email = models.EmailField(blank=True)

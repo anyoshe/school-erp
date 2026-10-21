@@ -36,7 +36,7 @@ class Migration(migrations.Migration):
                 ("notes", models.TextField(blank=True)),
                 ("is_active", models.BooleanField(default=True)),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
-                ("school", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="vendors", to="school.school")),
+                ("school", models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name="finance_vendors", to="school.school")),
             ],
             options={"ordering": ["name"], "unique_together": {("school", "name")}},
         ),
