@@ -52,17 +52,23 @@ interface DashboardSummaryResponse {
   feeGroupBreakdown: FeeItemTotal[];
 }
 
-function IncomeReceiptsLink() {
+function FinanceNavLinks() {
   return (
-    <>
-      <IncomeReceiptsLink />
-
-    <div className="mb-4">
-      <Link
-        href="/dashboard/modules/finance/income-receipts"
-        className="text-sm font-medium text-amber-800 underline underline-offset-2"
-      >
-        Pre-enrollment income (interview / admission) →
+    <div className="mb-4 flex flex-wrap gap-3 text-sm">
+      <Link href="/dashboard/modules/finance/standing" className="font-medium text-emerald-800 underline underline-offset-2">
+        School standing (P&L)
+      </Link>
+      <Link href="/dashboard/modules/finance/expenses" className="font-medium text-slate-800 underline underline-offset-2">
+        Expenses
+      </Link>
+      <Link href="/dashboard/modules/finance/bills" className="font-medium text-slate-800 underline underline-offset-2">
+        Vendor bills
+      </Link>
+      <Link href="/dashboard/modules/finance/income-receipts" className="font-medium text-amber-800 underline underline-offset-2">
+        Pre-enrollment income
+      </Link>
+      <Link href="/dashboard/modules/finance/fee-structures" className="font-medium text-slate-800 underline underline-offset-2">
+        Fee structures
       </Link>
     </div>
   );

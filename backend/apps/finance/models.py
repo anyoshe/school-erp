@@ -552,3 +552,178 @@ class IncomeReceipt(models.Model):
 
     def __str__(self):
         return f"{self.source} {self.amount} ({self.school_id})"
+
+
+class ExpenseCategory(models.Model):
+    """Operating expense categories (utilities, salaries, supplies, etc.)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="expense_categories")
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = [("school", "name")]
+
+    def __str__(self):
+        return self.name
+
+
+class Vendor(models.Model):
+    """Suppliers / payees for bills and expenses."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="vendors")
+    name = models.CharField(max_length=200)
+    phone = models.CharField(max_length=40, blank=True)
+    email = models.EmailField(blank=True)
+    address = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = [("school", "name")]
+
+    def __str__(self):
+        return self.name
+
+
+class Expense(models.Model):
+    """School operating expense (money out)."""
+    class PaymentMethod(models.TextChoices):
+        CASH = "CASH", "Cash"
+        BANK = "BANK", "Bank transfer"
+        MPESA = "MPESA", "M-Pesa"
+        CHEQUE = "CHEQUE", "Cheque"
+        OTHER = "OTHER", "Other"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="expenses")
+    category = models.ForeignKey(
+        ExpenseCategory, on_delete=models.SET_NULL, null=True, blank=True, related_name="expenses"
+    )
+    vendor = models.ForeignKey(
+        Vendor, on_delete=models.SET_NULL, null=True, blank=True, related_name="expenses"
+    )
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    expense_date = models.DateField()
+    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.CASH)
+    reference_number = models.CharField(max_length=100, blank=True)
+    paid_to = models.CharField(max_length=200, blank=True, help_text="Payee name if no vendor")
+    academic_year = models.CharField(max_length=20, blank=True)
+    term = models.CharField(max_length=30, blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="recorded_expenses"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-expense_date", "-created_at"]
+
+    def __str__(self):
+        return f"{self.title} ({self.amount})"
+
+
+class Bill(models.Model):
+    """Vendor bill / payable (school owes supplier)."""
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
+        OPEN = "OPEN", "Open"
+        PARTIAL = "PARTIAL", "Partially paid"
+        PAID = "PAID", "Paid"
+        CANCELLED = "CANCELLED", "Cancelled"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="bills")
+    vendor = models.ForeignKey(Vendor, on_delete=models.PROTECT, related_name="bills")
+    bill_number = models.CharField(max_length=50)
+    description = models.TextField(blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    bill_date = models.DateField()
+    due_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.OPEN)
+    category = models.ForeignKey(
+        ExpenseCategory, on_delete=models.SET_NULL, null=True, blank=True, related_name="bills"
+    )
+    academic_year = models.CharField(max_length=20, blank=True)
+    term = models.CharField(max_length=30, blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_bills"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-bill_date", "-created_at"]
+        unique_together = [("school", "bill_number")]
+
+    def __str__(self):
+        return f"{self.bill_number} — {self.vendor}"
+
+    def refresh_payment_state(self):
+        paid = self.payments.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+        self.amount_paid = paid
+        self.balance = max(Decimal("0"), Decimal(str(self.amount)) - paid)
+        if self.balance <= 0:
+            self.status = self.Status.PAID
+            self.balance = Decimal("0")
+        elif paid > 0:
+            self.status = self.Status.PARTIAL
+        elif self.status not in (self.Status.CANCELLED, self.Status.DRAFT):
+            self.status = self.Status.OPEN
+        self.save(update_fields=["amount_paid", "balance", "status", "updated_at"])
+
+
+class BillPayment(models.Model):
+    """Payment against a vendor bill."""
+    class PaymentMethod(models.TextChoices):
+        CASH = "CASH", "Cash"
+        BANK = "BANK", "Bank transfer"
+        MPESA = "MPESA", "M-Pesa"
+        CHEQUE = "CHEQUE", "Cheque"
+        OTHER = "OTHER", "Other"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="bill_payments")
+    bill = models.ForeignKey(Bill, on_delete=models.CASCADE, related_name="payments")
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    payment_date = models.DateField()
+    payment_method = models.CharField(max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.BANK)
+    reference_number = models.CharField(max_length=100, blank=True)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="bill_payments_recorded"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-payment_date", "-created_at"]
+
+
+class CashLedgerEntry(models.Model):
+    """Simple cash/bank movement log for school standing."""
+    class Direction(models.TextChoices):
+        IN = "IN", "Inflow"
+        OUT = "OUT", "Outflow"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="cash_ledger")
+    direction = models.CharField(max_length=3, choices=Direction.choices)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    entry_date = models.DateField()
+    description = models.CharField(max_length=255)
+    reference_number = models.CharField(max_length=100, blank=True)
+    source_type = models.CharField(max_length=40, blank=True)
+    source_id = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-entry_date", "-created_at"]

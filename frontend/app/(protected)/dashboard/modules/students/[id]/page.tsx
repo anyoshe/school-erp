@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 "use client";
 
@@ -121,7 +122,19 @@ function StudentFeeOverview({ studentId }: { studentId: string }) {
       <Card className="mt-4">
         <CardContent className="p-4 text-sm text-muted-foreground">Loading fees…</CardContent>
       </Card>
-      {student?.id ? <StudentFeeOverview studentId={String(student.id)} /> : null}
+      {student?.id ? (
+        <>
+          <div className="mt-2 print:hidden">
+            <Link
+              href={`/dashboard/modules/finance/statements/${student.id}`}
+              className="text-sm font-medium text-emerald-800 underline underline-offset-2"
+            >
+              Open printable fee statement →
+            </Link>
+          </div>
+          <StudentFeeOverview studentId={String(student.id)} />
+        </>
+      ) : null}
     );
   }
   if (!data) return null;
