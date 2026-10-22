@@ -151,6 +151,7 @@ export default function FinanceDashboard() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
+      <FinanceNavLinks />
       {/* Owner-facing hero */}
       <div
         className="rounded-3xl p-6 sm:p-8 text-white shadow-lg relative overflow-hidden"
@@ -387,6 +388,5 @@ export default function FinanceDashboard() {
         </CardContent>
       </Card>
     </div>
-      </>
-);
+  );
 }
