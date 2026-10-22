@@ -64,9 +64,22 @@ def _build_finance_dashboard_summary(request):
         )
     )
 
-    admission_payments = list(
+    # AdmissionFeePayment historically also stored enrollment term-fee deposits.
+    # Only count true admission/registration receipts here — not school-fee deposits.
+    all_admission_fee_rows = list(
         AdmissionFeePayment.objects.filter(application__school_id__in=school_ids).select_related("application")
     )
+
+    def _is_school_fee_deposit(p) -> bool:
+        method = (getattr(p, "payment_method", None) or "").lower()
+        return (
+            "school fee" in method
+            or "enrollment" in method
+            or "deposit" in method and "admission" not in method
+        )
+
+    admission_payments = [p for p in all_admission_fee_rows if not _is_school_fee_deposit(p)]
+    legacy_deposit_rows = [p for p in all_admission_fee_rows if _is_school_fee_deposit(p)]
 
     total_assigned = Decimal("0")
     total_outstanding = Decimal("0")
@@ -254,6 +267,7 @@ def _build_finance_dashboard_summary(request):
             "pendingInvoices": pending_invoices,
             "totalInvoiced": float(_round_money(total_assigned)),
             "totalAdmissionPayments": float(_round_money(sum((Decimal(str(p.amount)) for p in admission_payments), Decimal("0")))),
+            "legacyEnrollmentDeposits": float(_round_money(sum((Decimal(str(p.amount)) for p in legacy_deposit_rows), Decimal("0")))),
         },
         "revenueByPeriod": {
             "all": float(_round_money(revenue_by_period["all"])),

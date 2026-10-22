@@ -234,11 +234,24 @@ class OwnerStandingView(APIView):
         if not school:
             return Response({"detail": "School context required"}, status=400)
 
+        # Term / school fees actually posted to finance Payment (exclude internal transfers)
         fee_collected = (
             Payment.objects.filter(school=school).exclude(payment_method="TRANSFER").aggregate(t=Sum("amount"))["t"]
             or Decimal("0")
         )
-        pre_enroll = IncomeReceipt.objects.filter(school=school).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+        interview_income = (
+            IncomeReceipt.objects.filter(school=school, source="INTERVIEW").aggregate(t=Sum("amount"))["t"]
+            or Decimal("0")
+        )
+        admission_income = (
+            IncomeReceipt.objects.filter(school=school, source="ADMISSION").aggregate(t=Sum("amount"))["t"]
+            or Decimal("0")
+        )
+        other_income = (
+            IncomeReceipt.objects.filter(school=school, source="OTHER").aggregate(t=Sum("amount"))["t"]
+            or Decimal("0")
+        )
+        pre_enroll = interview_income + admission_income + other_income
         total_income = fee_collected + pre_enroll
         total_expenses = Expense.objects.filter(school=school).aggregate(t=Sum("amount"))["t"] or Decimal("0")
         payables = (
@@ -258,12 +271,21 @@ class OwnerStandingView(APIView):
 
         return Response({
             "total_fee_collected": str(fee_collected),
+            "interview_income": str(interview_income),
+            "admission_income": str(admission_income),
+            "other_income": str(other_income),
             "pre_enrollment_income": str(pre_enroll),
             "total_income": str(total_income),
             "total_expenses": str(total_expenses),
             "net_position": str(total_income - total_expenses),
             "receivables_outstanding": str(receivables),
             "payables_outstanding": str(payables),
+            "income_breakdown": [
+                {"label": "School / term fees", "total": str(fee_collected)},
+                {"label": "Interview fees", "total": str(interview_income)},
+                {"label": "Admission / registration fees", "total": str(admission_income)},
+                {"label": "Other income", "total": str(other_income)},
+            ],
             "expenses_by_category": [
                 {"category": r["category__name"] or "Uncategorised", "total": str(r["total"] or 0)}
                 for r in by_category

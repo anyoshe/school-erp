@@ -633,19 +633,10 @@ class Application(models.Model):
             initial_amount = Decimal('0')
             reference = ''
 
+        # Enrollment deposit is school/term fee money — posted only as finance.Payment on invoices.
+        # Do NOT create AdmissionFeePayment here (that table is for true admission/registration fees only).
         if initial_amount > 0:
-            if not AdmissionFeePayment.objects.filter(
-                application=self,
-                amount=initial_amount,
-                receipt_number=reference
-            ).exists():
-                # Enrollment deposit is toward school/term fees — NOT admission/registration fee
-                AdmissionFeePayment.objects.create(
-                    application=self,
-                    amount=initial_amount,
-                    payment_method="School fee deposit (enrollment)",
-                    receipt_number=reference or "",
-                )
+            pass  # Payment rows are created later against student invoices in this method
 
         # Generate admission number if missing
         if not self.admission_number:
