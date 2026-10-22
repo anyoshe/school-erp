@@ -15,6 +15,15 @@ export const getToken = (): string | null => {
 
 export const removeToken = () => {
   localStorage.removeItem("token");
+  localStorage.removeItem("refreshToken");
+};
+
+export const getRefreshToken = (): string | null => {
+  return localStorage.getItem("refreshToken");
+};
+
+export const saveRefreshToken = (token: string) => {
+  localStorage.setItem("refreshToken", token);
 };
 
 // =====================

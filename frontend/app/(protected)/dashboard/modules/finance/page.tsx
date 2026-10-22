@@ -131,9 +131,14 @@ export default function FinanceDashboard() {
       try {
         sessionStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data }));
       } catch { /* */ }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to fetch dashboard data:", error);
-      toast.error("Failed to load finance dashboard");
+      const status = error?.response?.status;
+      if (status === 401) {
+        // interceptor will refresh or redirect; avoid noisy toast
+      } else {
+        toast.error("Failed to load finance dashboard");
+      }
     } finally {
       setLoading(false);
     }
