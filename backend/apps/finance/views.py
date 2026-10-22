@@ -230,12 +230,21 @@ def _build_finance_dashboard_summary(request):
     )
     pending_invoices = sum(1 for invoice in invoices if max(Decimal("0"), Decimal(str(invoice.balance))) > 0)
 
-    total_revenue = sum((Decimal(str(invoice.amount_paid)) for invoice in invoices), Decimal("0"))
-    # Pre-enrollment income (interview/admission) comes from IncomeReceipt — not AdmissionFeePayment.
-    # AdmissionFeePayment rows are legacy and often misclassified term deposits.
+    # SOURCE OF TRUTH for "Collected" = real Payment rows (not drifted invoice.amount_paid)
+    from django.db.models import Sum as DjSum
+    school_fee_collected = (
+        Payment.objects.filter(
+            Q(school_id__in=list(school_ids)) | Q(invoice__student__school_id__in=list(school_ids))
+        )
+        .exclude(payment_method="TRANSFER")
+        .aggregate(t=DjSum("amount"))["t"]
+        or Decimal("0")
+    )
+    # Keep invoice.amount_paid in sync when reporting outstanding
+    total_revenue = school_fee_collected
+
     try:
         from .models import IncomeReceipt
-        from django.db.models import Sum as DjSum
         pre_enroll_income = (
             IncomeReceipt.objects.filter(school_id__in=list(school_ids)).aggregate(t=DjSum("amount"))["t"]
             or Decimal("0")
@@ -252,10 +261,27 @@ def _build_finance_dashboard_summary(request):
         pre_enroll_income = Decimal("0")
         interview_income_amt = Decimal("0")
         admission_income_amt = Decimal("0")
-    total_revenue = sum((Decimal(str(invoice.amount_paid)) for invoice in invoices), Decimal("0"))
-    # School-fee collected only (invoice payments). Pre-enroll shown separately.
-    school_fee_collected = total_revenue
+
     total_revenue_with_pre = school_fee_collected + pre_enroll_income
+
+    # Outstanding from invoices using payment-based paid amounts
+    total_outstanding = Decimal("0")
+    students_with_balance = set()
+    pending_invoices = 0
+    overdue_balance = Decimal("0")
+    for invoice in invoices:
+        paid = sum(
+            (Decimal(str(p.amount)) for p in invoice.payments.all() if getattr(p, "payment_method", None) != "TRANSFER"),
+            Decimal("0"),
+        )
+        due = Decimal(str(invoice.amount_due or 0)) + Decimal(str(invoice.late_fee_applied or 0))
+        bal = max(Decimal("0"), due - paid)
+        total_outstanding += bal
+        if bal > 0:
+            pending_invoices += 1
+            students_with_balance.add(str(invoice.student_id))
+            if invoice.due_date and invoice.due_date < today:
+                overdue_balance += bal
 
     fee_assignment_ids = {assignment.id for assignment in assignments}
     for invoice in invoices:

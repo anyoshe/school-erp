@@ -1,20 +1,21 @@
-"""
-Fix double-counted admission backfills and missing enrollment school-fee payments.
 
-1) Remove Payment rows created by backfill (notes contain "backfill")
-2) Rebuild each invoice.amount_paid from real Payment sums
-3) For each enrolled student, ensure school-fee Payments cover AdmissionFeePayment totals
-   (once only) by posting the shortfall onto invoices
+"""
+Reconcile enrollment school-fee money onto Finance Payment rows (no double count).
+
+1) Delete Payment rows from failed backfill (notes contain "backfill")
+2) For each enrolled application, target paid = sum(AdmissionFeePayment)
+   existing = sum(Payment on student invoices)
+   post shortfall once across invoices (by amount_due), ignoring wrong balance flags
+3) Rebuild every invoice.amount_paid / balance from Payment sums
 """
 from decimal import Decimal
 
 from django.core.management.base import BaseCommand
 from django.db.models import Sum
-from django.db.models import F
 
 
 class Command(BaseCommand):
-    help = "Reconcile enrollment/admission fee money onto invoices without double counting"
+    help = "Reconcile enrollment fee collections to Payment rows and rebuild invoice paid totals"
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true")
@@ -23,34 +24,125 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         from apps.admissions.models import AdmissionFeePayment, Application
         from apps.finance.models import Invoice, Payment, StudentFeeAssignment
-        from apps.students.models import Student
 
         dry = options["dry_run"]
         school_id = (options.get("school_id") or "").strip()
 
         removed = 0
-        rebuilt = 0
         posted = 0
         no_invoice = 0
 
-        # ── 1) Remove backfill duplicates ───────────────────────────────────
         bf = Payment.objects.filter(notes__icontains="backfill")
         if school_id:
             bf = bf.filter(school_id=school_id)
-        bf = list(bf.select_related("invoice"))
-        for p in bf:
-            self.stdout.write(
-                f"{'[dry] ' if dry else ''}Remove backfill payment "
-                f"{p.amount} on invoice {getattr(p.invoice, 'invoice_number', p.invoice_id)}"
-            )
+        for p in list(bf):
+            self.stdout.write(f"{'[dry] ' if dry else ''}DELETE backfill {p.amount} inv={p.invoice_id}")
             if not dry:
-                inv = p.invoice
-                # Reverse inflated amount_paid before delete
-                Payment.objects.filter(pk=p.pk).delete()
-                # amount_paid will be rebuilt in step 2
+                p.delete()
             removed += 1
 
-        # ── 2) Rebuild amount_paid / balance from Payment rows ─────────────
+        apps = Application.objects.filter(student__isnull=False).select_related("student", "school")
+        if school_id:
+            apps = apps.filter(school_id=school_id)
+
+        for app in apps.iterator():
+            student = app.student
+            adm_total = (
+                AdmissionFeePayment.objects.filter(application=app).aggregate(t=Sum("amount"))["t"]
+                or Decimal("0")
+            )
+            if adm_total <= 0:
+                continue
+
+            existing = (
+                Payment.objects.filter(invoice__student=student)
+                .exclude(payment_method="TRANSFER")
+                .aggregate(t=Sum("amount"))["t"]
+                or Decimal("0")
+            )
+            shortfall = adm_total - existing
+            self.stdout.write(
+                f"{student.admission_number}: admission_rows={adm_total} "
+                f"payments={existing} shortfall={shortfall}"
+            )
+            if shortfall <= 0:
+                continue
+
+            invoices = list(
+                Invoice.objects.filter(student=student).order_by("due_date", "generated_at", "id")
+            )
+            if not invoices:
+                fs_id = getattr(student, "fee_structure_id", None)
+                if fs_id and not dry:
+                    try:
+                        assignment, _ = StudentFeeAssignment.objects.get_or_create(
+                            student=student,
+                            defaults={"fee_structure_id": fs_id},
+                        )
+                        try:
+                            from apps.finance.signals import regenerate_invoices_for_assignment
+                            regenerate_invoices_for_assignment(assignment)
+                        except Exception as e:
+                            self.stderr.write(f"regen invoices: {e}")
+                        invoices = list(
+                            Invoice.objects.filter(student=student).order_by(
+                                "due_date", "generated_at", "id"
+                            )
+                        )
+                    except Exception as e:
+                        self.stderr.write(f"assign {student.admission_number}: {e}")
+
+            if not invoices:
+                no_invoice += 1
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"NO INVOICE {student.admission_number} {student.full_name} "
+                        f"cannot post {shortfall}"
+                    )
+                )
+                continue
+
+            # Distribute shortfall across invoices by remaining capacity (due - payment sum)
+            remaining = shortfall
+            for inv in invoices:
+                if remaining <= 0:
+                    break
+                paid = (
+                    Payment.objects.filter(invoice=inv)
+                    .exclude(payment_method="TRANSFER")
+                    .aggregate(t=Sum("amount"))["t"]
+                    or Decimal("0")
+                )
+                due = Decimal(str(inv.amount_due or 0)) + Decimal(str(inv.late_fee_applied or 0))
+                room = due - paid
+                # If due is 0 but we still have shortfall, put all on first invoice
+                if room <= 0 and inv != invoices[-1]:
+                    continue
+                if room <= 0:
+                    pay_amt = remaining
+                else:
+                    pay_amt = min(remaining, room)
+
+                self.stdout.write(
+                    f"{'[dry] ' if dry else ''}POST {pay_amt} → {inv.invoice_number} "
+                    f"({student.admission_number})"
+                )
+                if not dry:
+                    # Create without double-bump confusion: use objects.create then rebuild
+                    Payment.objects.create(
+                        school=app.school,
+                        invoice=inv,
+                        amount=pay_amt,
+                        payment_method="CASH",
+                        notes=(
+                            "Enrollment school fee (reconcile once) "
+                            f"application={app.id}"
+                        ),
+                    )
+                posted += 1
+                remaining -= pay_amt
+
+        # Rebuild all invoice paid totals from Payment
         inv_qs = Invoice.objects.all()
         if school_id:
             inv_qs = inv_qs.filter(school_id=school_id)
@@ -63,184 +155,23 @@ class Command(BaseCommand):
             )
             due = Decimal(str(inv.amount_due or 0)) + Decimal(str(inv.late_fee_applied or 0))
             balance = max(Decimal("0"), due - paid)
-            is_paid = paid >= due and due > 0
-            if dry:
-                if Decimal(str(inv.amount_paid or 0)) != paid:
-                    self.stdout.write(
-                        f"[dry] Rebuild {inv.invoice_number}: amount_paid "
-                        f"{inv.amount_paid} → {paid}"
-                    )
-            else:
+            if not dry:
                 Invoice.objects.filter(pk=inv.pk).update(
                     amount_paid=paid,
                     balance=balance,
-                    is_paid=is_paid,
-                )
-            rebuilt += 1
-
-        # ── 3) Post missing enrollment collections once ────────────────────
-        apps = Application.objects.filter(student__isnull=False).select_related(
-            "student", "school"
-        )
-        if school_id:
-            apps = apps.filter(school_id=school_id)
-
-        for app in apps.iterator():
-            student = app.student
-            if not student:
-                continue
-
-            adm_total = (
-                AdmissionFeePayment.objects.filter(application=app).aggregate(
-                    t=Sum("amount")
-                )["t"]
-                or Decimal("0")
-            )
-            if adm_total <= 0:
-                continue
-
-            existing = (
-                Payment.objects.filter(invoice__student=student)
-                .exclude(payment_method="TRANSFER")
-                .aggregate(t=Sum("amount"))["t"]
-                or Decimal("0")
-            )
-
-            # Target: at least adm_total recognized as school-fee payments.
-            # If finance later collected more, keep the higher existing total.
-            shortfall = adm_total - existing
-            if shortfall <= 0:
-                self.stdout.write(
-                    f"OK {student.admission_number}: payments={existing} "
-                    f"admission_rows={adm_total} (no shortfall)"
-                )
-                continue
-
-            invoices = list(
-                Invoice.objects.filter(student=student).order_by("due_date", "generated_at", "id")
-            )
-            if not invoices:
-                fs = getattr(student, "fee_structure", None)
-                if fs and not dry:
-                    try:
-                        assignment, _ = StudentFeeAssignment.objects.get_or_create(
-                            student=student,
-                            defaults={"fee_structure": fs},
-                        )
-                        # Prefer signal/regen if available
-                        try:
-                            from apps.finance.signals import regenerate_invoices_for_assignment
-                            regenerate_invoices_for_assignment(assignment)
-                        except Exception:
-                            pass
-                        invoices = list(
-                            Invoice.objects.filter(student=student).order_by(
-                                "due_date", "generated_at", "id"
-                            )
-                        )
-                    except Exception as e:
-                        self.stderr.write(f"Assign failed {student.admission_number}: {e}")
-
-            if not invoices:
-                no_invoice += 1
-                self.stdout.write(
-                    self.style.WARNING(
-                        f"No invoice for {student.admission_number} ({student.full_name}) "
-                        f"— shortfall {shortfall}. Assign fee structure in Finance."
-                    )
-                )
-                continue
-
-            remaining = shortfall
-            for inv in invoices:
-                if remaining <= 0:
-                    break
-                # refresh paid from payments
-                paid = (
-                    Payment.objects.filter(invoice=inv)
-                    .exclude(payment_method="TRANSFER")
-                    .aggregate(t=Sum("amount"))["t"]
-                    or Decimal("0")
-                )
-                due = Decimal(str(inv.amount_due or 0)) + Decimal(str(inv.late_fee_applied or 0))
-                outstanding = max(Decimal("0"), due - paid)
-                if outstanding <= 0:
-                    continue
-                pay_amt = min(remaining, outstanding)
-                self.stdout.write(
-                    f"{'[dry] ' if dry else ''}Post missing {pay_amt} → "
-                    f"{inv.invoice_number} ({student.admission_number})"
-                )
-                if not dry:
-                    Payment.objects.create(
-                        school=app.school,
-                        invoice=inv,
-                        amount=pay_amt,
-                        payment_method="CASH",
-                        reference_number="",
-                        notes=(
-                            "Enrollment school fee deposit (reconcile) "
-                            f"application={app.id}"
-                        ),
-                    )
-                    # Payment.save already bumps amount_paid — rebuild later
-                posted += 1
-                remaining -= pay_amt
-
-            if remaining > 0:
-                inv = invoices[0]
-                self.stdout.write(
-                    f"{'[dry] ' if dry else ''}Post remaining {remaining} → "
-                    f"{inv.invoice_number} ({student.admission_number})"
-                )
-                if not dry:
-                    Payment.objects.create(
-                        school=app.school,
-                        invoice=inv,
-                        amount=remaining,
-                        payment_method="CASH",
-                        notes=(
-                            "Enrollment school fee deposit surplus (reconcile) "
-                            f"application={app.id}"
-                        ),
-                    )
-                posted += 1
-
-        # ── 4) Final rebuild of amount_paid after new posts ────────────────
-        if not dry:
-            inv_qs = Invoice.objects.all()
-            if school_id:
-                inv_qs = inv_qs.filter(school_id=school_id)
-            for inv in inv_qs.iterator():
-                paid = (
-                    Payment.objects.filter(invoice=inv)
-                    .exclude(payment_method="TRANSFER")
-                    .aggregate(t=Sum("amount"))["t"]
-                    or Decimal("0")
-                )
-                due = Decimal(str(inv.amount_due or 0)) + Decimal(str(inv.late_fee_applied or 0))
-                balance = max(Decimal("0"), due - paid)
-                Invoice.objects.filter(pk=inv.pk).update(
-                    amount_paid=paid,
-                    balance=balance,
-                    is_paid=(paid >= due and due > 0),
+                    is_paid=(due > 0 and paid >= due),
                 )
 
-        # Totals report
         pay_qs = Payment.objects.exclude(payment_method="TRANSFER")
-        inv_qs = Invoice.objects.all()
         if school_id:
             pay_qs = pay_qs.filter(school_id=school_id)
-            inv_qs = inv_qs.filter(school_id=school_id)
-        total_payments = pay_qs.aggregate(t=Sum("amount"))["t"] or Decimal("0")
-        total_invoiced = inv_qs.aggregate(t=Sum("amount_due"))["t"] or Decimal("0")
-        total_invoice_paid = inv_qs.aggregate(t=Sum("amount_paid"))["t"] or Decimal("0")
+        total_pay = pay_qs.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+        total_due = inv_qs.aggregate(t=Sum("amount_due"))["t"] or Decimal("0")
+        total_paid_field = inv_qs.aggregate(t=Sum("amount_paid"))["t"] or Decimal("0")
 
         self.stdout.write(self.style.SUCCESS(
-            f"Done. removed_backfill={removed} invoices_touched={rebuilt} "
-            f"posted_missing={posted} still_no_invoice={no_invoice}\n"
-            f"CHECK totals: payment_rows_sum={total_payments} "
-            f"invoice_amount_paid_sum={total_invoice_paid} "
-            f"invoice_amount_due_sum={total_invoiced}"
+            f"Done removed_backfill={removed} posted={posted} no_invoice={no_invoice}\n"
+            f"TOTALS payment_sum={total_pay} invoice_due_sum={total_due} "
+            f"invoice_amount_paid_sum={total_paid_field}"
             + (" (dry-run)" if dry else "")
         ))
