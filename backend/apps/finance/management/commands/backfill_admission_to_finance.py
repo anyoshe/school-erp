@@ -107,7 +107,7 @@ class Command(BaseCommand):
 
             school = app.school
             invoices = list(
-                Invoice.objects.filter(student=student).order_by("due_date", "created_at", "id")
+                Invoice.objects.filter(student=student).order_by("due_date", "generated_at", "id")
             )
             if not invoices:
                 # Try ensure assignment exists if fee_structure on student
