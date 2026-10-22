@@ -637,4 +637,12 @@ class PaymentCreateUpdateSerializer(serializers.ModelSerializer):
         return data
     
     def create(self, validated_data):
-        return Payment.objects.create(**validated_data)
+        payment = Payment.objects.create(**validated_data)
+        try:
+            student = getattr(getattr(payment, "invoice", None), "student", None)
+            if student is not None and getattr(student, "status", None) == "PENDING_CLEARANCE":
+                student.status = "ACTIVE"
+                student.save(update_fields=["status"])
+        except Exception:
+            pass
+        return payment

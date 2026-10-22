@@ -340,7 +340,8 @@ export default function StudentsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="ACTIVE">Active</SelectItem>
+                  <SelectItem value="PENDING_CLEARANCE">Pending finance clearance</SelectItem>
+              <SelectItem value="ACTIVE">Active</SelectItem>
                   <SelectItem value="GRADUATED">Graduated</SelectItem>
                   <SelectItem value="TRANSFERRED">Transferred</SelectItem>
                   <SelectItem value="SUSPENDED">Suspended</SelectItem>

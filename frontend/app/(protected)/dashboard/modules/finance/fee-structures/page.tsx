@@ -10,7 +10,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, Copy, Plus, Loader2 } from "lucide-react";
+import { Pencil, Trash2, Copy, Plus, Loader2, ArrowLeft } from "lucide-react";
+import Link from "next/link";
 import api from "@/utils/api";
 import { toast } from "sonner";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
@@ -169,6 +170,14 @@ export default function FeeStructuresList() {
   const gradeEntries = Object.entries(groupedByGrade);
 
   return (
+    <div>
+      <div className="mb-3 flex items-center gap-2">
+        <Button asChild variant="outline" size="sm">
+          <Link href="/dashboard/modules/finance">
+            <ArrowLeft className="h-4 w-4 mr-1" /> Finance
+          </Link>
+        </Button>
+      </div>
     <div className="space-y-8 p-4 max-w-7xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
@@ -339,6 +348,7 @@ export default function FeeStructuresList() {
         structureId={selectedStructureId}
         cloneFromId={cloneFromId}
       />
+    </div>
     </div>
   );
 }

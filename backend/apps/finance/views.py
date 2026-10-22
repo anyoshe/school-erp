@@ -231,7 +231,31 @@ def _build_finance_dashboard_summary(request):
     pending_invoices = sum(1 for invoice in invoices if max(Decimal("0"), Decimal(str(invoice.balance))) > 0)
 
     total_revenue = sum((Decimal(str(invoice.amount_paid)) for invoice in invoices), Decimal("0"))
-    total_revenue += sum((Decimal(str(p.amount)) for p in admission_payments), Decimal("0"))
+    # Pre-enrollment income (interview/admission) comes from IncomeReceipt — not AdmissionFeePayment.
+    # AdmissionFeePayment rows are legacy and often misclassified term deposits.
+    try:
+        from .models import IncomeReceipt
+        from django.db.models import Sum as DjSum
+        pre_enroll_income = (
+            IncomeReceipt.objects.filter(school_id__in=list(school_ids)).aggregate(t=DjSum("amount"))["t"]
+            or Decimal("0")
+        )
+        interview_income_amt = (
+            IncomeReceipt.objects.filter(school_id__in=list(school_ids), source="INTERVIEW").aggregate(t=DjSum("amount"))["t"]
+            or Decimal("0")
+        )
+        admission_income_amt = (
+            IncomeReceipt.objects.filter(school_id__in=list(school_ids), source="ADMISSION").aggregate(t=DjSum("amount"))["t"]
+            or Decimal("0")
+        )
+    except Exception:
+        pre_enroll_income = Decimal("0")
+        interview_income_amt = Decimal("0")
+        admission_income_amt = Decimal("0")
+    total_revenue = sum((Decimal(str(invoice.amount_paid)) for invoice in invoices), Decimal("0"))
+    # School-fee collected only (invoice payments). Pre-enroll shown separately.
+    school_fee_collected = total_revenue
+    total_revenue_with_pre = school_fee_collected + pre_enroll_income
 
     fee_assignment_ids = {assignment.id for assignment in assignments}
     for invoice in invoices:
@@ -260,14 +284,17 @@ def _build_finance_dashboard_summary(request):
         "stats": {
             "totalOutstanding": float(_round_money(total_outstanding)),
             "totalAssigned": float(_round_money(total_assigned)),
-            "totalRevenue": float(_round_money(total_revenue)),
+            "totalRevenue": float(_round_money(school_fee_collected)),
             "totalStudentsWithFees": len(assignments),
             "studentsWithBalance": len(students_with_balance),
             "overdueBalance": float(_round_money(overdue_balance)),
             "pendingInvoices": pending_invoices,
             "totalInvoiced": float(_round_money(total_assigned)),
-            "totalAdmissionPayments": float(_round_money(sum((Decimal(str(p.amount)) for p in admission_payments), Decimal("0")))),
-            "legacyEnrollmentDeposits": float(_round_money(sum((Decimal(str(p.amount)) for p in legacy_deposit_rows), Decimal("0")))),
+            "totalAdmissionPayments": float(_round_money(admission_income_amt)),
+            "totalInterviewPayments": float(_round_money(interview_income_amt)),
+            "preEnrollmentIncome": float(_round_money(pre_enroll_income)),
+            "schoolFeeCollected": float(_round_money(school_fee_collected)),
+            "legacyEnrollmentDeposits": 0.0,
         },
         "revenueByPeriod": {
             "all": float(_round_money(revenue_by_period["all"])),

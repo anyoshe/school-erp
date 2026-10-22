@@ -13,6 +13,7 @@ User = settings.AUTH_USER_MODEL
 
 class Student(models.Model):
     class Status(models.TextChoices):
+        PENDING_CLEARANCE = "PENDING_CLEARANCE", "Pending finance clearance"
         ACTIVE = "ACTIVE", "Active"
         GRADUATED = "GRADUATED", "Graduated"
         TRANSFERRED = "TRANSFERRED", "Transferred"

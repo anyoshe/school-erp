@@ -633,10 +633,10 @@ class Application(models.Model):
             initial_amount = Decimal('0')
             reference = ''
 
-        # Enrollment deposit is school/term fee money — posted only as finance.Payment on invoices.
-        # Do NOT create AdmissionFeePayment here (that table is for true admission/registration fees only).
-        if initial_amount > 0:
-            pass  # Payment rows are created later against student invoices in this method
+        # Term fees are collected only in Finance after enrollment.
+        # Admissions only confirms interview + admission charges; no term deposit here.
+        initial_amount = Decimal("0")
+        reference = ""
 
         # Generate admission number if missing
         if not self.admission_number:
@@ -768,6 +768,7 @@ class Application(models.Model):
             vaccination_status=wd.get('vaccination_status', 'UNKNOWN'),
 
             fee_structure=fee_structure_obj,
+            status="PENDING_CLEARANCE",
             created_by=created_by_user,
         )
 

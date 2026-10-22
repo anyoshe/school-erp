@@ -884,20 +884,8 @@ export default function EnrollmentWizardModal({
         return formData.guardian_name && formData.guardian_phone && formData.guardian_national_id;
 
       case 6: {
-        const deposit = Number(formData.initial_payment_amount || 0);
-        const hasPaymentProof =
-          deposit <= 0 ||
-          String(formData.initial_payment_reference || "").trim().length > 2 ||
-          !!formData.initial_payment_proof;
-
-        const waiverIsValid =
-          !formData.is_waived ||
-          String(formData.waiver_reason || "").trim().length >= 2;
-
-        const allocationValid = isItemAllocationValid();
-        const paymentPlanOk =
-          paymentPlans.length === 0 || !!formData.payment_plan;
-
+        // Term / school fees are collected in Finance after enroll.
+        // Admissions only requires interview + admission charges satisfied.
         const chargesOk =
           applicationCharges.length === 0 ||
           ["INTERVIEW", "ADMISSION"].every((t) => {
@@ -908,13 +896,8 @@ export default function EnrollmentWizardModal({
           });
 
         const isValid =
-          !!formData.fee_structure_id &&
-          paymentPlanOk &&
           formData.terms_accepted === true &&
           formData.summary_confirmed === true &&
-          hasPaymentProof &&
-          waiverIsValid &&
-          allocationValid &&
           chargesOk;
 
         return isValid;
