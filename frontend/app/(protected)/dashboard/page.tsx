@@ -88,12 +88,16 @@ export default function DashboardHome() {
           onClick={() => router.push("/dashboard/modules/students")}
         />
         <Kpi
-          label="Collected this month"
+          label={
+            pulse?.finance?.current_term
+              ? `Collected · ${pulse.finance.current_term}`
+              : "Collected this month"
+          }
           value={pulseQ.isLoading ? "…" : `${currency} ${Number(pulse?.finance?.collected_month || 0).toLocaleString()}`}
           sub={
             pulseQ.isLoading
               ? "Loading…"
-              : `Fees ${Number(pulse?.finance?.collected_fees_month || 0).toLocaleString()} · Adm ${Number(pulse?.finance?.collected_admission_month || 0).toLocaleString()} · Int ${Number(pulse?.finance?.collected_interview_month || 0).toLocaleString()}`
+              : `${pulse?.finance?.current_term || "Term"} ${pulse?.finance?.current_year || ""} · Fees ${Number(pulse?.finance?.collected_fees_month || 0).toLocaleString()} · Adm ${Number(pulse?.finance?.collected_admission_month || 0).toLocaleString()} · Int ${Number(pulse?.finance?.collected_interview_month || 0).toLocaleString()}`
           }
           icon={DollarSign}
           tone="amber"
@@ -134,7 +138,13 @@ export default function DashboardHome() {
             Collections breakdown
           </h2>
           <p className="text-xs text-stone-500 mb-4">
-            Term school fees vs pre-enrollment admission and interview fees.
+            {pulse?.finance?.current_term
+              ? `${pulse.finance.current_term} · ${pulse.finance.current_year || ""} — school fees vs admission & interview.`
+              : "School fees vs pre-enrollment admission and interview fees."}
+            {" "}
+            <a href="/dashboard/modules/finance" className="text-amber-800 underline font-medium">
+              Open Finance to switch term
+            </a>
           </p>
           <div className="grid sm:grid-cols-3 gap-3">
             {[
