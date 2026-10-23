@@ -346,8 +346,8 @@ export default function FinanceDashboard() {
           { href: "/dashboard/modules/finance/payment-plans", label: "Manage Payment Plans", variant: "default" as const, className: "bg-primary hover:bg-primary-700" },
           { href: "/dashboard/modules/finance/student-assignments", label: "Assign Fees to Students", variant: "outline" as const },
           { href: "/dashboard/modules/finance/invoices", label: "View & Manage Invoices", variant: "outline" as const },
-          { href: "/dashboard/modules/finance/payments", label: "Record Payments", variant: "default" as const, className: "bg-secondary hover:bg-secondary-700" },
-          { href: "/dashboard/modules/finance/post-balances", label: "Post Balances", variant: "default" as const, className: "bg-secondary hover:bg-secondary-700" },
+          { href: "/dashboard/modules/finance/clearance", label: "Awaiting clearance", variant: "default" as const, className: "bg-emerald-600 hover:bg-emerald-700 text-white" },
+          { href: "/dashboard/modules/finance/payments", label: "Record term payments", variant: "default" as const, className: "bg-secondary hover:bg-secondary-700" },
           { href: "/dashboard/modules/finance/receipts", label: "Print Receipts", variant: "outline" as const },
           { href: "/dashboard/modules/finance/reports", label: "View Reports", variant: "outline" as const },
         ].map((btn, i) => (

@@ -46,6 +46,85 @@ def _get_assignment_period_meta(assignment: StudentFeeAssignment):
 def _build_finance_dashboard_summary(request):
     school_ids = _resolve_school_ids(request)
     today = timezone.now().date()
+    from django.db.models import Sum as DjSum, Count, Q as DjQ
+
+    # ── Fast aggregates (avoid loading every assignment/invoice into memory) ──
+    inv_base = Invoice.objects.filter(
+        Q(school_id__in=school_ids) | Q(student__school_id__in=school_ids)
+    )
+    pay_base = Payment.objects.filter(
+        Q(school_id__in=school_ids) | Q(invoice__student__school_id__in=school_ids)
+    ).exclude(payment_method="TRANSFER")
+
+    school_fee_collected_fast = pay_base.aggregate(t=DjSum("amount"))["t"] or Decimal("0")
+    total_invoiced_fast = inv_base.aggregate(t=DjSum("amount_due"))["t"] or Decimal("0")
+    # Outstanding = sum of (amount_due + late - amount_paid) for unpaid
+    outstanding_fast = Decimal("0")
+    overdue_fast = Decimal("0")
+    pending_count = 0
+    students_bal = set()
+    for row in inv_base.values("id", "student_id", "amount_due", "late_fee_applied", "amount_paid", "due_date"):
+        due = Decimal(str(row["amount_due"] or 0)) + Decimal(str(row["late_fee_applied"] or 0))
+        paid = Decimal(str(row["amount_paid"] or 0))
+        bal = max(Decimal("0"), due - paid)
+        if bal > 0:
+            pending_count += 1
+            outstanding_fast += bal
+            students_bal.add(str(row["student_id"]))
+            if row["due_date"] and row["due_date"] < today:
+                overdue_fast += bal
+
+    try:
+        from .models import IncomeReceipt
+        pre_enroll_income = (
+            IncomeReceipt.objects.filter(school_id__in=list(school_ids)).aggregate(t=DjSum("amount"))["t"]
+            or Decimal("0")
+        )
+        interview_income_amt = (
+            IncomeReceipt.objects.filter(school_id__in=list(school_ids), source="INTERVIEW").aggregate(t=DjSum("amount"))["t"]
+            or Decimal("0")
+        )
+        admission_income_amt = (
+            IncomeReceipt.objects.filter(school_id__in=list(school_ids), source="ADMISSION").aggregate(t=DjSum("amount"))["t"]
+            or Decimal("0")
+        )
+    except Exception:
+        pre_enroll_income = Decimal("0")
+        interview_income_amt = Decimal("0")
+        admission_income_amt = Decimal("0")
+
+    # Prefer fast path for headline stats; skip heavy fee-group walk when ?lite=1 or always for speed
+    use_lite = True  # always use aggregate path for dashboard speed
+
+    if use_lite:
+        return {
+            "stats": {
+                "totalOutstanding": float(_round_money(outstanding_fast)),
+                "totalAssigned": float(_round_money(total_invoiced_fast)),
+                "totalRevenue": float(_round_money(school_fee_collected_fast)),
+                "totalStudentsWithFees": StudentFeeAssignment.objects.filter(
+                    student__school_id__in=school_ids
+                ).count(),
+                "studentsWithBalance": len(students_bal),
+                "overdueBalance": float(_round_money(overdue_fast)),
+                "pendingInvoices": pending_count,
+                "totalInvoiced": float(_round_money(total_invoiced_fast)),
+                "totalAdmissionPayments": float(_round_money(admission_income_amt)),
+                "totalInterviewPayments": float(_round_money(interview_income_amt)),
+                "preEnrollmentIncome": float(_round_money(pre_enroll_income)),
+                "schoolFeeCollected": float(_round_money(school_fee_collected_fast)),
+                "legacyEnrollmentDeposits": 0.0,
+            },
+            "revenueByPeriod": {
+                "all": float(_round_money(school_fee_collected_fast)),
+                "year": float(_round_money(school_fee_collected_fast)),
+                "term": float(_round_money(school_fee_collected_fast)),
+                "session": float(_round_money(school_fee_collected_fast)),
+            },
+            "detectedTerm": "Term",
+            "detectedYear": str(today.year),
+            "feeGroupBreakdown": [],
+        }
 
     assignments = list(
         StudentFeeAssignment.objects.filter(student__school_id__in=school_ids)
