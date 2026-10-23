@@ -139,6 +139,10 @@
 #     offer_issued_at = models.DateTimeField(null=True, blank=True)
 #     offer_method = models.CharField(max_length=20, blank=True)  # 'email', 'whatsapp', 'download', etc.
 #     accepted_at = models.DateTimeField(null=True, blank=True)
+    # Term selected at enroll — Finance uses this to match fee structure
+    enrollment_term = models.CharField(max_length=50, blank=True, default="")
+    enrollment_academic_year = models.CharField(max_length=20, blank=True, default="")
+
 #     acceptance_notes = models.TextField(blank=True)
 
 #     # Documents / Media
@@ -634,9 +638,16 @@ class Application(models.Model):
 
         # === Payment Handling ===
         # School fees are collected only in Finance (clearance desk).
-        # Admissions only issues admission number after interview/admission charges.
         initial_amount = Decimal("0")
         reference = ""
+
+        # Persist term chosen on Step 6 for Finance structure matching
+        et = str(wd.get("enrollment_term") or "").strip()
+        ey = str(wd.get("enrollment_academic_year") or "").strip()
+        if et or ey:
+            self.enrollment_term = et or self.enrollment_term
+            self.enrollment_academic_year = ey or self.enrollment_academic_year
+            self.save(update_fields=["enrollment_term", "enrollment_academic_year"])
 
         # Generate admission number if missing
         if not self.admission_number:

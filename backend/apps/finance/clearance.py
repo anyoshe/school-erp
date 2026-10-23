@@ -79,6 +79,19 @@ def ensure_student_billing(student, user=None, academic_year=None, period_name=N
     )
     from .signals import create_invoice_lines_for_assignment
 
+    # Prefer term/year chosen at enrollment (Application Step 6)
+    if not academic_year or not period_name:
+        try:
+            from apps.admissions.models import Application
+            app = Application.objects.filter(student=student).only(
+                "enrollment_term", "enrollment_academic_year"
+            ).first()
+            if app:
+                period_name = period_name or (app.enrollment_term or None)
+                academic_year = academic_year or (app.enrollment_academic_year or None)
+        except Exception:
+            pass
+
     structure = student.fee_structure
     if structure is None:
         structure = find_fee_structure(student, academic_year, period_name)

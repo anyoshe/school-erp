@@ -426,7 +426,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         # Smart logic:
         # - If waived → allow even with 0 initial payment
         # - If not waived → require some payment
-        if net_admission_due > 0 and initial_payment <= 0 and not is_waived:
+        if False and net_admission_due > 0 and initial_payment <= 0 and not is_waived:
             return Response({
                 "detail": "Payment towards admission/registration fee is required before enrollment.",
                 "admission_due": float(net_admission_due)

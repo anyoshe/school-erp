@@ -322,6 +322,8 @@ export default function EnrollmentWizardModal({
 
     // ── New final fields ───────────────────────────────
     admission_date: today,
+    enrollment_term: "",
+    enrollment_academic_year: "",
     terms_accepted: false,
     summary_confirmed: false,
   }));
@@ -884,10 +886,12 @@ export default function EnrollmentWizardModal({
         return formData.guardian_name && formData.guardian_phone && formData.guardian_national_id;
 
       case 6: {
-        // Finance collects school fees. Admissions only confirms enrollment.
+        const termOk = Boolean(String(formData.enrollment_term || "").trim());
+        const yearOk = Boolean(String(formData.enrollment_academic_year || "").trim());
         const isValid =
-          formData.terms_accepted === true &&
-          formData.summary_confirmed === true;
+          termOk &&
+          yearOk &&
+          formData.terms_accepted === true;
         return isValid;
       }
       default:
@@ -899,8 +903,16 @@ export default function EnrollmentWizardModal({
     if (validateStep(currentStep)) {
       setCurrentStep((prev) => Math.min(prev + 1, totalSteps));
     } else {
-      if (currentStep === 6 && !isItemAllocationValid()) {
-        toast.error("Deposit allocation total must equal the entered amount before enrollment.");
+      if (currentStep === 6) {
+        if (!String(formData.enrollment_term || "").trim()) {
+          toast.error("Select the term the student is enrolling into.");
+        } else if (!String(formData.enrollment_academic_year || "").trim()) {
+          toast.error("Select the academic year.");
+        } else if (!formData.terms_accepted) {
+          toast.error("Accept the terms to enroll.");
+        } else {
+          toast.error("Complete the enrollment checklist.");
+        }
       } else {
         toast.error("Please complete all required fields.");
       }
@@ -937,9 +949,10 @@ export default function EnrollmentWizardModal({
       });
 
       // Explicit mapping for important fields (safety)
-      if (formData.fee_structure_id) {
-        payload.set("fee_structure", String(formData.fee_structure_id));
-      }
+      payload.set("initial_payment_amount", "0");
+      payload.set("enrollment_term", String(formData.enrollment_term || ""));
+      payload.set("enrollment_academic_year", String(formData.enrollment_academic_year || ""));
+      // Do not send fee_structure from admissions — Finance assigns by grade + term
 
       if (formData.payment_plan) {
         payload.set("payment_plan", String(formData.payment_plan));   // This is important
@@ -1400,822 +1413,102 @@ export default function EnrollmentWizardModal({
         );
 
       case 6: {
-        const selectedStructure = feeStructures.find(
-          (fs) => String(fs.id) === String(formData.fee_structure_id)
-        );
+        return (
+          <div className="space-y-5">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-950">
+              <p className="font-semibold">Enrollment only — school fees are collected in Finance</p>
+              <p className="mt-1 text-emerald-900/90">
+                Select the academic year and term. After enroll, the learner gets an admission
+                number and appears under <strong>Finance → Awaiting clearance</strong> for fee
+                structure and payments.
+              </p>
+            </div>
 
-        const selectedPlan = paymentPlans.find(
-          (p) => String(p.id) === String(formData.payment_plan)
-        );
-
-        if (!selectedStructure) {
-          return (
-            <div className="space-y-6 p-4">
-              <section className="space-y-3">
-                <Label className="text-sm font-bold">Fee structure (from Finance)</Label>
-                <p className="text-xs text-muted-foreground">
-                  Same active structures as the admission offer letter for{" "}
-                  <strong>{applicationData?.class_applied?.name || "this grade"}</strong>.
-                </p>
-                {feeLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-                {feeError && (
-                  <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-3">
-                    {feeError}
-                  </p>
-                )}
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Academic year *</label>
+                <Input
+                  className="mt-1"
+                  placeholder="e.g. 2026"
+                  value={formData.enrollment_academic_year || ""}
+                  onChange={(e) => updateForm("enrollment_academic_year", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Enrolling into term *</label>
                 <Select
-                  value={formData.fee_structure_id}
-                  onValueChange={(val) => {
-                    updateForm("fee_structure_id", val);
-                    updateForm("selected_optional_items", []);
-                  }}
-                  disabled={feeLoading || feeStructures.length === 0}
+                  value={formData.enrollment_term || "none"}
+                  onValueChange={(v) => updateForm("enrollment_term", v === "none" ? "" : v)}
                 >
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={
-                        feeStructures.length
-                          ? "Choose term structure…"
-                          : "No structure for this grade"
-                      }
-                    />
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select term" />
                   </SelectTrigger>
                   <SelectContent>
-                    {feeStructures.map((fs: any) => (
-                      <SelectItem key={fs.id} value={String(fs.id)}>
-                        {fs.period_name ? `${fs.period_name} — ${fs.name}` : fs.name}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="none">Select term…</SelectItem>
+                    <SelectItem value="Term 1">Term 1</SelectItem>
+                    <SelectItem value="Term 2">Term 2</SelectItem>
+                    <SelectItem value="Term 3">Term 3</SelectItem>
+                    <SelectItem value="Semester 1">Semester 1</SelectItem>
+                    <SelectItem value="Semester 2">Semester 2</SelectItem>
                   </SelectContent>
                 </Select>
-              </section>
-              <div className="text-center text-slate-500 py-10 text-sm">
-                {feeStructures.length === 0
-                  ? "Create an active fee structure in Finance for this grade, then return here."
-                  : "Select a fee structure above to continue enrollment."}
               </div>
             </div>
-          );
-        }
 
-        const ADMISSION_CATEGORY_NAME = "Admission & Registration";
-
-        const allItems = selectedStructure?.structure_items ?? [];
-
-        const optionalItemIds = new Set(
-          (selectedStructure?.available_optional_items ?? []).map((id: number) => String(id))
-        );
-
-        const admissionItems = allItems.filter((si: any) => {
-          const cat = (si.category_name || si.item_details?.category_name || "").trim();
-          return cat === ADMISSION_CATEGORY_NAME;
-        });
-
-        const admissionItemIds = new Set(
-          admissionItems.map((si: any) => String(si.item?.id || si.item))
-        );
-
-        const mandatoryItems = allItems.filter((si: any) => {
-          const itemId = String(si.item?.id || si.item);
-          return !optionalItemIds.has(itemId) || admissionItemIds.has(itemId);
-        });
-
-        const optionalItemsInStructure = allItems.filter((si: any) => {
-          const itemId = String(si.item?.id || si.item);
-          return optionalItemIds.has(itemId) && !admissionItemIds.has(itemId);
-        });
-
-        const selectedOptionalIds: string[] = (formData.selected_optional_items ?? [])
-          .map((id: any) => String(id))
-          .filter((id: string) => !admissionItemIds.has(id));
-
-        const totalAdmissionAmount = admissionItems.reduce((sum: number, si: any) =>
-          sum + Number(si.amount || 0), 0
-        );
-
-        const netAdmission = formData.is_waived
-          ? Math.max(0, totalAdmissionAmount - Number(formData.waiver_amount || 0))
-          : totalAdmissionAmount;
-
-        const otherMandatoryAmount = mandatoryItems
-          .filter((si: any) => {
-            const cat = (si.category_name || si.item_details?.category_name || "").trim();
-            return cat !== ADMISSION_CATEGORY_NAME;
-          })
-          .reduce((sum: number, si: any) => sum + Number(si.amount || 0), 0);
-
-        const optionalTotal = selectedOptionalIds.reduce((sum: number, id: string | number) => {
-          const matchingSI = selectedStructure?.structure_items?.find((si: any) =>
-            String(si.item?.id || si.item) === String(id)
-          );
-          return sum + (matchingSI ? Number(matchingSI.amount || 0) : 0);
-        }, 0);
-
-        const totalDueNow = otherMandatoryAmount + netAdmission + optionalTotal;
-        const depositAllocated = getItemAmountTotal(formData.item_amounts || {});
-        const depositPaid = depositAllocated > 0 ? depositAllocated : Number(formData.initial_payment_amount || 0);
-        const balanceDue = Math.max(0, totalDueNow - depositPaid);
-
-        type AllocationItem = {
-          itemId: string;
-          name: string;
-          category: string;
-          cost: number;
-          allocated: number;
-          isAdmission: boolean;
-        };
-
-        const allocationItems: AllocationItem[] = selectedStructure
-          ? getSelectedFeeItems(selectedStructure).map((si: any) => {
-            const itemId = String(si.item?.id || si.item);
-            const netAdmissionByItem = getAdmissionNetByItem(selectedStructure);
-            const cost = getAllocationItemCost(si, netAdmissionByItem);
-            return {
-              itemId,
-              name: si.item_name || si.item_details?.name || si.name || si.description || "Fee item",
-              category: si.category_name || si.item_details?.category_name || si.item_details?.category?.name || "Fees",
-              cost,
-              allocated: Number(formData.item_amounts?.[itemId] || 0),
-              isAdmission: admissionItemIds.has(itemId),
-            };
-          })
-          : [];
-
-        const allocatedDepositTotal = getItemAmountTotal(formData.item_amounts || {});
-        const suggestTransport = formData.transport_mode === "school_bus";
-        const transportItem = selectedStructure.available_optional_items_details?.find((it: any) =>
-          it.name.toLowerCase().includes("transport") || it.name.toLowerCase().includes("bus")
-        );
-
-        return (
-          <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-
-              {/* LEFT COLUMN */}
-              <div className="lg:col-span-3 space-y-6">
-
-
-                {/* Pre-enrollment charges (interview / admission) */}
-                <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
-                  <h3 className="font-semibold text-lg">Pre-enrollment charges</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Interview fee is decided when scheduling/completing the interview; admission fee when accepting the offer. If both show Decided, you only handle term fees below. Any undecided charge must be completed here before enroll.
-                  </p>
-                  {chargesLoading ? (
-                    <p className="text-sm text-muted-foreground">Loading charges…</p>
-                  ) : applicationCharges.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No charges configured yet.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {["INTERVIEW", "ADMISSION"].map((ctype) => {
-                        const c = applicationCharges.find((x) => x.charge_type === ctype);
-                        if (!c) return null;
-                        const label = ctype === "INTERVIEW" ? "Interview fee" : "Admission / registration fee";
-                        return (
-                          <div key={ctype} className="rounded-lg border bg-slate-50 p-3 space-y-2">
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="font-medium text-sm">{label}</span>
-                              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                                c.is_satisfied ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900"
-                              }`}>
-                                {c.is_satisfied ? "Satisfied" : "Outstanding"}
-                              </span>
-                            </div>
-                            <div className="flex flex-wrap gap-2 items-center">
-                              <Select
-                                value={c.policy}
-                                onValueChange={(v) =>
-                                  updateApplicationCharge(ctype, {
-                                    policy: v,
-                                    waiver_reason: v === "WAIVED" || v === "DISCOUNTED" ? c.waiver_reason || "Staff adjustment" : "",
-                                  })
-                                }
-                              >
-                                <SelectTrigger className="h-9 w-[180px] bg-white">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="NOT_APPLICABLE">Not applicable</SelectItem>
-                                  <SelectItem value="FULL">Full amount due</SelectItem>
-                                  <SelectItem value="DISCOUNTED">Discounted</SelectItem>
-                                  <SelectItem value="WAIVED">Waived</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <span className="text-sm font-mono">
-                                Due {currencySymbol} {Number(c.amount_due || 0).toLocaleString()}
-                                {Number(c.amount_paid) > 0
-                                  ? ` · Paid ${Number(c.amount_paid).toLocaleString()}`
-                                  : ""}
-                              </span>
-                            </div>
-                            {(c.policy === "FULL" || c.policy === "DISCOUNTED") && !c.is_satisfied && (
-                              <div className="flex gap-2 items-end">
-                                <div className="flex-1">
-                                  <Label className="text-xs">Record payment amount</Label>
-                                  <Input
-                                    type="number"
-                                    className="h-9"
-                                    defaultValue={c.amount_due}
-                                    id={`pay-${ctype}`}
-                                  />
-                                </div>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="secondary"
-                                  onClick={() => {
-                                    const el = document.getElementById(`pay-${ctype}`) as HTMLInputElement | null;
-                                    const amt = Number(el?.value || c.amount_due || 0);
-                                    updateApplicationCharge(ctype, { amount_paid: amt, policy: c.policy });
-                                  }}
-                                >
-                                  Mark paid
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </section>
-
-                {/* Fee Structure */}
-                <section className="space-y-3">
-                  <Label className="text-sm font-bold flex items-center gap-2">
-                    <span className="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px]">1</span>
-                    Fee structure (from Finance)
-                  </Label>
-                  <p className="text-xs text-muted-foreground -mt-1">
-                    Loaded for <strong>{applicationData?.class_applied?.name || "this grade"}</strong> — same active structures used on the admission offer letter. Not an upload.
-                  </p>
-                  {feeLoading && (
-                    <p className="text-sm text-muted-foreground">Loading fee structures…</p>
-                  )}
-                  {feeError && (
-                    <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-3">{feeError}</p>
-                  )}
-                  <Select
-                    value={formData.fee_structure_id}
-                    onValueChange={(val) => {
-                      updateForm("fee_structure_id", val);
-                      updateForm("selected_optional_items", []);
-                    }}
-                    disabled={feeLoading || feeStructures.length === 0}
-                  >
-                    <SelectTrigger className="h-12 border-slate-200">
-                      <SelectValue placeholder={feeStructures.length ? "Choose term structure…" : "No structure for this grade"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {feeStructures.map((fs: any) => (
-                        <SelectItem key={fs.id} value={String(fs.id)}>
-                          {fs.name} — {fs.period_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </section>
-
-                {/* Mandatory Fees */}
-                <section className="space-y-4 bg-slate-50 p-5 rounded-xl border">
-                  <h3 className="font-semibold text-lg">Mandatory Fees</h3>
-                  {/* Admission block */}
-                  <div className="bg-gradient-to-b from-amber-50/70 to-white p-5 rounded-lg border border-amber-200">
-                    <div className="flex justify-between items-center mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold">
-                          1x
-                        </div>
-                        <h4 className="font-semibold">Admission & Registration</h4>
-                      </div>
-                      <p className="text-xl font-bold">{currencySymbol} {totalAdmissionAmount.toLocaleString()}</p>
-                    </div>
-
-                    {admissionItems.length > 0 ? (
-                      <ul className="space-y-2 text-sm">
-                        {admissionItems.map((si: any) => (
-                          <li key={si.id || lineLabel(si)} className="flex justify-between gap-2">
-                            <span>{lineLabel(si)} <span className="text-slate-400">· {lineCat(si)}</span></span>
-                            <span className="font-mono shrink-0">{currencySymbol} {Number(si.amount).toLocaleString()}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-slate-500">No separate “Admission & Registration” category lines — term lines are listed below.</p>
-                    )}
-
-                    {/* Waiver */}
-                    <div className="mt-4 pt-4 border-t">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Checkbox
-                          id="waive-admission"
-                          checked={formData.is_waived}
-                          onCheckedChange={(checked) => {
-                            updateForm("is_waived", checked);
-                            if (!checked) {
-                              updateForm("waiver_amount", 0);
-                              updateForm("waiver_reason", "");
-                            }
-                          }}
-                        />
-                        <Label htmlFor="waive-admission">Waive / discount admission fees</Label>
-                      </div>
-
-                      {formData.is_waived && (
-                        <div className="grid md:grid-cols-2 gap-4 pl-6">
-                          <div>
-                            <Label>Amount ({currencySymbol})</Label>
-                            <Input
-                              type="number"
-                              value={formData.waiver_amount || ""}
-                              onChange={(e) => updateForm("waiver_amount", Number(e.target.value) || 0)}
-                              min={0}
-                              max={totalAdmissionAmount}
-                            />
-                          </div>
-                          <div>
-                            <Label>Reason *</Label>
-                            <Input
-                              value={formData.waiver_reason || ""}
-                              onChange={(e) => updateForm("waiver_reason", e.target.value)}
-                              placeholder="e.g. Staff child"
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="mt-3 flex justify-between font-bold">
-                        <span>Net Admission:</span>
-                        <span>{currencySymbol} {netAdmission.toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Other mandatory */}
-                  <div className="mt-4 space-y-2">
-                    <p className="font-medium">Term school fees (required lines)</p>
-                    {mandatoryItems.filter((si: any) => {
-                      const cat = (si.category_name || si.item_details?.category_name || "").trim();
-                      return cat !== ADMISSION_CATEGORY_NAME;
-                    }).length === 0 && allItems.length === 0 ? (
-                      <p className="text-sm text-amber-700">
-                        No line items on this structure. Open Finance → Fee structures, edit this term, and re-save lines.
-                      </p>
-                    ) : (
-                      <ul className="space-y-1.5 text-sm border rounded-lg bg-white p-3">
-                        {(mandatoryItems.filter((si: any) => {
-                          const cat = (si.category_name || si.item_details?.category_name || "").trim();
-                          return cat !== ADMISSION_CATEGORY_NAME;
-                        }).length
-                          ? mandatoryItems.filter((si: any) => {
-                              const cat = (si.category_name || si.item_details?.category_name || "").trim();
-                              return cat !== ADMISSION_CATEGORY_NAME;
-                            })
-                          : allItems
-                        ).map((si: any) => (
-                          <li key={si.id || lineLabel(si)} className="flex justify-between gap-2">
-                            <span>
-                              {lineLabel(si)}
-                              <span className="text-slate-400"> · {lineCat(si)}</span>
-                            </span>
-                            <span className="font-mono shrink-0">
-                              {currencySymbol} {Number(si.amount || 0).toLocaleString()}
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    <p className="text-lg font-bold mt-1">
-                      Subtotal {currencySymbol}{" "}
-                      {(otherMandatoryAmount || allItems.reduce((s: number, si: any) => s + Number(si.amount || 0), 0)).toLocaleString()}
-                    </p>
-                  </div>
-                </section>
-
-                {/* Optional Services */}
-                {/* 2. Optional Services – FIXED */}
-                <section className="space-y-3">
-                  <Label className="text-sm font-bold flex items-center gap-2 text-primary-600">
-                    <span className="w-6 h-6 rounded-full bg-primary text-white flex items-center justify-center text-[10px]">2</span>
-                    Add Optional Services
-                  </Label>
-
-                  {optionalItemsInStructure.length > 0 ? (
-                    <div className="space-y-2">
-                      {optionalItemsInStructure.map((si: any) => {
-                        const itemId = String(si.item?.id || si.item); // FeeItem ID
-                        const itemDetails = si.item_details || {};
-                        const isChecked = selectedOptionalIds.includes(itemId);
-                        const amount = Number(si.amount || 0);
-
-                        return (
-                          <div
-                            key={itemId}
-                            className={cn(
-                              "flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all",
-                              isChecked
-                                ? "bg-primary-50 border-primary-300 ring-1 ring-primary-200"
-                                : "bg-white border-slate-200 hover:border-primary-300"
-                            )}
-                            onClick={() => {
-                              let nextIds: string[];
-                              if (isChecked) {
-                                nextIds = selectedOptionalIds.filter(id => id !== itemId);
-                              } else {
-                                nextIds = [...selectedOptionalIds, itemId];
-                              }
-                              updateForm("selected_optional_items", nextIds);
-                            }}
-                          >
-                            <div className="flex items-center gap-3 flex-1">
-                              <Checkbox
-                                checked={isChecked}
-                                onCheckedChange={() => { }} // controlled by parent div click
-                                className="pointer-events-none"
-                              />
-                              <div>
-                                <p className="font-medium text-slate-800">
-                                  {lineLabel(si) || itemDetails.name || "Optional service"}
-                                </p>
-                                <p className="text-xs text-slate-500">
-                                  {itemDetails.category_name || "Miscellaneous"}
-                                </p>
-                              </div>
-                            </div>
-                            <div className="text-right min-w-[100px]">
-                              <span className={cn(
-                                "font-mono font-bold text-sm",
-                                isChecked ? "text-primary-600" : "text-slate-500"
-                              )}>
-                                + {amount.toLocaleString()} {currencySymbol}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 border-2 border-dashed rounded-xl bg-slate-50/50">
-                      <p className="text-sm text-slate-400 italic">
-                        No optional items available for this fee structure
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Quick summary of selected optional total */}
-                  {optionalTotal > 0 && (
-                    <div className="text-right text-sm font-medium text-primary-700 pt-2">
-                      Selected optional total: +{optionalTotal.toLocaleString()} {currencySymbol}
-                    </div>
-                  )}
-                </section>
-
-
-
-                {/* Payment Plan */}
-                <section className="space-y-4">
-                  <Label className="text-sm font-bold">Payment Plan</Label>
-                  {paymentPlans.length === 0 ? (
-                    <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-3">
-                      No payment plans for this school yet. Re-open this step or create plans under Finance.
-                      Enrollment can continue with full payment once defaults seed.
-                    </p>
-                  ) : null}
-                  <Select
-                    value={formData.payment_plan || undefined}
-                    onValueChange={(val) => updateForm("payment_plan", val)}
-                    disabled={paymentPlans.length === 0}
-                  >
-                    <SelectTrigger className="h-12">
-                      <SelectValue placeholder={paymentPlans.length ? "Select payment plan" : "No plans available"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {paymentPlans
-                        .filter((plan) => plan.is_active !== false)
-                        .map((plan) => (
-                          <SelectItem key={plan.id} value={String(plan.id)}>
-                            {plan.name} {plan.is_recommended ? "· Recommended" : ""}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-
-                  {selectedPlan && selectedPlan.plan_type === "custom" ? (
-                    <p className="text-xs text-muted-foreground">
-                      This custom/partial plan keeps the remaining balance as one follow-up payment.
-                    </p>
-                  ) : selectedPlan ? (
-                    <p className="text-xs text-muted-foreground">
-                      Balance will be divided into {selectedPlan.number_of_installments} installments
-                      {selectedPlan.plan_type === "weekly" && " (weekly)"}
-                    </p>
-                  ) : null}
-
-                  {selectedPlan?.plan_type === "custom" && (
-                    <div className="mt-4">
-                      <Label>Agreed follow-up payment date</Label>
-                      <Input
-                        type="date"
-                        value={formData.remaining_payment_due_date}
-                        onChange={(e) => updateForm("remaining_payment_due_date", e.target.value)}
-                        min={today}
-                      />
-                    </div>
-                  )}
-                </section>
-
-                {/* PAYMENT SCHEDULE */}
-                {paymentBreakdown.installments.length > 0 ? (
-                  <div className="mt-8 p-6 border-2 border-slate-200 rounded-2xl bg-white">
-                    <h4 className="font-semibold text-xl mb-6">
-                      📅 Payment Schedule — {selectedPlan ? selectedPlan.name : "Custom Plan"}
-                    </h4>
-
-                    <div className="space-y-3">
-                      {/* Initial Payment */}
-                      <div className="grid grid-cols-3 gap-4 bg-secondary-50 p-4 rounded-xl">
-                        <div className="font-medium">Initial Payment</div>
-                        <div className="text-right font-bold text-secondary-700">
-                          {currencySymbol} {paymentBreakdown.initialPayment.toLocaleString()}
-                        </div>
-                        <div className="text-right">Today</div>
-                      </div>
-
-                      {/* Installments */}
-                      {paymentBreakdown.installments.map((inst, index) => (
-                        <div key={index} className="grid grid-cols-3 gap-4 p-4 border rounded-xl">
-                          <div className="font-medium">Installment {index + 1}</div>
-                          <div className="text-right font-semibold">
-                            {currencySymbol} {inst.amount.toLocaleString()}
-                          </div>
-                          <div className="text-right text-slate-600">{inst.dueDate}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-6 pt-4 border-t flex justify-between font-bold text-lg">
-                      <span>Total Amount Due</span>
-                      <span>{currencySymbol} {paymentBreakdown.total.toLocaleString()}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-6 p-6 border border-dashed border-slate-300 rounded-2xl text-center text-slate-500">
-                    Select a payment plan and enter initial payment to see detailed installment schedule
-                  </div>
-                )}
-
-
-                {/* Initial Payment / Deposit - IMPROVED */}
-                <section className="space-y-4 pt-4 border-t">
-                  <Label className="text-base font-bold">Initial Payment / Deposit</Label>
-
-                  {/* Admission Fee Warning */}
-                  {totalAdmissionAmount > 0 && (
-                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm">
-                      <div className="font-medium text-amber-800 mb-1">
-                        Admission & Registration Fee: {currencySymbol} {totalAdmissionAmount.toLocaleString()}
-                      </div>
-                      {formData.is_waived ? (
-                        <p className="text-amber-700">
-                          Waiver applied: {currencySymbol} {Number(formData.waiver_amount || 0).toLocaleString()}
-                          ({formData.waiver_reason || "No reason provided"})
-                        </p>
-                      ) : (
-                        <p className="text-amber-700">
-                          Please pay at least part of the admission fee to proceed with enrollment.
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="grid md:grid-cols-3 gap-4">
-                    <div>
-                      <Label>Amount Paid ({currencySymbol}) *</Label>
-                      <Input
-                        type="number"
-                        value={0}
-                        disabled
-                        onChange={() => {}}
-                        placeholder="e.g. 5000"
-                      />
-                    </div>
-                    <div>
-                      <Label>Reference Code</Label>
-                      <Input
-                        value={formData.initial_payment_reference}
-                        onChange={(e) => updateForm("initial_payment_reference", e.target.value)}
-                        placeholder="MPESA code or bank ref"
-                      />
-                    </div>
-                    <div>
-                      <Label>Proof of Payment (optional)</Label>
-                      <Input
-                        type="file"
-                        onChange={(e) => updateForm("initial_payment_proof", e.target.files?.[0] ?? null)}
-                      />
-                    </div>
-                  </div>
-
-                  {allocationItems.length > 0 && (
-                    <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <p className="text-sm font-semibold">Allocate Deposit (disabled — use Finance clearance) to Fee Items</p>
-                          <p className="text-xs text-slate-500">
-                            Adjust how the paid deposit is assigned across the selected fee items.
-                          </p>
-                        </div>
-                        <div className="text-right text-sm">
-                          <div>Allocated total</div>
-                          <div className="font-semibold">{currencySymbol} {allocatedDepositTotal.toLocaleString()}</div>
-                        </div>
-                      </div>
-
-                      <div className="grid gap-3">
-                        {allocationItems.map((item) => (
-                          <div key={item.itemId} className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr] gap-3 items-end">
-                            <div>
-                              <p className="text-sm font-medium">{item.name}</p>
-                              <p className="text-xs text-slate-500">{item.category}</p>
-                            </div>
-                            <div>
-                              <Label className="text-xs">Item Cost</Label>
-                              <div className="mt-1 text-sm font-semibold">{currencySymbol} {item.cost.toLocaleString()}</div>
-                            </div>
-                            <div>
-                              <Label className="text-xs">Deposit Allocated</Label>
-                              <Input
-                                type="number"
-                                min={0}
-                                max={item.cost}
-                                value={item.allocated || ""}
-                                onChange={(e) => {
-                                  const nextAmount = Number(e.target.value) || 0;
-                                  updateForm("item_amounts", {
-                                    ...formData.item_amounts,
-                                    [item.itemId]: Math.max(0, Math.min(nextAmount, item.cost)),
-                                  });
-                                }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {allocatedDepositTotal !== Number(formData.initial_payment_amount || 0) && (
-                        <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-700">
-                          The deposit amount shown above is based on the item allocations. If you adjust item allocations, the enrollment payment amount will be submitted as {currencySymbol} {allocatedDepositTotal.toLocaleString()}.
-                        </div>
-                      )}
-
-                      {!isItemAllocationValid() && (
-                        <div className="mt-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
-                          The total deposit allocated to items must equal the entered amount paid before you can complete enrollment.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </section>
-
-                {/* Summary */}
-                <section className="space-y-6 pt-6 border-t">
-                  <h4 className="text-lg font-semibold">Final Summary</h4>
-                  <div className="bg-slate-50 p-5 rounded-xl border space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span>Mandatory Fees (excl. admission)</span>
-                        <span>{currencySymbol} {otherMandatoryAmount.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Admission & Registration (net)</span>
-                        <span>{currencySymbol} {netAdmission.toLocaleString()}</span>
-                      </div>
-                      {optionalTotal > 0 && (
-                        <div className="flex justify-between text-primary-700">
-                          <span>Optional Services</span>
-                          <span>+ {currencySymbol} {optionalTotal.toLocaleString()}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between font-bold text-lg border-t pt-2">
-                        <span>Total Due Now</span>
-                        <span className="text-primary-700">{currencySymbol} {totalDueNow.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span>Initial Payment</span>
-                        <span>{currencySymbol} {depositPaid.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between font-bold border-t pt-2">
-                        <span>Balance to Invoice</span>
-                        <span>{currencySymbol} {balanceDue.toLocaleString()}</span>
-                      </div>
-                    </div>
-
-                    {/* Transport hint */}
-                    {suggestTransport && transportItem && !selectedOptionalIds.includes(String(transportItem.id)) && (
-                      <p className="text-amber-700 text-sm bg-amber-50 p-3 rounded">
-                        School bus selected → consider adding <strong>{transportItem.name}</strong>
-                      </p>
-                    )}
-                  </div>
-
-
-                  {/* Confirmations - CRITICAL FIX */}
-                  <div className="space-y-4 pt-4 border-t">
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        id="terms"
-                        checked={formData.terms_accepted === true}   // strict boolean
-                        onCheckedChange={(checked) => {
-                          console.log("Terms checkbox changed to:", checked); // ← temporary debug
-                          updateForm("terms_accepted", checked === true);
-                        }}
-                      />
-                      <Label htmlFor="terms" className="text-sm leading-tight cursor-pointer select-none">
-                        I confirm the guardian has read and accepted the school rules, policies and fee structure.
-                      </Label>
-                    </div>
-
-                    <div className="flex items-start gap-3">
-                      <Checkbox
-                        id="summary-confirm"
-                        checked={formData.summary_confirmed === true}   // strict boolean
-                        onCheckedChange={(checked) => {
-                          console.log("Summary confirm checkbox changed to:", checked); // ← temporary debug
-                          updateForm("summary_confirmed", checked === true);
-                        }}
-                      />
-                      <Label htmlFor="summary-confirm" className="text-sm leading-tight cursor-pointer select-none">
-                        I have carefully reviewed all the above details and confirm they are correct.
-                      </Label>
-                    </div>
-                  </div>
-                </section>
-              </div>
-
-              {/* RIGHT COLUMN – Invoice Preview */}
-              <div className="lg:col-span-2">
-                <div className="bg-slate-900 text-white rounded-3xl p-6 shadow-2xl sticky top-0">
-                  <h4 className="text-sm font-black uppercase tracking-wider text-primary-400 mb-4">
-                    Enrollment Cost Summary
-                  </h4>
-                  <div className="space-y-4">
-                    <div className="flex justify-between text-sm text-slate-400">
-                      <span>Mandatory Fees</span>
-                      <span>{currencySymbol} {(otherMandatoryAmount + netAdmission).toLocaleString()}</span>
-                    </div>
-
-                    {optionalTotal > 0 && (
-                      <div className="flex justify-between text-sm text-primary-300">
-                        <span>Optional Services</span>
-                        <span>+{currencySymbol} {optionalTotal.toLocaleString()}</span>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between font-semibold border-t border-slate-700 pt-3">
-                      <span>Total Term Bill</span>
-                      <span>{currencySymbol} {totalDueNow.toLocaleString()}</span>
-                    </div>
-
-                    {/* This is the missing link that makes the math work */}
-                    <div className="flex justify-between text-secondary-400 text-sm">
-                      <span>Initial Deposit</span>
-                      <span>- {currencySymbol} {depositPaid.toLocaleString()}</span>
-                    </div>
-
-                    <Separator className="bg-slate-700" />
-
-                    <div className="flex justify-between items-end">
-                      <div>
-                        <p className="text-xs text-slate-400 uppercase font-bold">Due Today</p>
-                        <p className="text-2xl font-bold text-white">
-                          {currencySymbol} {depositPaid.toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-slate-400 uppercase font-bold">Remaining</p>
-                        <p className="text-lg font-semibold text-primary-400">
-                          {currencySymbol} {balanceDue.toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-800/50 p-3 rounded-xl border border-slate-700 mt-4">
-                      <p className="text-[10px] text-slate-400 leading-relaxed">
-                        The remaining <span className="text-white font-bold">{currencySymbol} {balanceDue.toLocaleString()}</span> will
-                        {selectedPlan?.plan_type === "custom" ? (
-                          <> be due once on <span className="text-white font-bold">{formData.remaining_payment_due_date}</span>.</>
-                        ) : (
-                          <> be split into <span className="text-white font-bold">{selectedPlan?.number_of_installments || 1} installments</span> as per the {selectedPlan?.name || "selected"} plan.</>
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="rounded-xl border bg-slate-50 p-4 text-sm space-y-2">
+              <p className="font-medium">Pre-enrollment fees (interview / admission)</p>
+              <p className="text-muted-foreground text-xs">
+                These must already be marked paid, waived, or not applicable earlier in the
+                pipeline. School term fees are <strong>not</strong> collected here.
+              </p>
+              {(application as any)?.charges?.length ? (
+                <ul className="divide-y rounded-lg border bg-white">
+                  {((application as any).charges as any[]).map((c: any) => (
+                    <li key={c.id || c.charge_type} className="flex justify-between px-3 py-2 text-sm">
+                      <span>
+                        {c.charge_type === "INTERVIEW"
+                          ? "Interview fee"
+                          : c.charge_type === "ADMISSION"
+                            ? "Admission fee"
+                            : c.charge_type}
+                        {c.policy ? ` · ${c.policy}` : ""}
+                      </span>
+                      <span className="font-medium">
+                        {c.policy === "WAIVED" || c.policy === "NOT_APPLICABLE"
+                          ? c.policy
+                          : Number(c.amount_paid || 0) > 0
+                            ? `Paid ${Number(c.amount_paid).toLocaleString()}`
+                            : `Due ${Number(c.amount_due || 0).toLocaleString()}`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No interview/admission charge rows — treat as not applicable if your school
+                  does not charge them.
+                </p>
+              )}
             </div>
+
+            <label className="flex items-start gap-3 rounded-xl border p-4 cursor-pointer hover:bg-slate-50">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={!!formData.terms_accepted}
+                onChange={(e) => updateForm("terms_accepted", e.target.checked)}
+              />
+              <span className="text-sm">
+                <span className="font-medium">I confirm this enrollment *</span>
+                <span className="block text-muted-foreground mt-0.5">
+                  Details are correct. School fees will be handled at the Finance clearance desk.
+                </span>
+              </span>
+            </label>
           </div>
         );
       }
+
       default:
         return null;
     }
