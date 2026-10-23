@@ -264,6 +264,13 @@ def _build_finance_dashboard_summary(request):
 
     total_revenue_with_pre = school_fee_collected + pre_enroll_income
 
+    # Force period buckets = actual payments only (no structure "recognition" as cash)
+    revenue_by_period["all"] = school_fee_collected
+    revenue_by_period["year"] = school_fee_collected
+    revenue_by_period["term"] = school_fee_collected
+    revenue_by_period["session"] = school_fee_collected
+
+
     # Align period buckets so they cannot exceed real Payment totals (stops 16.4k term vs 1.8k collected)
     try:
         if school_fee_collected > 0:

@@ -884,22 +884,10 @@ export default function EnrollmentWizardModal({
         return formData.guardian_name && formData.guardian_phone && formData.guardian_national_id;
 
       case 6: {
-        // Term / school fees are collected in Finance after enroll.
-        // Admissions only requires interview + admission charges satisfied.
-        const chargesOk =
-          applicationCharges.length === 0 ||
-          ["INTERVIEW", "ADMISSION"].every((t) => {
-            const c = applicationCharges.find(
-              (x) => String(x.charge_type).toUpperCase() === t
-            );
-            return c ? !!c.is_satisfied : true;
-          });
-
+        // Finance collects school fees. Admissions only confirms enrollment.
         const isValid =
           formData.terms_accepted === true &&
-          formData.summary_confirmed === true &&
-          chargesOk;
-
+          formData.summary_confirmed === true;
         return isValid;
       }
       default:
@@ -959,7 +947,7 @@ export default function EnrollmentWizardModal({
 
       const allocationTotal = getItemAmountTotal(formData.item_amounts || {});
       if (allocationTotal > 0) {
-        payload.set("initial_payment_amount", String(allocationTotal));
+        payload.set("initial_payment_amount", "0"); // school fees collected in Finance clearance
       }
 
       if (formData.item_amounts && typeof formData.item_amounts === "object") {
@@ -2005,8 +1993,9 @@ export default function EnrollmentWizardModal({
                       <Label>Amount Paid ({currencySymbol}) *</Label>
                       <Input
                         type="number"
-                        value={formData.initial_payment_amount || ""}
-                        onChange={(e) => updateForm("initial_payment_amount", Number(e.target.value) || 0)}
+                        value={0}
+                        disabled
+                        onChange={() => {}}
                         placeholder="e.g. 5000"
                       />
                     </div>
@@ -2031,7 +2020,7 @@ export default function EnrollmentWizardModal({
                     <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
                       <div className="flex items-center justify-between mb-3">
                         <div>
-                          <p className="text-sm font-semibold">Allocate Deposit to Fee Items</p>
+                          <p className="text-sm font-semibold">Allocate Deposit (disabled — use Finance clearance) to Fee Items</p>
                           <p className="text-xs text-slate-500">
                             Adjust how the paid deposit is assigned across the selected fee items.
                           </p>
