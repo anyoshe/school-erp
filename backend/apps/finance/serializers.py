@@ -481,6 +481,35 @@ class InvoicePaymentSerializer(serializers.ModelSerializer):
         ]
 
 
+class InvoiceLiteSerializer(serializers.ModelSerializer):
+    """Fast list for payment forms — no nested payment history / heavy trees."""
+    student_name = serializers.SerializerMethodField()
+    student_admission = serializers.CharField(source="student.admission_number", read_only=True)
+    balance = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Invoice
+        fields = [
+            "id", "invoice_number", "student", "student_name", "student_admission",
+            "amount_due", "amount_paid", "balance", "is_paid", "due_date",
+            "term", "academic_year",
+        ]
+
+    def get_student_name(self, obj):
+        s = obj.student
+        if not s:
+            return ""
+        return f"{s.first_name} {s.last_name}".strip()
+
+    def get_balance(self, obj):
+        try:
+            due = float(obj.amount_due or 0) + float(obj.late_fee_applied or 0)
+            paid = float(obj.amount_paid or 0)
+            return max(0.0, due - paid)
+        except Exception:
+            return float(getattr(obj, "balance", 0) or 0)
+
+
 class InvoiceSerializer(serializers.ModelSerializer):
     student = StudentSerializer(read_only=True)
     fee_assignment = StudentFeeAssignmentSerializer(read_only=True)

@@ -773,14 +773,27 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return InvoiceCreateUpdateSerializer
+        if self.action == "list":
+            from .serializers import InvoiceLiteSerializer
+            return InvoiceLiteSerializer
         return InvoiceSerializer
 
-  
     def get_queryset(self):
         school_ids = accessible_school_ids(self.request)
-        return self.queryset.filter(
+        qs = Invoice.objects.select_related("student").filter(
             Q(school_id__in=school_ids) | Q(student__school_id__in=school_ids)
         ).distinct()
+        unpaid = self.request.query_params.get("unpaid")
+        if unpaid in ("1", "true", "True"):
+            # balance > 0 approximately
+            from django.db.models import F
+            qs = qs.filter(is_paid=False)
+        # list does not need payments/lines
+        return qs.only(
+            "id", "invoice_number", "student_id", "amount_due", "amount_paid",
+            "late_fee_applied", "balance", "is_paid", "due_date", "term",
+            "academic_year", "school_id",
+        )
 
     @action(detail=False, methods=['get'], url_path='overdue')
     def overdue_invoices(self, request):
@@ -791,6 +804,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
 class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.select_related('invoice__student', 'paid_by').all()
+    pagination_class = None
     permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['invoice', 'invoice__student', 'payment_method', 'paid_at']
