@@ -139,10 +139,6 @@
 #     offer_issued_at = models.DateTimeField(null=True, blank=True)
 #     offer_method = models.CharField(max_length=20, blank=True)  # 'email', 'whatsapp', 'download', etc.
 #     accepted_at = models.DateTimeField(null=True, blank=True)
-    # Term selected at enroll — Finance uses this to match fee structure
-    enrollment_term = models.CharField(max_length=50, blank=True, default="")
-    enrollment_academic_year = models.CharField(max_length=20, blank=True, default="")
-
 #     acceptance_notes = models.TextField(blank=True)
 
 #     # Documents / Media
@@ -557,6 +553,11 @@ class Application(models.Model):
     offer_issued_at = models.DateTimeField(null=True, blank=True)
     offer_method = models.CharField(max_length=20, blank=True)
     accepted_at = models.DateTimeField(null=True, blank=True)
+
+    # Term selected at enroll — Finance uses this to match fee structure
+    enrollment_term = models.CharField(max_length=50, blank=True, default="")
+    enrollment_academic_year = models.CharField(max_length=20, blank=True, default="")
+
     acceptance_notes = models.TextField(blank=True)
 
     # Documents / Misc
