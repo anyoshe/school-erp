@@ -1461,9 +1461,11 @@ export default function EnrollmentWizardModal({
                 These must already be marked paid, waived, or not applicable earlier in the
                 pipeline. School term fees are <strong>not</strong> collected here.
               </p>
-              {(application as any)?.charges?.length ? (
+              {chargesLoading ? (
+                <p className="text-xs text-muted-foreground">Loading charge status…</p>
+              ) : applicationCharges?.length ? (
                 <ul className="divide-y rounded-lg border bg-white">
-                  {((application as any).charges as any[]).map((c: any) => (
+                  {applicationCharges.map((c: any) => (
                     <li key={c.id || c.charge_type} className="flex justify-between px-3 py-2 text-sm">
                       <span>
                         {c.charge_type === "INTERVIEW"
