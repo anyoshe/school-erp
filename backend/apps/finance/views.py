@@ -847,3 +847,44 @@ class IncomeReceiptListView(APIView):
             for r in qs.order_by("-paid_at")[:200]
         ]
         return Response(data)
+
+
+class AwaitingClearanceView(APIView):
+    """Students enrolled from admissions but not yet cleared by Finance."""
+    permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
+
+    def get(self, request):
+        from apps.students.models import Student
+        from apps.finance.models import Invoice, Payment
+        from django.db.models import Sum
+
+        school_ids = _resolve_school_ids(request)
+        qs = Student.objects.filter(
+            school_id__in=school_ids,
+            status="PENDING_CLEARANCE",
+        ).select_related("school", "current_class", "fee_structure").order_by("-admission_date")
+
+        rows = []
+        for s in qs:
+            invoices = list(Invoice.objects.filter(student=s))
+            due = sum((float(i.amount_due or 0) + float(i.late_fee_applied or 0) for i in invoices), 0.0)
+            paid = float(
+                Payment.objects.filter(invoice__student=s)
+                .exclude(payment_method="TRANSFER")
+                .aggregate(t=Sum("amount"))["t"] or 0
+            )
+            rows.append({
+                "id": str(s.id),
+                "admission_number": s.admission_number,
+                "full_name": s.full_name if hasattr(s, "full_name") else f"{s.first_name} {s.last_name}",
+                "first_name": s.first_name,
+                "last_name": s.last_name,
+                "grade": getattr(getattr(s, "current_class", None), "name", None),
+                "admission_date": s.admission_date.isoformat() if s.admission_date else None,
+                "fee_structure_id": str(s.fee_structure_id) if s.fee_structure_id else None,
+                "total_due": due,
+                "total_paid": paid,
+                "balance": max(0.0, due - paid),
+                "invoice_ids": [str(i.id) for i in invoices],
+            })
+        return Response({"count": len(rows), "results": rows})

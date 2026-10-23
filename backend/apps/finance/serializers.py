@@ -588,6 +588,7 @@ class PaymentSerializer(serializers.ModelSerializer):
         model = Payment
         fields = [
             'id', 'invoice', 'amount', 'payment_method', 'reference_number',
+            'payment_date', 'academic_year', 'term', 'receipt_number',
             'paid_at', 'paid_by', 'notes'
         ]
     
@@ -597,6 +598,7 @@ class PaymentCreateUpdateSerializer(serializers.ModelSerializer):
         model = Payment
         fields = [
             'id', 'school', 'invoice', 'amount', 'payment_method', 'reference_number',
+            'payment_date', 'academic_year', 'term', 'receipt_number',
             'paid_by', 'notes'
         ]
     def validate(self, data):
@@ -604,6 +606,11 @@ class PaymentCreateUpdateSerializer(serializers.ModelSerializer):
         amount = data.get("amount", self.instance.amount if self.instance else None)
         if amount is None or amount <= 0:
             raise serializers.ValidationError("Payment amount must be greater than zero.")
+        payment_date = data.get("payment_date", getattr(self.instance, "payment_date", None))
+        if not payment_date:
+            raise serializers.ValidationError(
+                {"payment_date": "Payment date is required (use the real collection date for backdating)."}
+            )
 
         invoice = data.get(
             "invoice", self.instance.invoice if self.instance else None
@@ -637,12 +644,9 @@ class PaymentCreateUpdateSerializer(serializers.ModelSerializer):
         return data
     
     def create(self, validated_data):
-        payment = Payment.objects.create(**validated_data)
-        try:
-            student = getattr(getattr(payment, "invoice", None), "student", None)
-            if student is not None and getattr(student, "status", None) == "PENDING_CLEARANCE":
-                student.status = "ACTIVE"
-                student.save(update_fields=["status"])
-        except Exception:
-            pass
-        return payment
+        invoice = validated_data.get("invoice")
+        if invoice and not validated_data.get("academic_year"):
+            validated_data["academic_year"] = getattr(invoice, "academic_year", "") or ""
+        if invoice and not validated_data.get("term"):
+            validated_data["term"] = getattr(invoice, "term", "") or ""
+        return Payment.objects.create(**validated_data)

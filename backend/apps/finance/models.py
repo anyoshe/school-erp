@@ -455,12 +455,17 @@ class Payment(models.Model):
         default='CASH'
     )
     reference_number = models.CharField(max_length=100, blank=True)  # Receipt/MPESA code
+    # Business date of the receipt (required for backdating / term allocation)
+    payment_date = models.DateField(null=True, blank=True, db_index=True)
+    academic_year = models.CharField(max_length=20, blank=True)
+    term = models.CharField(max_length=50, blank=True)
     paid_at = models.DateTimeField(auto_now_add=True)
     paid_by = models.ForeignKey('students.StudentGuardian', on_delete=models.SET_NULL, null=True, blank=True, related_name="payments")
     notes = models.TextField(blank=True)
+    receipt_number = models.CharField(max_length=50, blank=True)
 
     class Meta:
-        ordering = ["-paid_at"]
+        ordering = ["-payment_date", "-paid_at"]
 
     def __str__(self):
         return f"Payment {self.amount} - {self.invoice.invoice_number}"
@@ -477,6 +482,20 @@ class Payment(models.Model):
                 self.school_id = school_id
 
         is_new = self._state.adding
+        if not self.payment_date:
+            from django.utils import timezone as dj_tz
+            self.payment_date = dj_tz.now().date()
+        if self.invoice_id:
+            inv = self.invoice
+            if not self.academic_year and getattr(inv, "academic_year", None):
+                self.academic_year = inv.academic_year or ""
+            if not self.term and getattr(inv, "term", None):
+                self.term = inv.term or ""
+        if is_new and not self.receipt_number:
+            from django.utils import timezone as dj_tz
+            prefix = "RCPT"
+            self.receipt_number = f"{prefix}-{dj_tz.now().strftime('%Y%m%d%H%M%S')}-{str(self.invoice_id)[:6]}"
+
         super().save(*args, **kwargs)
 
         if is_new:
@@ -486,6 +505,15 @@ class Payment(models.Model):
             )
             self.invoice.refresh_from_db(fields=['amount_paid', 'amount_due', 'late_fee_applied'])
             self.invoice.save(update_fields=['balance', 'is_paid', 'paid_at', 'school'])
+
+            # Finance clearance: first school-fee payment activates the student
+            try:
+                student = getattr(self.invoice, "student", None)
+                if student is not None and getattr(student, "status", None) == "PENDING_CLEARANCE":
+                    student.status = "ACTIVE"
+                    student.save(update_fields=["status"])
+            except Exception:
+                pass
 class LateFeeRule(models.Model):
 
     school = models.ForeignKey(School, on_delete=models.CASCADE)

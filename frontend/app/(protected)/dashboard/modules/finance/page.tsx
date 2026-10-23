@@ -55,6 +55,9 @@ interface DashboardSummaryResponse {
 function FinanceNavLinks() {
   return (
     <div className="mb-4 flex flex-wrap gap-3 text-sm">
+      <Link href="/dashboard/modules/finance/clearance" className="font-medium text-amber-900 underline underline-offset-2">
+        Awaiting clearance
+      </Link>
       <Link href="/dashboard/modules/finance/standing" className="font-medium text-emerald-800 underline underline-offset-2">
         School standing (P&L)
       </Link>
