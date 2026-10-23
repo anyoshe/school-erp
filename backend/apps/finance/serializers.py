@@ -637,9 +637,8 @@ class PaymentCreateUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Payment amount must be greater than zero.")
         payment_date = data.get("payment_date", getattr(self.instance, "payment_date", None))
         if not payment_date:
-            raise serializers.ValidationError(
-                {"payment_date": "Payment date is required (use the real collection date for backdating)."}
-            )
+            from django.utils import timezone as dj_tz
+            data["payment_date"] = dj_tz.now().date()
 
         invoice = data.get(
             "invoice", self.instance.invoice if self.instance else None
@@ -664,10 +663,21 @@ class PaymentCreateUpdateSerializer(serializers.ModelSerializer):
             )
         data["school"] = school
         if invoice:
-            outstanding = invoice.current_total_due - invoice.amount_paid
-            if amount > outstanding:
+            try:
+                due = Decimal(str(getattr(invoice, "current_total_due", None) or invoice.amount_due or 0))
+                paid = Decimal(str(invoice.amount_paid or 0))
+                outstanding = due - paid
+            except Exception:
+                outstanding = Decimal(str(getattr(invoice, "balance", 0) or 0))
+            # Allow full balance settlement with minor float/decimal noise
+            if Decimal(str(amount)) > outstanding + Decimal("0.05"):
                 raise serializers.ValidationError(
-                    "Payment amount cannot exceed the invoice outstanding balance."
+                    {
+                        "amount": (
+                            f"Amount exceeds outstanding balance "
+                            f"({outstanding}). Reduce the amount or refresh the invoice."
+                        )
+                    }
                 )
 
         return data
