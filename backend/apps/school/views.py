@@ -313,7 +313,18 @@ class SchoolViewSet(ModelViewSet):
                 inv.filter(is_paid=False, due_date__lt=today).aggregate(t=Sum("balance"))["t"]
                 or Decimal("0")
             )
+            # Current term label for owner dashboard
+            term_label = "Term"
+            year_label = str(today.year)
+            try:
+                from apps.finance.clearance import _detect_year_term
+                year_label, term_label = _detect_year_term(school)
+            except Exception:
+                pass
+
             finance = {
+                "current_term": term_label,
+                "current_year": year_label,
                 "outstanding": f"{outstanding:.2f}",
                 "collected_month": f"{collected_month:.2f}",
                 "collected_fees_month": f"{collected_fees_month:.2f}",

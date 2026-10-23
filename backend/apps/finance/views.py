@@ -93,38 +93,132 @@ def _build_finance_dashboard_summary(request):
         interview_income_amt = Decimal("0")
         admission_income_amt = Decimal("0")
 
-    # Prefer fast path for headline stats; skip heavy fee-group walk when ?lite=1 or always for speed
-    use_lite = True  # always use aggregate path for dashboard speed
+    # ── Detect current academic year / term (or use query filters) ──
+    from apps.finance.clearance import _detect_year_term
+    school_obj = None
+    try:
+        from apps.school.models import School
+        if school_ids:
+            school_obj = School.objects.filter(pk=list(school_ids)[0]).first()
+    except Exception:
+        school_obj = None
+    auto_year, auto_term = _detect_year_term(school_obj) if school_obj else (str(today.year), "Term 1")
+
+    q_year = (request.GET.get("academic_year") or request.GET.get("year") or "").strip()
+    q_term = (request.GET.get("term") or "").strip()
+    selected_year = q_year or auto_year
+    selected_term = q_term or auto_term
+
+    # Available terms/years from invoices + payments for the switcher
+    term_labels = list(
+        inv_base.exclude(term="").exclude(term__isnull=True)
+        .values_list("term", flat=True).distinct()
+    )
+    year_labels = list(
+        inv_base.exclude(academic_year="").exclude(academic_year__isnull=True)
+        .values_list("academic_year", flat=True).distinct()
+    )
+    for t in pay_base.exclude(term="").values_list("term", flat=True).distinct():
+        if t and t not in term_labels:
+            term_labels.append(t)
+    for y in pay_base.exclude(academic_year="").values_list("academic_year", flat=True).distinct():
+        if y and y not in year_labels:
+            year_labels.append(y)
+    for label in ("Term 1", "Term 2", "Term 3"):
+        if label not in term_labels:
+            term_labels.append(label)
+    if selected_year and selected_year not in year_labels:
+        year_labels.insert(0, selected_year)
+
+    # Filter invoice/payment sets for selected term + year
+    inv_term = inv_base.filter(academic_year=selected_year).filter(
+        Q(term__iexact=selected_term) | Q(term__icontains=selected_term.split()[-1] if selected_term else "")
+    )
+    # Fallback if no exact match: by year only then all
+    if not inv_term.exists():
+        inv_term = inv_base.filter(academic_year=selected_year)
+    if not inv_term.exists():
+        inv_term = inv_base
+
+    pay_term = pay_base.filter(
+        Q(academic_year=selected_year) | Q(invoice__academic_year=selected_year)
+    ).filter(
+        Q(term__iexact=selected_term)
+        | Q(term__icontains=selected_term.split()[-1] if selected_term else "")
+        | Q(invoice__term__iexact=selected_term)
+        | Q(invoice__term__icontains=selected_term.split()[-1] if selected_term else "")
+    )
+    if not pay_term.exists():
+        pay_term = pay_base.filter(
+            Q(academic_year=selected_year) | Q(invoice__academic_year=selected_year)
+        )
+
+    pay_year = pay_base.filter(
+        Q(academic_year=selected_year) | Q(invoice__academic_year=selected_year)
+    )
+    inv_year = inv_base.filter(academic_year=selected_year)
+
+    collected_term = pay_term.aggregate(t=DjSum("amount"))["t"] or Decimal("0")
+    collected_year = pay_year.aggregate(t=DjSum("amount"))["t"] or Decimal("0")
+    collected_all = school_fee_collected_fast
+
+    invoiced_term = inv_term.aggregate(t=DjSum("amount_due"))["t"] or Decimal("0")
+    invoiced_year = inv_year.aggregate(t=DjSum("amount_due"))["t"] or Decimal("0")
+
+    outstanding_term = Decimal("0")
+    overdue_term = Decimal("0")
+    pending_term = 0
+    students_bal_term = set()
+    for row in inv_term.values("student_id", "amount_due", "late_fee_applied", "amount_paid", "due_date"):
+        due = Decimal(str(row["amount_due"] or 0)) + Decimal(str(row["late_fee_applied"] or 0))
+        paid = Decimal(str(row["amount_paid"] or 0))
+        bal = max(Decimal("0"), due - paid)
+        if bal > 0:
+            pending_term += 1
+            outstanding_term += bal
+            students_bal_term.add(str(row["student_id"]))
+            if row["due_date"] and row["due_date"] < today:
+                overdue_term += bal
+
+    # Prefer fast path for headline stats (term-scoped by default)
+    use_lite = True
 
     if use_lite:
         return {
             "stats": {
-                "totalOutstanding": float(_round_money(outstanding_fast)),
-                "totalAssigned": float(_round_money(total_invoiced_fast)),
-                "totalRevenue": float(_round_money(school_fee_collected_fast)),
+                "totalOutstanding": float(_round_money(outstanding_term)),
+                "totalAssigned": float(_round_money(invoiced_term)),
+                "totalRevenue": float(_round_money(collected_term)),
                 "totalStudentsWithFees": StudentFeeAssignment.objects.filter(
                     student__school_id__in=school_ids
                 ).count(),
-                "studentsWithBalance": len(students_bal),
-                "overdueBalance": float(_round_money(overdue_fast)),
-                "pendingInvoices": pending_count,
-                "totalInvoiced": float(_round_money(total_invoiced_fast)),
+                "studentsWithBalance": len(students_bal_term),
+                "overdueBalance": float(_round_money(overdue_term)),
+                "pendingInvoices": pending_term,
+                "totalInvoiced": float(_round_money(invoiced_term)),
                 "totalAdmissionPayments": float(_round_money(admission_income_amt)),
                 "totalInterviewPayments": float(_round_money(interview_income_amt)),
                 "preEnrollmentIncome": float(_round_money(pre_enroll_income)),
-                "schoolFeeCollected": float(_round_money(school_fee_collected_fast)),
+                "schoolFeeCollected": float(_round_money(collected_term)),
                 "legacyEnrollmentDeposits": 0.0,
+                "yearCollected": float(_round_money(collected_year)),
+                "yearInvoiced": float(_round_money(invoiced_year)),
+                "allTimeCollected": float(_round_money(collected_all)),
             },
             "revenueByPeriod": {
-                "all": float(_round_money(school_fee_collected_fast)),
-                "year": float(_round_money(school_fee_collected_fast)),
-                "term": float(_round_money(school_fee_collected_fast)),
-                "session": float(_round_money(school_fee_collected_fast)),
+                "all": float(_round_money(collected_all)),
+                "year": float(_round_money(collected_year)),
+                "term": float(_round_money(collected_term)),
+                "session": float(_round_money(collected_term)),
             },
-            "detectedTerm": "Term",
-            "detectedYear": str(today.year),
+            "detectedTerm": selected_term,
+            "detectedYear": selected_year,
+            "availableTerms": sorted(set(str(x) for x in term_labels if x)),
+            "availableYears": sorted(set(str(x) for x in year_labels if x), reverse=True),
+            "isCurrentTerm": (selected_term == auto_term and selected_year == auto_year),
             "feeGroupBreakdown": [],
         }
+
 
     assignments = list(
         StudentFeeAssignment.objects.filter(student__school_id__in=school_ids)

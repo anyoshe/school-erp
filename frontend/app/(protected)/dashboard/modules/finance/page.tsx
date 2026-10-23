@@ -45,10 +45,17 @@ interface RevenueByPeriod {
 }
 
 interface DashboardSummaryResponse {
-  stats: Stats;
+  stats: Stats & {
+    yearCollected?: number;
+    yearInvoiced?: number;
+    allTimeCollected?: number;
+  };
   revenueByPeriod: RevenueByPeriod;
   detectedTerm: string;
   detectedYear: string;
+  availableTerms?: string[];
+  availableYears?: string[];
+  isCurrentTerm?: boolean;
   feeGroupBreakdown: FeeItemTotal[];
 }
 
@@ -103,19 +110,32 @@ export default function FinanceDashboard() {
   const [loading, setLoading] = useState(true);
   const [detectedTerm, setDetectedTerm] = useState<string>("Term 1");
   const [detectedYear, setDetectedYear] = useState<string>("2026");
+  const [filterTerm, setFilterTerm] = useState<string>("");
+  const [filterYear, setFilterYear] = useState<string>("");
+  const [availableTerms, setAvailableTerms] = useState<string[]>([]);
+  const [availableYears, setAvailableYears] = useState<string[]>([]);
+  const [yearCollected, setYearCollected] = useState(0);
+  const [allTimeCollected, setAllTimeCollected] = useState(0);
 
   const fetchDashboardData = useCallback(async () => {
-    const cacheKey = `erp_finance_summary_${currentSchool?.id || "x"}`;
-    // Instant paint from short cache (same tab)
+    const params: Record<string, string> = {};
+    if (filterTerm) params.term = filterTerm;
+    if (filterYear) params.academic_year = filterYear;
+    const cacheKey = `erp_finance_summary_${currentSchool?.id || "x"}_${filterTerm || "auto"}_${filterYear || "auto"}`;
+
     try {
       const raw = sessionStorage.getItem(cacheKey);
       if (raw) {
         const { at, data } = JSON.parse(raw);
-        if (Date.now() - at < 60_000 && data?.stats) {
+        if (Date.now() - at < 45_000 && data?.stats) {
           setStats(data.stats);
           setRevenueByPeriod(data.revenueByPeriod || revenueByPeriod);
           setDetectedTerm(data.detectedTerm || "Term 1");
           setDetectedYear(data.detectedYear || new Date().getFullYear().toString());
+          setAvailableTerms(data.availableTerms || []);
+          setAvailableYears(data.availableYears || []);
+          setYearCollected(Number(data.stats?.yearCollected || data.revenueByPeriod?.year || 0));
+          setAllTimeCollected(Number(data.stats?.allTimeCollected || data.revenueByPeriod?.all || 0));
           setFeeItemTotals(data.feeGroupBreakdown || []);
           setLoading(false);
         }
@@ -124,12 +144,19 @@ export default function FinanceDashboard() {
 
     setLoading(true);
     try {
-      const response = await api.get<DashboardSummaryResponse>("/finance/dashboard-summary/");
+      const response = await api.get<DashboardSummaryResponse>("/finance/dashboard-summary/", {
+        params,
+        headers: currentSchool?.id ? { "X-School-ID": String(currentSchool.id) } : undefined,
+      });
       const data = response.data;
       setStats(data.stats);
       setRevenueByPeriod(data.revenueByPeriod);
       setDetectedTerm(data.detectedTerm || "Term 1");
       setDetectedYear(data.detectedYear || new Date().getFullYear().toString());
+      setAvailableTerms(data.availableTerms || []);
+      setAvailableYears(data.availableYears || []);
+      setYearCollected(Number(data.stats?.yearCollected || data.revenueByPeriod?.year || 0));
+      setAllTimeCollected(Number(data.stats?.allTimeCollected || data.revenueByPeriod?.all || 0));
       setFeeItemTotals(data.feeGroupBreakdown || []);
       try {
         sessionStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data }));
@@ -138,14 +165,14 @@ export default function FinanceDashboard() {
       console.error("Failed to fetch dashboard data:", error);
       const status = error?.response?.status;
       if (status === 401) {
-        // interceptor will refresh or redirect; avoid noisy toast
+        // interceptor will refresh or redirect
       } else {
         toast.error("Failed to load finance dashboard");
       }
     } finally {
       setLoading(false);
     }
-  }, [currentSchool?.id]);
+  }, [currentSchool?.id, filterTerm, filterYear]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -160,6 +187,39 @@ export default function FinanceDashboard() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       <FinanceNavLinks />
+      <div className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border bg-white p-3 shadow-sm">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-1">Academic year</p>
+          <select
+            className="h-9 rounded-md border px-3 text-sm min-w-[120px]"
+            value={filterYear || detectedYear}
+            onChange={(e) => setFilterYear(e.target.value)}
+          >
+            {(availableYears.length ? availableYears : [detectedYear]).map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-1">Term</p>
+          <select
+            className="h-9 rounded-md border px-3 text-sm min-w-[140px]"
+            value={filterTerm || detectedTerm}
+            onChange={(e) => setFilterTerm(e.target.value)}
+          >
+            {(availableTerms.length ? availableTerms : [detectedTerm, "Term 1", "Term 2", "Term 3"]).map((term) => (
+              <option key={term} value={term}>{term}</option>
+            ))}
+          </select>
+        </div>
+        <p className="text-sm text-muted-foreground pb-1">
+          Showing <span className="font-semibold text-foreground">{filterTerm || detectedTerm}</span>
+          {" · "}
+          <span className="font-semibold text-foreground">{filterYear || detectedYear}</span>
+          {" "}collections & balances
+        </p>
+      </div>
+
       {/* Owner-facing hero */}
       <div
         className="rounded-3xl p-6 sm:p-8 text-white shadow-lg relative overflow-hidden"
@@ -285,10 +345,9 @@ export default function FinanceDashboard() {
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { label: "This Session", value: revenueByPeriod.session },
-              { label: `This Term (${detectedTerm})`, value: revenueByPeriod.term },
-              { label: `This Year (${detectedYear})`, value: revenueByPeriod.year },
-              { label: "All Time", value: revenueByPeriod.all },
+              { label: `${detectedTerm} · ${detectedYear}`, value: revenueByPeriod.term },
+              { label: `Full year ${detectedYear}`, value: yearCollected || revenueByPeriod.year },
+              { label: "All time", value: allTimeCollected || revenueByPeriod.all },
             ].map((period, i) => (
               <div key={i} className="bg-secondary-50 dark:bg-secondary-950/70 p-5 rounded-xl border border-secondary-100 dark:border-secondary-900">
                 <p className="text-sm text-muted-foreground">{period.label}</p>
@@ -299,7 +358,7 @@ export default function FinanceDashboard() {
             ))}
           </div>
           <p className="text-xs text-muted-foreground mt-4">
-            Term is automatically detected from your active invoices and fee structures.
+            Defaults to the current academic term. Change year/term above to compare collections and balances.
           </p>
         </CardContent>
       </Card>
