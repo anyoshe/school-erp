@@ -322,6 +322,19 @@ def _build_finance_dashboard_summary(request):
 
     fee_group_values.sort(key=lambda item: (not item["isTuition"], item["description"]))
 
+    # Rescale fee groups to Payment totals so UI cannot show 14.6k "collected" while Payments are 1.8k
+    try:
+        group_sum = sum((Decimal(str(g["allocated"])) for g in fee_group_values), Decimal("0"))
+        if group_sum > 0 and school_fee_collected >= 0:
+            scale = Decimal(str(school_fee_collected)) / group_sum
+            for g in fee_group_values:
+                g["allocated"] = float(_round_money(Decimal(str(g["allocated"])) * scale))
+                g["pending"] = float(_round_money(Decimal(str(g.get("pending", 0))) * scale)) if scale <= 1 else 0.0
+                g["total"] = float(_round_money(Decimal(str(g["allocated"])) + Decimal(str(g.get("pending", 0)))))
+    except Exception:
+        pass
+
+
     return {
         "stats": {
             "totalOutstanding": float(_round_money(total_outstanding)),

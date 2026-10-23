@@ -627,16 +627,12 @@ class Application(models.Model):
 
         # === Payment Handling ===
         try:
+            # School-fee amount collected at enroll (wizard Step 6). 0 = collect later in Finance.
             initial_amount = Decimal(str(wd.get('initial_payment_amount', 0) or 0))
             reference = str(wd.get('initial_payment_reference', '')).strip()
         except Exception:
             initial_amount = Decimal('0')
             reference = ''
-
-        # Term fees are collected only in Finance after enrollment.
-        # Admissions only confirms interview + admission charges; no term deposit here.
-        initial_amount = Decimal("0")
-        reference = ""
 
         # Generate admission number if missing
         if not self.admission_number:
