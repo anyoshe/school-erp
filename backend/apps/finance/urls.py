@@ -7,6 +7,7 @@ from .views import (
     StudentFeeAssignmentViewSet, InvoiceViewSet, PaymentViewSet, PaymentPlanViewSet,
     FinanceDashboardSummaryView,
     AwaitingClearanceView,
+    ClearanceAddItemView,
 )
 from .accounting_views import (
     ExpenseCategoryViewSet,
@@ -34,6 +35,7 @@ urlpatterns = [
     path('income-receipts/', IncomeReceiptListView.as_view(), name='income-receipts'),
     path('dashboard-summary/', FinanceDashboardSummaryView.as_view(), name='finance-dashboard-summary'),
     path('awaiting-clearance/', AwaitingClearanceView.as_view(), name='awaiting-clearance'),
+    path('awaiting-clearance/<uuid:student_id>/add-item/', ClearanceAddItemView.as_view(), name='clearance-add-item'),
     path('owner-standing/', OwnerStandingView.as_view(), name='owner-standing'),
     path('students/<uuid:student_id>/statement/', StudentFeeStatementView.as_view(), name='student-fee-statement'),
     path('', include(router.urls)),

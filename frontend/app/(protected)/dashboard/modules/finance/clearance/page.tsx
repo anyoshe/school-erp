@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Banknote } from "lucide-react";
+import { ArrowLeft, Loader2, Banknote, Plus } from "lucide-react";
 import api from "@/utils/api";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import { Button } from "@/components/ui/button";
@@ -47,7 +47,9 @@ export default function FinanceClearancePage() {
   const [reference, setReference] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
   const [saving, setSaving] = useState(false);
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [extraName, setExtraName] = useState("");
+  const [extraAmount, setExtraAmount] = useState("");
+  const [addingExtra, setAddingExtra] = useState(false);
 
   const listQ = useQuery({
     queryKey: ["awaiting-clearance", schoolId],
@@ -58,24 +60,55 @@ export default function FinanceClearancePage() {
     },
   });
 
-  const openPay = async (r: any) => {
+  const openPay = (r: any) => {
     setRow(r);
-    setAmount(r.balance > 0 ? String(r.balance) : "");
+    setAmount(r.balance > 0 ? String(r.balance) : r.total_due > 0 ? String(r.total_due) : "");
     setPaymentDate(new Date().toISOString().slice(0, 10));
     setMethod("CASH");
     setReference("");
-    setInvoiceId("");
+    const invs = r.invoices || [];
+    setInvoiceId(invs[0] ? String(invs[0].id) : "");
+    setExtraName("");
+    setExtraAmount("");
     setPayOpen(true);
+  };
+
+  const addExtra = async () => {
+    if (!row?.id) return;
+    if (!extraName.trim() || !extraAmount || Number(extraAmount) <= 0) {
+      toast.error("Enter item name and amount");
+      return;
+    }
+    setAddingExtra(true);
     try {
-      const res = await api.get("/finance/invoices/", {
-        headers,
-        params: { student: r.id },
-      });
-      const invs = asList(res.data);
-      setInvoices(invs);
-      if (invs[0]) setInvoiceId(String(invs[0].id));
-    } catch {
-      setInvoices([]);
+      const res = await api.post(
+        `/finance/awaiting-clearance/${row.id}/add-item/`,
+        { description: extraName.trim(), amount: extraAmount },
+        { headers }
+      );
+      const billing = res.data?.billing;
+      if (billing) {
+        setRow((prev: any) => ({
+          ...prev,
+          ...billing,
+          structure: billing.structure ?? prev.structure,
+          lines: billing.lines ?? prev.lines,
+          invoices: billing.invoices ?? prev.invoices,
+          total_due: billing.total_due,
+          total_paid: billing.total_paid,
+          balance: billing.balance,
+        }));
+        setAmount(String(billing.balance ?? billing.total_due ?? ""));
+        if (billing.invoices?.[0]) setInvoiceId(String(billing.invoices[0].id));
+      }
+      setExtraName("");
+      setExtraAmount("");
+      toast.success("Extra fee item added");
+      qc.invalidateQueries({ queryKey: ["awaiting-clearance"] });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Could not add item");
+    } finally {
+      setAddingExtra(false);
     }
   };
 
@@ -89,7 +122,7 @@ export default function FinanceClearancePage() {
       return;
     }
     if (!invoiceId) {
-      toast.error("Select invoice / term bill");
+      toast.error("No invoice — create a fee structure for this grade, then reopen");
       return;
     }
     setSaving(true);
@@ -107,7 +140,7 @@ export default function FinanceClearancePage() {
         { headers }
       );
       toast.success(
-        `Payment recorded${res.data?.receipt_number ? ` · Receipt ${res.data.receipt_number}` : ""}. Student activated.`
+        `Payment recorded${res.data?.receipt_number ? ` · ${res.data.receipt_number}` : ""}`
       );
       setPayOpen(false);
       qc.invalidateQueries({ queryKey: ["awaiting-clearance"] });
@@ -115,9 +148,7 @@ export default function FinanceClearancePage() {
     } catch (e: any) {
       const d = e?.response?.data;
       toast.error(
-        d?.payment_date?.[0] ||
-          d?.detail ||
-          (typeof d === "object" ? JSON.stringify(d) : "Payment failed")
+        d?.payment_date?.[0] || d?.detail || (typeof d === "object" ? JSON.stringify(d) : "Payment failed")
       );
     } finally {
       setSaving(false);
@@ -129,6 +160,9 @@ export default function FinanceClearancePage() {
     () => rows.reduce((s: number, r: any) => s + Number(r.balance || 0), 0),
     [rows]
   );
+
+  const lines = row?.lines || [];
+  const invoices = row?.invoices || [];
 
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-6xl mx-auto">
@@ -144,8 +178,8 @@ export default function FinanceClearancePage() {
             Awaiting finance clearance
           </h1>
           <p className="text-sm text-muted-foreground">
-            Admitted learners with admission numbers. Collect school fees here with real payment
-            dates. They join the main Students list after the first clearance payment.
+            Fees load from the structure for the learner&apos;s grade, year and term. Add extra items
+            (uniform, assessment book, etc.) before receiving payment.
           </p>
         </div>
       </div>
@@ -167,11 +201,9 @@ export default function FinanceClearancePage() {
         </CardHeader>
         <CardContent className="p-0">
           {listQ.isLoading ? (
-            <p className="p-6 text-sm text-muted-foreground">Loading…</p>
+            <p className="p-6 text-sm text-muted-foreground">Loading structures & balances…</p>
           ) : rows.length === 0 ? (
-            <p className="p-8 text-center text-sm text-muted-foreground">
-              No one awaiting clearance.
-            </p>
+            <p className="p-8 text-center text-sm text-muted-foreground">No one awaiting clearance.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -180,8 +212,8 @@ export default function FinanceClearancePage() {
                     <th className="py-3 px-4">Admission #</th>
                     <th className="py-3 px-4">Name</th>
                     <th className="py-3 px-4">Grade</th>
-                    <th className="py-3 px-4 text-right">Due</th>
-                    <th className="py-3 px-4 text-right">Paid</th>
+                    <th className="py-3 px-4">Structure</th>
+                    <th className="py-3 px-4 text-right">Expected</th>
                     <th className="py-3 px-4 text-right">Balance</th>
                     <th className="py-3 px-4"></th>
                   </tr>
@@ -192,11 +224,18 @@ export default function FinanceClearancePage() {
                       <td className="py-3 px-4 font-mono text-xs">{r.admission_number}</td>
                       <td className="py-3 px-4 font-medium">{r.full_name}</td>
                       <td className="py-3 px-4">{r.grade || "—"}</td>
-                      <td className="py-3 px-4 text-right tabular-nums">
-                        {Number(r.total_due || 0).toLocaleString()}
+                      <td className="py-3 px-4 text-xs text-muted-foreground max-w-[180px]">
+                        {r.structure?.name || (
+                          <span className="text-rose-600">No structure for grade</span>
+                        )}
+                        {r.matched_term ? (
+                          <span className="block">
+                            {r.matched_term} · {r.matched_year}
+                          </span>
+                        ) : null}
                       </td>
                       <td className="py-3 px-4 text-right tabular-nums">
-                        {Number(r.total_paid || 0).toLocaleString()}
+                        {Number(r.total_due || 0).toLocaleString()}
                       </td>
                       <td className="py-3 px-4 text-right font-semibold tabular-nums">
                         {Number(r.balance || 0).toLocaleString()}
@@ -216,23 +255,104 @@ export default function FinanceClearancePage() {
       </Card>
 
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              Receive fees — {row?.admission_number} {row?.full_name}
+              Clearance — {row?.admission_number} {row?.full_name}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-1">
+
+          <div className="rounded-lg border bg-slate-50 p-3 text-sm space-y-1">
+            <p>
+              <span className="text-muted-foreground">Grade:</span> {row?.grade || "—"}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Structure:</span>{" "}
+              {row?.structure?.name || "Not found — create fee structure for this grade"}
+            </p>
+            <p>
+              <span className="text-muted-foreground">Period:</span>{" "}
+              {row?.matched_term || "—"} / {row?.matched_year || "—"}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-sm font-medium mb-2">Expected fee lines</p>
+            {lines.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No lines yet. Ensure a fee structure exists for this grade/year/term.
+              </p>
+            ) : (
+              <ul className="text-sm border rounded-lg divide-y max-h-40 overflow-y-auto">
+                {lines.map((ln: any) => (
+                  <li key={ln.line_id} className="flex justify-between px-3 py-1.5">
+                    <span>{ln.description}</span>
+                    <span className="font-medium tabular-nums">
+                      {Number(ln.amount || 0).toLocaleString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-sm font-semibold mt-2 flex justify-between">
+              <span>Balance due</span>
+              <span>
+                {currency} {Number(row?.balance ?? 0).toLocaleString()}
+              </span>
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-dashed border-emerald-300 p-3 space-y-2">
+            <p className="text-sm font-medium flex items-center gap-1">
+              <Plus className="h-4 w-4" /> Add extra fee item
+            </p>
+            <p className="text-xs text-muted-foreground">
+              e.g. Assessment book, uniform — for items not on the term structure.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="col-span-2 sm:col-span-1">
+                <Label>Item name</Label>
+                <Input
+                  value={extraName}
+                  onChange={(e) => setExtraName(e.target.value)}
+                  placeholder="Assessment book"
+                />
+              </div>
+              <div>
+                <Label>Amount</Label>
+                <Input
+                  type="number"
+                  value={extraAmount}
+                  onChange={(e) => setExtraAmount(e.target.value)}
+                />
+              </div>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={addingExtra}
+              onClick={addExtra}
+            >
+              {addingExtra ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add to bill"}
+            </Button>
+          </div>
+
+          <div className="space-y-3 border-t pt-3">
             <div>
               <Label>Payment date *</Label>
-              <Input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)} />
-              <p className="text-xs text-muted-foreground mt-1">
-                Real collection date (required for backdating and term reports).
-              </p>
+              <Input
+                type="date"
+                value={paymentDate}
+                onChange={(e) => setPaymentDate(e.target.value)}
+              />
             </div>
             <div>
               <Label>Invoice / term bill *</Label>
-              <Select value={invoiceId || "none"} onValueChange={(v) => setInvoiceId(v === "none" ? "" : v)}>
+              <Select
+                value={invoiceId || "none"}
+                onValueChange={(v) => setInvoiceId(v === "none" ? "" : v)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select invoice" />
                 </SelectTrigger>
@@ -241,14 +361,14 @@ export default function FinanceClearancePage() {
                   {invoices.map((inv: any) => (
                     <SelectItem key={inv.id} value={String(inv.id)}>
                       {inv.invoice_number} · {inv.term || "Term"} · bal{" "}
-                      {Number(inv.balance ?? inv.amount_due ?? 0).toLocaleString()}
+                      {Number(inv.balance ?? 0).toLocaleString()}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label>Amount *</Label>
+              <Label>Amount received *</Label>
               <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
             </div>
             <div>
@@ -266,16 +386,22 @@ export default function FinanceClearancePage() {
               </Select>
             </div>
             <div>
-              <Label>Reference (optional)</Label>
+              <Label>Reference</Label>
               <Input value={reference} onChange={(e) => setReference(e.target.value)} />
             </div>
           </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setPayOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" disabled={saving} className="bg-emerald-600 text-white" onClick={submit}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Record & clear"}
+            <Button
+              type="button"
+              disabled={saving}
+              className="bg-emerald-600 text-white"
+              onClick={submit}
+            >
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Record payment"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -862,8 +862,7 @@ class AwaitingClearanceView(APIView):
 
     def get(self, request):
         from apps.students.models import Student
-        from apps.finance.models import Invoice, Payment
-        from django.db.models import Sum
+        from apps.finance.clearance import ensure_student_billing
 
         school_ids = _resolve_school_ids(request)
         qs = Student.objects.filter(
@@ -871,15 +870,25 @@ class AwaitingClearanceView(APIView):
             status="PENDING_CLEARANCE",
         ).select_related("school", "current_class", "fee_structure").order_by("-admission_date")
 
+        year = request.query_params.get("academic_year")
+        term = request.query_params.get("term")
+
         rows = []
         for s in qs:
-            invoices = list(Invoice.objects.filter(student=s))
-            due = sum((float(i.amount_due or 0) + float(i.late_fee_applied or 0) for i in invoices), 0.0)
-            paid = float(
-                Payment.objects.filter(invoice__student=s)
-                .exclude(payment_method="TRANSFER")
-                .aggregate(t=Sum("amount"))["t"] or 0
-            )
+            try:
+                billing = ensure_student_billing(
+                    s, user=request.user, academic_year=year, period_name=term
+                )
+            except Exception as e:
+                billing = {
+                    "structure": None,
+                    "lines": [],
+                    "invoices": [],
+                    "total_due": 0,
+                    "total_paid": 0,
+                    "balance": 0,
+                    "error": str(e),
+                }
             rows.append({
                 "id": str(s.id),
                 "admission_number": s.admission_number,
@@ -887,11 +896,48 @@ class AwaitingClearanceView(APIView):
                 "first_name": s.first_name,
                 "last_name": s.last_name,
                 "grade": getattr(getattr(s, "current_class", None), "name", None),
+                "grade_id": str(s.current_class_id) if s.current_class_id else None,
                 "admission_date": s.admission_date.isoformat() if s.admission_date else None,
-                "fee_structure_id": str(s.fee_structure_id) if s.fee_structure_id else None,
-                "total_due": due,
-                "total_paid": paid,
-                "balance": max(0.0, due - paid),
-                "invoice_ids": [str(i.id) for i in invoices],
+                "fee_structure_id": (
+                    billing.get("structure") or {}
+                ).get("id") or (str(s.fee_structure_id) if s.fee_structure_id else None),
+                "structure": billing.get("structure"),
+                "lines": billing.get("lines") or [],
+                "invoices": billing.get("invoices") or [],
+                "total_due": billing.get("total_due") or 0,
+                "total_paid": billing.get("total_paid") or 0,
+                "balance": billing.get("balance") or 0,
+                "matched_year": billing.get("matched_year"),
+                "matched_term": billing.get("matched_term"),
+                "billing_error": billing.get("error"),
             })
         return Response({"count": len(rows), "results": rows})
+
+
+class ClearanceAddItemView(APIView):
+    """Add extra fee line (uniform, assessment book, etc.) for a clearance student."""
+    permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
+
+    def post(self, request, student_id):
+        from apps.students.models import Student
+        from apps.finance.clearance import add_extra_fee_line
+
+        school_ids = _resolve_school_ids(request)
+        student = Student.objects.filter(pk=student_id, school_id__in=school_ids).first()
+        if not student:
+            return Response({"detail": "Student not found"}, status=404)
+        try:
+            line, inv, billing = add_extra_fee_line(
+                student,
+                description=request.data.get("description") or request.data.get("name"),
+                amount=request.data.get("amount"),
+                user=request.user,
+                fee_item_id=request.data.get("fee_item_id"),
+            )
+        except Exception as e:
+            return Response({"detail": str(e)}, status=400)
+        return Response({
+            "line_id": str(line.id),
+            "invoice_id": str(inv.id),
+            "billing": billing,
+        })
