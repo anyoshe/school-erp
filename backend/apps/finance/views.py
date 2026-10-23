@@ -812,13 +812,26 @@ class PaymentViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return PaymentCreateUpdateSerializer
+        if self.action == "list":
+            from .serializers import PaymentListSerializer
+            return PaymentListSerializer
         return PaymentSerializer
 
 
     def get_queryset(self):
-        return self.queryset.filter(
-            school_id__in=accessible_school_ids(self.request)
-        )
+        school_ids = accessible_school_ids(self.request)
+        qs = self.queryset.filter(
+            Q(school_id__in=school_ids) | Q(invoice__student__school_id__in=school_ids)
+        ).order_by("-payment_date", "-paid_at")
+        limit = self.request.query_params.get("limit")
+        if limit:
+            try:
+                return qs[: int(limit)]
+            except Exception:
+                return qs[:40]
+        if self.action == "list":
+            return qs[:40]
+        return qs
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

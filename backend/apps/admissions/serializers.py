@@ -251,6 +251,14 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         documents_files = validated_data.pop('documents', [])
+        for key in (
+            "secondary_guardian_name",
+            "secondary_guardian_phone",
+            "secondary_guardian_relationship",
+            "secondary_guardian_id_number",
+        ):
+            if validated_data.get(key) is None:
+                validated_data[key] = ""
         application = Application.objects.create(**validated_data)
 
         for file in documents_files:

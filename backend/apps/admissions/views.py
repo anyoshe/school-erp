@@ -486,6 +486,44 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+    @action(detail=False, methods=["get"], url_path="pipeline-stats")
+    def pipeline_stats(self, request):
+        """Admissions funnel + fee metrics for the active school."""
+        from django.db.models import Count, Sum
+        from .models import ApplicationCharge
+
+        qs = self.get_queryset()
+        by_status = {
+            row["status"]: row["c"]
+            for row in qs.values("status").annotate(c=Count("id"))
+        }
+        charges = ApplicationCharge.objects.filter(application__in=qs)
+        interview_paid = (
+            charges.filter(charge_type="INTERVIEW", amount_paid__gt=0).aggregate(
+                t=Sum("amount_paid")
+            )["t"]
+            or 0
+        )
+        admission_paid = (
+            charges.filter(charge_type="ADMISSION", amount_paid__gt=0).aggregate(
+                t=Sum("amount_paid")
+            )["t"]
+            or 0
+        )
+        waitlist = qs.filter(interview_outcome="WAITLIST").count()
+        failed = qs.filter(interview_outcome="FAIL").count()
+        return Response(
+            {
+                "by_status": by_status,
+                "total": qs.count(),
+                "waitlist": waitlist,
+                "interview_failed": failed,
+                "interview_fees_collected": str(interview_paid),
+                "admission_fees_collected": str(admission_paid),
+            }
+        )
+
+
 class PublicApplicationSubmissionViewSet(viewsets.GenericViewSet):
     """
     Public endpoint for parents/students to submit applications.
@@ -555,54 +593,6 @@ class PublicApplicationSubmissionViewSet(viewsets.GenericViewSet):
             return Response({"detail": "Draft not found"}, status=status.HTTP_404_NOT_FOUND)
 
 # Optional: Separate ViewSets for documents/payments if needed later
-    @action(detail=False, methods=["get"], url_path="pipeline-stats")
-    def pipeline_stats(self, request):
-        """Admissions funnel + fee metrics for the active school."""
-        from django.db.models import Count, Sum, Q
-        from .models import ApplicationCharge
-        school = selected_school(request)
-        qs = self.get_queryset()
-        by_status = dict(
-            qs.values_list("status").annotate(c=Count("id")).values_list("status", "c")
-        )
-        # rebuild properly
-        by_status = {
-            row["status"]: row["c"]
-            for row in qs.values("status").annotate(c=Count("id"))
-        }
-        charges = ApplicationCharge.objects.filter(application__in=qs)
-        interview_paid = (
-            charges.filter(charge_type="INTERVIEW", amount_paid__gt=0).aggregate(
-                t=Sum("amount_paid")
-            )["t"]
-            or 0
-        )
-        admission_paid = (
-            charges.filter(charge_type="ADMISSION", amount_paid__gt=0).aggregate(
-                t=Sum("amount_paid")
-            )["t"]
-            or 0
-        )
-        interview_waived = charges.filter(
-            charge_type="INTERVIEW", policy__in=["WAIVED", "NOT_APPLICABLE"]
-        ).count()
-        admission_waived = charges.filter(
-            charge_type="ADMISSION", policy__in=["WAIVED", "NOT_APPLICABLE"]
-        ).count()
-        waitlist = qs.filter(interview_outcome="WAITLIST").count()
-        failed = qs.filter(interview_outcome="FAIL").count()
-        return Response(
-            {
-                "by_status": by_status,
-                "total": qs.count(),
-                "waitlist": waitlist,
-                "interview_failed": failed,
-                "interview_fees_collected": str(interview_paid),
-                "admission_fees_collected": str(admission_paid),
-                "interview_waived_or_na": interview_waived,
-                "admission_waived_or_na": admission_waived,
-            }
-        )
 
     @action(detail=True, methods=["get"], url_path="document-checklist")
     def document_checklist(self, request, pk=None):

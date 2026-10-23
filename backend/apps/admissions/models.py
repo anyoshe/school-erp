@@ -504,6 +504,13 @@ class Application(models.Model):
     primary_guardian_relationship = models.CharField(max_length=50, blank=True)
     primary_guardian_id_number = models.CharField(max_length=50, blank=True)
 
+    # Secondary guardian (optional)
+    secondary_guardian_name = models.CharField(max_length=100, blank=True, default="")
+    secondary_guardian_phone = models.CharField(max_length=20, blank=True, default="")
+    secondary_guardian_email = models.EmailField(blank=True, null=True)
+    secondary_guardian_relationship = models.CharField(max_length=50, blank=True, default="")
+    secondary_guardian_id_number = models.CharField(max_length=50, blank=True, default="")
+
     # Address
     address = models.TextField(blank=True)
     region = models.CharField(max_length=100, blank=True)

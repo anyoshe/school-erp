@@ -609,7 +609,20 @@ class InvoiceCreateUpdateSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class PaymentListSerializer(serializers.ModelSerializer):
+    """Lightweight list for recent payments (avoid nested full Invoice)."""
+    invoice_number = serializers.CharField(source="invoice.invoice_number", read_only=True)
+
+    class Meta:
+        model = Payment
+        fields = [
+            "id", "invoice", "invoice_number", "amount", "payment_method",
+            "reference_number", "payment_date", "receipt_number", "paid_at", "notes",
+        ]
+
+
 class PaymentSerializer(serializers.ModelSerializer):
+
     invoice = InvoiceSerializer(read_only=True)
     paid_by = StudentGuardianSerializer(read_only=True)
 
