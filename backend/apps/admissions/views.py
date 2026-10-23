@@ -296,8 +296,10 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         # School permission check
         user_school = selected_school(request)
         if application.school_id != user_school.id:
-            return Response({"detail": "You can only enroll applications from your own school."},
-                            status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "You can only enroll applications from your own school."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         allowed = {
             Application.Status.ACCEPTED,
@@ -464,6 +466,14 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                     {"detail": f"Enrollment failed: {msg}"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            # Ensure paid interview/admission charges hit Finance income accounts
+            try:
+                from apps.finance.pre_enrollment import post_charge_to_finance
+                for ch in application.charges.all():
+                    post_charge_to_finance(ch, student=student)
+            except Exception as exc:
+                print(f"[finance] enroll post charges: {exc}")
 
             return Response({
                 "detail": "Student enrolled successfully",
