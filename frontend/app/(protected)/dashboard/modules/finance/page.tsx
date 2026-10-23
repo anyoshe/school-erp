@@ -195,7 +195,7 @@ export default function FinanceDashboard() {
             value={filterYear || detectedYear}
             onChange={(e) => setFilterYear(e.target.value)}
           >
-            {(availableYears.length ? availableYears : [detectedYear]).map((y) => (
+            {Array.from(new Set(availableYears.length ? availableYears : [detectedYear].filter(Boolean))).map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
@@ -207,7 +207,13 @@ export default function FinanceDashboard() {
             value={filterTerm || detectedTerm}
             onChange={(e) => setFilterTerm(e.target.value)}
           >
-            {(availableTerms.length ? availableTerms : [detectedTerm, "Term 1", "Term 2", "Term 3"]).map((term) => (
+            {Array.from(
+              new Set(
+                availableTerms.length
+                  ? availableTerms
+                  : [detectedTerm, "Term 1", "Term 2", "Term 3"].filter(Boolean)
+              )
+            ).map((term) => (
               <option key={term} value={term}>{term}</option>
             ))}
           </select>
