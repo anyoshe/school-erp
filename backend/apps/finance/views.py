@@ -264,6 +264,22 @@ def _build_finance_dashboard_summary(request):
 
     total_revenue_with_pre = school_fee_collected + pre_enroll_income
 
+    # Align period buckets so they cannot exceed real Payment totals (stops 16.4k term vs 1.8k collected)
+    try:
+        if school_fee_collected > 0:
+            # Prefer payment truth for "all" / headline year when recognition drifted
+            revenue_by_period["all"] = school_fee_collected
+            # Cap year/term/session at actual collections
+            for k in ("year", "term", "session"):
+                if revenue_by_period.get(k, Decimal("0")) > school_fee_collected:
+                    revenue_by_period[k] = school_fee_collected
+                # If recognition under-counted vs payments, lift "all" already set
+        else:
+            revenue_by_period["all"] = school_fee_collected
+    except Exception:
+        pass
+
+
     # Outstanding from invoices using payment-based paid amounts
     total_outstanding = Decimal("0")
     students_with_balance = set()
