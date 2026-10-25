@@ -28,8 +28,8 @@ import { Loader2, CheckCircle2, ArrowLeft, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/utils/api";
 import { cn } from "@/lib/utils";
-import { Application } from "@/types/admission";
-import { classAppliedName } from "@/types/admission";
+import {Application, classAppliedId} from "@/types/admission";
+import { classAppliedName, classAppliedId } from "@/types/admission";
 import { fa } from "zod/v4/locales";
 
 interface Props {
@@ -271,7 +271,7 @@ export default function EnrollmentWizardModal({
     previous_grade: "",
     transfer_letter: null,
 
-    current_class: applicationData.class_applied?.id || "",
+    current_class: classAppliedId(applicationData),
     section: "",
     pathway: "",
     track: "",
@@ -520,7 +520,7 @@ export default function EnrollmentWizardModal({
 
 
   useEffect(() => {
-    const classId = applicationData?.class_applied?.id;
+    const classId = classAppliedId(applicationData) || undefined;
 
     if (!open || !classId) return;
 
@@ -602,7 +602,7 @@ export default function EnrollmentWizardModal({
     };
 
     loadFinanceData();
-  }, [open, applicationData?.class_applied?.id]);
+  }, [open, applicationData?.class_applied]);
 
   // Ensure interview/admission charges exist (N/A by default if school amounts are 0)
   useEffect(() => {

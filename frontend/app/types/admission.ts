@@ -116,3 +116,20 @@ export function classAppliedName(
   if (typeof c === "string" || typeof c === "number") return String(c);
   return "";
 }
+
+/** Safe grade id whether API sent nested object or raw id. */
+export function classAppliedId(
+  app?: {
+    class_applied?:
+      | { id?: string | number; name?: string }
+      | string
+      | number
+      | null;
+  } | null
+): string {
+  if (!app) return "";
+  const c = app.class_applied;
+  if (c && typeof c === "object" && c.id != null && c.id !== "") return String(c.id);
+  if (typeof c === "string" || typeof c === "number") return String(c);
+  return "";
+}

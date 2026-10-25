@@ -1,6 +1,6 @@
 "use client";
 
-import { classAppliedName } from "@/types/admission";
+import { classAppliedName, classAppliedId } from "@/types/admission";
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,7 @@ export default function OfferLetterModal({
     "We are delighted to offer you admission to our institution for the upcoming academic year. Please review the details below and complete the enrollment process by the deadline."
   );
 
-  const classId = applicationData?.class_applied?.id;
+  const classId = classAppliedId(applicationData) || undefined;
   const className = classAppliedName(applicationData) || "the applied class";
 
   useEffect(() => {
