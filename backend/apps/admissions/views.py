@@ -134,8 +134,6 @@ def _ensure_application_charges(application):
                 )
 
 
-
-
 class ApplicationViewSet(viewsets.ModelViewSet):
     pagination_class = None  # school lists are typically small; avoid page overhead
     """
