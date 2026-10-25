@@ -14,10 +14,13 @@ import {
   ClipboardList,
   Scale,
   ScrollText,
+  Menu,
+  X,
 } from "lucide-react";
 import api from "@/utils/api";
 import { toast } from "sonner";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 
 interface FeeItemTotal {
@@ -89,29 +92,85 @@ function balancedFeeGroupColumns(count: number): number {
   return best;
 }
 
+const FINANCE_NAV_LINKS = [
+  { href: "/dashboard/modules/finance/clearance", label: "Clearance" },
+  { href: "/dashboard/modules/finance/payments", label: "Record payment" },
+  { href: "/dashboard/modules/finance/receipts", label: "Receipts" },
+  { href: "/dashboard/modules/finance/invoices", label: "Invoices" },
+  { href: "/dashboard/modules/finance/fee-structures", label: "Fee structures" },
+  { href: "/dashboard/modules/finance/standing", label: "P&L" },
+  { href: "/dashboard/modules/finance/expenses", label: "Expenses" },
+  { href: "/dashboard/modules/finance/bills", label: "Bills" },
+  { href: "/dashboard/modules/finance/income-receipts", label: "Pre-enroll income" },
+] as const;
+
 function FinanceNavLinks() {
-  const links = [
-    { href: "/dashboard/modules/finance/clearance", label: "Clearance" },
-    { href: "/dashboard/modules/finance/payments", label: "Record payment" },
-    { href: "/dashboard/modules/finance/receipts", label: "Receipts" },
-    { href: "/dashboard/modules/finance/invoices", label: "Invoices" },
-    { href: "/dashboard/modules/finance/fee-structures", label: "Fee structures" },
-    { href: "/dashboard/modules/finance/standing", label: "P&L" },
-    { href: "/dashboard/modules/finance/expenses", label: "Expenses" },
-    { href: "/dashboard/modules/finance/bills", label: "Bills" },
-    { href: "/dashboard/modules/finance/income-receipts", label: "Pre-enroll income" },
-  ];
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+
+  const linkClass = (href: string) => {
+    const active =
+      pathname === href ||
+      (href !== "/dashboard/modules/finance" && pathname?.startsWith(href));
+    return [
+      "whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition no-underline",
+      active
+        ? "bg-teal-700 text-white shadow-sm"
+        : "text-slate-700 hover:bg-teal-50 hover:text-teal-900",
+    ].join(" ");
+  };
+
   return (
-    <nav className="mb-5 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5">
-      {links.map((l) => (
-        <Link
-          key={l.href}
-          href={l.href}
-          className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 shadow-sm hover:border-teal-600/40 hover:bg-teal-50 hover:text-teal-900 transition no-underline"
+    <nav className="mb-5 rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between gap-3 px-3 py-2 sm:px-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">
+            Finance
+          </p>
+          <p className="truncate text-[11px] text-muted-foreground">
+            Collect · bill · report
+          </p>
+        </div>
+
+        {/* Desktop / tablet horizontal nav */}
+        <div className="hidden md:flex flex-wrap items-center justify-end gap-1">
+          {FINANCE_NAV_LINKS.map((l) => (
+            <Link key={l.href} href={l.href} className={linkClass(l.href)}>
+              {l.label}
+            </Link>
+          ))}
+        </div>
+
+        {/* Mobile hamburger */}
+        <button
+          type="button"
+          className="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-800 hover:bg-teal-50 hover:text-teal-900"
+          aria-label={open ? "Close finance menu" : "Open finance menu"}
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
         >
-          {l.label}
-        </Link>
-      ))}
+          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+        </button>
+      </div>
+
+      {/* Mobile drawer panel */}
+      {open ? (
+        <div className="md:hidden border-t border-slate-100 bg-slate-50/80 px-2 py-2">
+          <ul className="flex flex-col gap-0.5">
+            {FINANCE_NAV_LINKS.map((l) => (
+              <li key={l.href}>
+                <Link
+                  href={l.href}
+                  className={`block ${linkClass(l.href)}`}
+                  onClick={() => setOpen(false)}
+                >
+                  {l.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </nav>
   );
 }
