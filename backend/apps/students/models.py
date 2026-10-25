@@ -147,24 +147,13 @@ class Student(models.Model):
 
     # Operational / Management Fields (admin fills or confirms)
     special_needs = models.TextField(blank=True, verbose_name="Special Educational Needs")
-    admission_date = models.DateField(default=timezone.now)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
-    notes = models.TextField(blank=True)
     # =========================================================
     # MANAGEMENT
     # =========================================================
-
-    admission_date = models.DateField(
-        default=timezone.now
-    )
-
-    status = models.CharField(
-        max_length=20,
-        choices=Status.choices,
-        default=Status.ACTIVE
-    )
-
+    admission_date = models.DateField(default=timezone.now)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     notes = models.TextField(blank=True)
+
     # Finance Link (no stored balance — dynamic from finance app)
     fee_structure = models.ForeignKey(
         'finance.FeeStructure', 
