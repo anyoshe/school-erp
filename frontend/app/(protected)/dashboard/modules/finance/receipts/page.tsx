@@ -76,9 +76,12 @@ function studentLabel(p: PaymentRow): string {
     if (s?.first_name || s?.last_name) {
       return `${s.first_name || ""} ${s.last_name || ""}`.trim();
     }
-    if (typeof s?.full_name === "string") return s.full_name;
   } catch { /* */ }
   return "Student";
+}
+
+function money(n: number, cur: string) {
+  return `${cur} ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
 export default function ReceiptPrintPage() {
@@ -105,7 +108,7 @@ export default function ReceiptPrintPage() {
       });
       setPayments(asList(response.data));
     } catch (error) {
-      console.error("Failed to fetch payments", error);
+      console.error(error);
       toast.error("Unable to load payment history.");
       setPayments([]);
     } finally {
@@ -127,7 +130,7 @@ export default function ReceiptPrintPage() {
       });
       setReceipt(response.data);
     } catch (error) {
-      console.error("Failed to load receipt", error);
+      console.error(error);
       toast.error("Unable to load receipt details.");
     } finally {
       setLoadingReceipt(false);
@@ -140,28 +143,104 @@ export default function ReceiptPrintPage() {
       return;
     }
     const html = printRef.current.innerHTML;
-    const w = window.open("", "_blank", "width=900,height=700");
+    const w = window.open("", "_blank", "width=560,height=800");
     if (!w) {
       toast.error("Allow pop-ups to print");
       return;
     }
-    w.document.write(`<!DOCTYPE html><html><head><title>Receipt ${receipt.receipt_number}</title>
+    w.document.write(`<!DOCTYPE html><html><head>
+<meta charset="utf-8"/>
+<title>Receipt ${receipt.receipt_number}</title>
 <style>
-  body { font-family: system-ui, sans-serif; color: #0f172a; margin: 24px; }
-  .receipt { max-width: 720px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 28px; }
-  .head { display: flex; gap: 16px; align-items: center; border-bottom: 2px solid #0f766e; padding-bottom: 16px; margin-bottom: 16px; }
-  .logo { width: 72px; height: 72px; object-fit: contain; }
-  h1 { font-size: 18px; margin: 0; }
-  .muted { color: #64748b; font-size: 12px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
-  th { color: #64748b; font-weight: 600; }
-  .right { text-align: right; }
-  .totals { margin-top: 16px; text-align: right; }
-  .totals strong { font-size: 18px; }
-  .foot { margin-top: 28px; font-size: 11px; color: #64748b; border-top: 1px dashed #cbd5e1; padding-top: 12px; }
-  @media print { body { margin: 0; } .receipt { border: none; } }
-</style></head><body>${html}
+  @page { size: A5 portrait; margin: 10mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", system-ui, sans-serif;
+    color: #0f172a;
+    margin: 0;
+    font-size: 10.5pt;
+    line-height: 1.25;
+  }
+  .sheet {
+    width: 100%;
+    max-width: 148mm;
+    margin: 0 auto;
+    padding: 0;
+  }
+  .head {
+    display: grid;
+    grid-template-columns: 48px 1fr;
+    gap: 8px;
+    align-items: center;
+    border-bottom: 2px solid #0f766e;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+  }
+  .logo { width: 48px; height: 48px; object-fit: contain; }
+  .logo-fallback {
+    width: 48px; height: 48px; border-radius: 6px;
+    background: #f0fdfa; border: 1px solid #99f6e4;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; color: #0f766e; font-size: 16px;
+  }
+  .school-name { font-size: 12pt; font-weight: 700; margin: 0; }
+  .meta-line { font-size: 8pt; color: #64748b; margin: 1px 0 0; }
+  .title {
+    text-align: center; font-size: 10pt; font-weight: 700;
+    letter-spacing: 0.06em; color: #0f766e; margin: 6px 0 8px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px 12px;
+    margin-bottom: 8px;
+    font-size: 9pt;
+  }
+  .grid .lbl { color: #64748b; font-size: 7.5pt; text-transform: uppercase; }
+  .grid .val { font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+  th {
+    text-align: left; font-size: 7.5pt; text-transform: uppercase;
+    color: #64748b; border-bottom: 1px solid #cbd5e1; padding: 3px 2px;
+  }
+  td { padding: 3px 2px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .summary {
+    margin-top: 8px;
+    border-top: 1px solid #cbd5e1;
+    padding-top: 6px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 16px;
+    font-size: 9pt;
+  }
+  .summary .amt { text-align: right; font-variant-numeric: tabular-nums; }
+  .summary .paid {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+    padding: 6px 8px;
+    background: #f0fdfa;
+    border: 1px solid #99f6e4;
+    border-radius: 4px;
+    display: flex;
+    justify-content: space-between;
+    font-weight: 700;
+    font-size: 11pt;
+    color: #115e59;
+  }
+  .foot {
+    margin-top: 10px;
+    padding-top: 6px;
+    border-top: 1px dashed #94a3b8;
+    font-size: 7.5pt;
+    color: #64748b;
+    display: flex;
+    justify-content: space-between;
+  }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style></head><body><div class="sheet">${html}</div>
 <script>window.onload=function(){window.print();}</script></body></html>`);
     w.document.close();
   };
@@ -182,6 +261,9 @@ export default function ReceiptPrintPage() {
     (currentSchool?.logo ? resolveMediaUrl(currentSchool.logo as any) : null);
   const schoolName = receipt?.school?.name || currentSchool?.name || "School";
   const cur = receipt?.school?.currency || currency;
+  const dateStr =
+    receipt?.payment_date ||
+    (receipt?.paid_at ? String(receipt.paid_at).slice(0, 10) : "—");
 
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-6xl mx-auto">
@@ -194,7 +276,7 @@ export default function ReceiptPrintPage() {
         <div className="flex-1 min-w-[200px]">
           <h1 className="text-2xl font-bold tracking-tight">Payment receipts</h1>
           <p className="text-sm text-muted-foreground">
-            Print official receipts for school fee collections and balance payments.
+            A5 official receipts — fee bill, amount received, and balance.
           </p>
         </div>
         <Button
@@ -203,19 +285,19 @@ export default function ReceiptPrintPage() {
           disabled={!receipt}
           onClick={printReceipt}
         >
-          <Printer className="h-4 w-4 mr-1" /> Print receipt
+          <Printer className="h-4 w-4 mr-1" /> Print A5
         </Button>
       </div>
 
-      <div className="grid lg:grid-cols-[340px_1fr] gap-6">
+      <div className="grid lg:grid-cols-[300px_1fr] gap-5">
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="border-b bg-slate-50/80 pb-3">
-            <CardTitle className="text-base">Payment history</CardTitle>
+            <CardTitle className="text-base">History</CardTitle>
             <div className="relative mt-2">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                className="pl-9"
-                placeholder="Search name, adm #, receipt…"
+                className="pl-9 h-9"
+                placeholder="Search…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -230,170 +312,166 @@ export default function ReceiptPrintPage() {
               <p className="p-6 text-sm text-muted-foreground">No payments found.</p>
             ) : (
               <ul className="divide-y">
-                {filtered.map((p) => {
-                  const active = selectedPaymentId === p.id;
-                  return (
-                    <li key={p.id}>
-                      <button
-                        type="button"
-                        onClick={() => loadReceipt(p.id)}
-                        className={`w-full text-left px-4 py-3 hover:bg-emerald-50/60 transition ${
-                          active ? "bg-emerald-50 border-l-4 border-emerald-600" : ""
-                        }`}
-                      >
-                        <p className="font-semibold text-sm">{studentLabel(p)}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {p.admission_number ? `${p.admission_number} · ` : ""}
-                          {p.invoice_number || p.invoice?.invoice_number || "Invoice"}
-                        </p>
-                        <p className="text-sm mt-1 flex justify-between">
-                          <span className="tabular-nums font-medium">
-                            {cur} {Number(p.amount || 0).toLocaleString()}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {p.payment_date ||
-                              (p.paid_at ? String(p.paid_at).slice(0, 10) : "")}
-                          </span>
-                        </p>
-                      </button>
-                    </li>
-                  );
-                })}
+                {filtered.map((p) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => loadReceipt(p.id)}
+                      className={`w-full text-left px-3 py-2.5 hover:bg-emerald-50/60 transition ${
+                        selectedPaymentId === p.id
+                          ? "bg-emerald-50 border-l-4 border-emerald-600"
+                          : ""
+                      }`}
+                    >
+                      <p className="font-semibold text-sm leading-tight">{studentLabel(p)}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {p.admission_number ? `${p.admission_number} · ` : ""}
+                        {p.invoice_number || "Invoice"}
+                      </p>
+                      <p className="text-sm mt-0.5 flex justify-between">
+                        <span className="font-medium tabular-nums">
+                          {money(p.amount, cur)}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {p.payment_date ||
+                            (p.paid_at ? String(p.paid_at).slice(0, 10) : "")}
+                        </span>
+                      </p>
+                    </button>
+                  </li>
+                ))}
               </ul>
             )}
           </CardContent>
         </Card>
 
         <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="border-b bg-slate-50/80 flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Receipt preview</CardTitle>
+          <CardHeader className="border-b bg-slate-50/80 flex flex-row items-center justify-between py-3">
+            <CardTitle className="text-base">Preview (A5)</CardTitle>
             {receipt && (
               <Button type="button" size="sm" variant="outline" onClick={printReceipt}>
                 <Printer className="h-4 w-4 mr-1" /> Print
               </Button>
             )}
           </CardHeader>
-          <CardContent className="p-4 sm:p-6">
+          <CardContent className="p-4 flex justify-center bg-slate-100/50">
             {loadingReceipt ? (
-              <p className="py-16 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
-                <Loader2 className="h-5 w-5 animate-spin" /> Loading receipt…
+              <p className="py-16 text-sm text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" /> Loading…
               </p>
             ) : !receipt ? (
-              <p className="py-16 text-center text-sm text-muted-foreground">
-                Select a payment from the list to preview and print the receipt.
+              <p className="py-16 text-sm text-muted-foreground">
+                Select a payment to preview the receipt.
               </p>
             ) : (
-              <div ref={printRef}>
-                <div className="receipt max-w-xl mx-auto border border-slate-200 rounded-xl p-6 bg-white">
-                  <div className="head flex gap-4 items-center border-b-2 border-teal-700 pb-4 mb-4">
+              <div
+                className="bg-white shadow-md border border-slate-200 w-full max-w-[148mm] p-4"
+                style={{ minHeight: "180mm" }}
+              >
+                <div ref={printRef}>
+                  <div className="head" style={{ display: "grid", gridTemplateColumns: "48px 1fr", gap: 8, alignItems: "center", borderBottom: "2px solid #0f766e", paddingBottom: 6, marginBottom: 8 }}>
                     {logoSrc ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={logoSrc} alt="" className="logo w-16 h-16 object-contain" />
+                      <img src={logoSrc} alt="" className="logo" style={{ width: 48, height: 48, objectFit: "contain" }} />
                     ) : (
-                      <div className="w-16 h-16 rounded-lg bg-teal-50 border border-teal-100 flex items-center justify-center text-teal-800 font-bold text-lg">
+                      <div className="logo-fallback" style={{ width: 48, height: 48, borderRadius: 6, background: "#f0fdfa", border: "1px solid #99f6e4", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "#0f766e" }}>
                         {(schoolName || "S").slice(0, 1)}
                       </div>
                     )}
                     <div>
-                      <h1 className="text-lg font-bold text-slate-900">{schoolName}</h1>
+                      <p className="school-name" style={{ fontSize: "12pt", fontWeight: 700, margin: 0 }}>{schoolName}</p>
                       {receipt.school?.address ? (
-                        <p className="muted text-xs text-slate-500">{receipt.school.address}</p>
+                        <p className="meta-line" style={{ fontSize: "8pt", color: "#64748b", margin: "1px 0 0" }}>{receipt.school.address}</p>
                       ) : null}
-                      <p className="muted text-xs text-slate-500">
+                      <p className="meta-line" style={{ fontSize: "8pt", color: "#64748b", margin: 0 }}>
                         {[receipt.school?.phone, receipt.school?.email].filter(Boolean).join(" · ")}
                       </p>
-                      <p className="text-sm font-semibold text-teal-800 mt-1">OFFICIAL FEE RECEIPT</p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+                  <p className="title" style={{ textAlign: "center", fontSize: "10pt", fontWeight: 700, letterSpacing: "0.06em", color: "#0f766e", margin: "6px 0 8px" }}>
+                    FEE RECEIPT
+                  </p>
+
+                  <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 12px", marginBottom: 8, fontSize: "9pt" }}>
                     <div>
-                      <p className="text-xs text-slate-500">Receipt No.</p>
-                      <p className="font-mono font-semibold">{receipt.receipt_number}</p>
+                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Receipt No.</div>
+                      <div className="val" style={{ fontWeight: 600 }}>{receipt.receipt_number}</div>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Date</p>
-                      <p className="font-semibold">
-                        {receipt.payment_date ||
-                          (receipt.paid_at ? String(receipt.paid_at).slice(0, 10) : "—")}
-                      </p>
+                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Date</div>
+                      <div className="val" style={{ fontWeight: 600 }}>{dateStr}</div>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Student</p>
-                      <p className="font-semibold">{receipt.student_name}</p>
+                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Student</div>
+                      <div className="val" style={{ fontWeight: 600 }}>{receipt.student_name}</div>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Admission No.</p>
-                      <p className="font-semibold">{receipt.admission_number || "—"}</p>
+                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Admission No.</div>
+                      <div className="val" style={{ fontWeight: 600 }}>{receipt.admission_number || "—"}</div>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Class / Grade</p>
-                      <p className="font-semibold">{receipt.grade || "—"}</p>
+                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Class</div>
+                      <div className="val" style={{ fontWeight: 600 }}>{receipt.grade || "—"}</div>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Term / Year</p>
-                      <p className="font-semibold">
+                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Term / Year</div>
+                      <div className="val" style={{ fontWeight: 600 }}>
                         {receipt.invoice_term || "—"} · {receipt.invoice_year || "—"}
-                      </p>
+                      </div>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Invoice</p>
-                      <p className="font-mono text-sm">{receipt.invoice_number}</p>
+                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Invoice</div>
+                      <div className="val" style={{ fontWeight: 600, fontFamily: "monospace", fontSize: "8.5pt" }}>{receipt.invoice_number}</div>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Method</p>
-                      <p className="font-semibold">
+                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Method</div>
+                      <div className="val" style={{ fontWeight: 600 }}>
                         {receipt.payment_method}
                         {receipt.reference_number ? ` · ${receipt.reference_number}` : ""}
-                      </p>
+                      </div>
                     </div>
                   </div>
 
-                  <table className="w-full text-sm">
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "9pt" }}>
                     <thead>
-                      <tr className="text-left text-xs uppercase text-slate-500 border-b">
-                        <th className="py-2">Description</th>
-                        <th className="py-2">Category</th>
-                        <th className="py-2 text-right">Amount</th>
+                      <tr>
+                        <th style={{ textAlign: "left", fontSize: "7.5pt", textTransform: "uppercase", color: "#64748b", borderBottom: "1px solid #cbd5e1", padding: "3px 2px" }}>Fee item</th>
+                        <th style={{ textAlign: "right", fontSize: "7.5pt", textTransform: "uppercase", color: "#64748b", borderBottom: "1px solid #cbd5e1", padding: "3px 2px" }}>Billed</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(receipt.line_items || []).map((ln, i) => (
-                        <tr key={i} className="border-b border-slate-100">
-                          <td className="py-2">{ln.description}</td>
-                          <td className="py-2 text-slate-500">{ln.category}</td>
-                          <td className="py-2 text-right tabular-nums">
-                            {Number(ln.amount || 0).toLocaleString()}
+                        <tr key={i}>
+                          <td style={{ padding: "3px 2px", borderBottom: "1px solid #f1f5f9" }}>
+                            {ln.description}
+                            {ln.category ? (
+                              <span style={{ color: "#94a3b8", fontSize: "7.5pt" }}> · {ln.category}</span>
+                            ) : null}
+                          </td>
+                          <td className="num" style={{ textAlign: "right", padding: "3px 2px", borderBottom: "1px solid #f1f5f9", fontVariantNumeric: "tabular-nums" }}>
+                            {Number(ln.amount || ln.line_amount || 0).toLocaleString()}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
 
-                  <div className="totals mt-4 space-y-1 text-sm text-right">
-                    <p>
-                      Invoice total: {cur}{" "}
-                      {Number(receipt.invoice_amount_due || 0).toLocaleString()}
-                    </p>
-                    <p>
-                      Total paid on invoice: {cur}{" "}
-                      {Number(receipt.invoice_amount_paid || 0).toLocaleString()}
-                    </p>
-                    <p>
-                      Balance: {cur}{" "}
-                      {Number(receipt.invoice_balance || 0).toLocaleString()}
-                    </p>
-                    <p className="text-lg font-bold text-teal-900 pt-1">
-                      Amount received: {cur} {Number(receipt.amount || 0).toLocaleString()}
-                    </p>
+                  <div className="summary" style={{ marginTop: 8, borderTop: "1px solid #cbd5e1", paddingTop: 6, display: "grid", gridTemplateColumns: "1fr auto", gap: "2px 16px", fontSize: "9pt" }}>
+                    <span>Invoice total</span>
+                    <span className="amt" style={{ textAlign: "right" }}>{money(receipt.invoice_amount_due, cur)}</span>
+                    <span>Paid to date</span>
+                    <span className="amt" style={{ textAlign: "right" }}>{money(receipt.invoice_amount_paid, cur)}</span>
+                    <span>Balance due</span>
+                    <span className="amt" style={{ textAlign: "right", fontWeight: 600 }}>{money(receipt.invoice_balance, cur)}</span>
+                    <div className="paid" style={{ gridColumn: "1 / -1", marginTop: 4, padding: "6px 8px", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 4, display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "11pt", color: "#115e59" }}>
+                      <span>Amount received</span>
+                      <span>{money(receipt.amount, cur)}</span>
+                    </div>
                   </div>
 
-                  {receipt.notes ? (
-                    <p className="text-xs text-slate-500 mt-3">Notes: {receipt.notes}</p>
-                  ) : null}
-
-                  <div className="foot mt-8 text-xs text-slate-500 border-t border-dashed border-slate-300 pt-3 flex justify-between">
-                    <span>Computer-generated receipt · Valid without signature</span>
+                  <div className="foot" style={{ marginTop: 10, paddingTop: 6, borderTop: "1px dashed #94a3b8", fontSize: "7.5pt", color: "#64748b", display: "flex", justifyContent: "space-between" }}>
+                    <span>Computer-generated · Keep for your records</span>
                     <span>Thank you</span>
                   </div>
                 </div>

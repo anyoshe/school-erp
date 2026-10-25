@@ -944,37 +944,28 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
         inv_due = Decimal(str(invoice.amount_due or 0)) + Decimal(str(invoice.late_fee_applied or 0))
         pay_amt = Decimal(str(payment.amount or 0))
-        # Allocate this payment across invoice lines proportionally
+        # Invoice fee breakdown (what was billed) — payment is shown as a single received amount
         raw_lines = list(invoice.lines.select_related("item__category").all())
-        line_total = sum((Decimal(str(ln.amount or 0)) for ln in raw_lines), Decimal("0"))
         lines = []
-        if raw_lines and line_total > 0:
-            allocated = Decimal("0")
-            for i, line in enumerate(raw_lines):
-                share = (Decimal(str(line.amount or 0)) / line_total) * pay_amt
-                if i == len(raw_lines) - 1:
-                    share = pay_amt - allocated
-                else:
-                    share = share.quantize(Decimal("0.01"))
-                    allocated += share
-                lines.append({
-                    "description": line.description or (
-                        line.item.name if line.item_id else "Fee item"
-                    ),
-                    "category": (
-                        line.item.category.name
-                        if line.item_id and line.item and line.item.category_id
-                        else "Fees"
-                    ),
-                    "line_amount": float(line.amount or 0),
-                    "amount": float(share),
-                })
-        else:
+        for line in raw_lines:
             lines.append({
-                "description": f"Payment toward {invoice.invoice_number}",
+                "description": line.description or (
+                    line.item.name if line.item_id else "Fee item"
+                ),
+                "category": (
+                    line.item.category.name
+                    if line.item_id and line.item and line.item.category_id
+                    else "Fees"
+                ),
+                "line_amount": float(line.amount or 0),
+                "amount": float(line.amount or 0),
+            })
+        if not lines:
+            lines.append({
+                "description": f"School fees — {invoice.invoice_number}",
                 "category": "Fees",
                 "line_amount": float(inv_due),
-                "amount": float(pay_amt),
+                "amount": float(inv_due),
             })
 
         logo_url = None
