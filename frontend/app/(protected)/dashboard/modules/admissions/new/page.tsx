@@ -34,19 +34,17 @@ import Link from "next/link";
 // ──────────────────────────────
 // Form schema
 // ──────────────────────────────
-const emptyToUndefined = (v: unknown) =>
-  v === "" || v === null || v === undefined ? undefined : v;
-
 const formSchema = z.object({
   first_name: z.string().min(1, "First name is required"),
   middle_name: z.string().optional(),
   last_name: z.string().min(1, "Last name is required"),
   preferred_name: z.string().optional(),
-  gender: z.preprocess(
-    emptyToUndefined,
-    z.enum(["MALE", "FEMALE", "OTHER"], { required_error: "Gender is required" })
-  ),
-  date_of_birth: z.string().min(1, "Date of birth is required"),
+  // empty string allowed in form state; validated when filled
+  gender: z
+    .enum(["MALE", "FEMALE", "OTHER", ""])
+    .optional()
+    .transform((v) => (v === "" || v == null ? undefined : v)),
+  date_of_birth: z.string().optional(),
   nationality: z.string().min(1, "Nationality is required"),
   passport_number: z.string().optional(),
   birth_certificate_number: z.string().optional(),
@@ -54,15 +52,22 @@ const formSchema = z.object({
   primary_guardian_name: z.string().min(1, "Guardian name is required"),
   primary_guardian_phone: z.string().min(9, "Valid phone number required"),
   // empty string must NOT fail as "invalid email"
-  primary_guardian_email: z.preprocess(
-    emptyToUndefined,
-    z.string().email("Invalid email").optional()
-  ),
+  primary_guardian_email: z
+    .string()
+    .optional()
+    .refine((v) => !v || v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), {
+      message: "Invalid email",
+    }),
   primary_guardian_relationship: z.string().min(1, "Relationship is required"),
   primary_guardian_id_number: z.string().optional(),
   secondary_guardian_name: z.string().optional(),
   secondary_guardian_phone: z.string().optional(),
-  secondary_guardian_email: z.preprocess(emptyToUndefined, z.string().email("Invalid email").optional()),
+  secondary_guardian_email: z
+    .string()
+    .optional()
+    .refine((v) => !v || v === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v), {
+      message: "Invalid email",
+    }),
   secondary_guardian_relationship: z.string().optional(),
   secondary_guardian_id_number: z.string().optional(),
 
@@ -95,7 +100,7 @@ const formSchema = z.object({
 );
 
 
-type FormValues = z.infer<typeof formSchema>;
+type FormValues = z.input<typeof formSchema>;
 
 interface GradeLevel {
   id: string;
@@ -174,7 +179,7 @@ function NewApplicationPageInner() {
     formState: { errors, isValid, isSubmitting },
     trigger,
   } = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as any,
     defaultValues: {
       first_name: "",
       middle_name: "",
