@@ -85,19 +85,15 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             return Application.objects.none()
 
         qs = Application.objects.filter(school_id__in=accessible_school_ids(self.request))
-        # List: minimal joins. Detail: full relations.
+        # List: pipeline applicants (not enrolled) by default — light joins only
         if getattr(self, "action", None) == "list":
-            return qs.select_related("class_applied").only(
-                "id",
-                "admission_number",
-                "first_name",
-                "middle_name",
-                "last_name",
-                "status",
-                "submitted_at",
-                "school_id",
-                "class_applied_id",
-                "created_at",
+            include_enrolled = str(
+                self.request.query_params.get("include_enrolled") or ""
+            ).lower() in ("1", "true", "yes")
+            if not include_enrolled:
+                qs = qs.exclude(status=Application.Status.ENROLLED)
+            return qs.select_related("class_applied").order_by(
+                "-submitted_at", "-created_at"
             )
         return qs.prefetch_related("documents", "fee_payments", "charges").select_related(
             "class_applied", "school"

@@ -304,9 +304,7 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
 class ApplicationListSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source="get_status_display", read_only=True)
-    class_applied_name = serializers.CharField(
-        source="class_applied.name", read_only=True, default=""
-    )
+    class_applied_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Application
@@ -326,3 +324,7 @@ class ApplicationListSerializer(serializers.ModelSerializer):
 
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.middle_name or ''} {obj.last_name}".strip()
+
+    def get_class_applied_name(self, obj):
+        ca = getattr(obj, "class_applied", None)
+        return getattr(ca, "name", "") or ""

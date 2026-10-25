@@ -48,21 +48,32 @@ const AdmissionsPage = () => {
     staleTime: 60_000,
   });
 
-  const { data: applications = [], isLoading } = useQuery({
+  const {
+    data: applications = [],
+    isLoading,
+    isError: applicationsError,
+    error: applicationsErr,
+    refetch: refetchApplications,
+  } = useQuery({
     queryKey: ['applications', currentSchool?.id],
     queryFn: async () => {
       if (!currentSchool?.id) throw new Error("No school selected");
       const res = await api.get('/admissions/applications/', {
-        headers: { 'X-School-ID': currentSchool.id },
+        headers: { 'X-School-ID': String(currentSchool.id) },
+        // Pipeline only (not enrolled). Backend excludes ENROLLED by default.
+        params: { include_enrolled: 0 },
       });
       const data = res.data;
       if (Array.isArray(data)) return data;
       if (Array.isArray(data?.results)) return data.results;
+      if (Array.isArray(data?.data)) return data.data;
+      console.warn("[admissions] unexpected list payload", data);
       return [];
     },
     enabled: !!currentSchool?.id && !schoolLoading,
-    staleTime: 45_000,
+    staleTime: 30_000,
     refetchOnWindowFocus: false,
+    retry: 1,
   });
 
   const applicationList = Array.isArray(applications) ? applications : [];
@@ -94,7 +105,8 @@ const AdmissionsPage = () => {
     { key: 'UNDER_REVIEW', label: 'In review', icon: Filter },
     { key: 'OFFERED', label: 'Offered', icon: Sparkles },
     { key: 'ACCEPTED', label: 'Accepted', icon: CalendarCheck },
-    { key: 'ENROLLED', label: 'Enrolled', icon: UserCheck },
+    // Enrolled students live under Students module after finance clearance
+    // { key: 'ENROLLED', label: 'Enrolled', icon: UserCheck },
   ];
 
    // Show loading while we check user & school
@@ -279,14 +291,30 @@ const AdmissionsPage = () => {
               <Loader2 className="h-8 w-8 animate-spin text-slate-300" />
               <p className="text-sm text-slate-400 font-medium">Synchronizing records...</p>
             </div>
+          ) : applicationsError ? (
+            <div className="rounded-[2rem] border border-red-200 bg-red-50/50 p-12 text-center">
+              <h3 className="text-lg font-bold text-red-900">Could not load applications</h3>
+              <p className="text-red-700/80 text-sm max-w-md mx-auto mt-2">
+                {(applicationsErr as any)?.response?.data?.detail ||
+                  (applicationsErr as Error)?.message ||
+                  "Check that the backend is running and you have the correct school selected."}
+              </p>
+              <button
+                type="button"
+                onClick={() => refetchApplications()}
+                className="mt-4 rounded-xl bg-red-700 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Retry
+              </button>
+            </div>
           ) : applicationList.length === 0 ? (
-            <div className="bg-white rounded-[2rem] border border-slate-200 p-12 text-center">
+            <div className="rounded-[2rem] border border-slate-200 p-12 text-center">
               <div className="mx-auto h-16 w-16 rounded-full bg-slate-50 flex items-center justify-center mb-4">
                 <Users className="h-8 w-8 text-slate-200" />
               </div>
-              <h3 className="text-lg font-bold text-slate-900">No applications found</h3>
+              <h3 className="text-lg font-bold text-slate-900">No open applications</h3>
               <p className="text-slate-500 text-sm max-w-xs mx-auto mt-2">
-                We couldn't find any applications for this school. Start by creating a new entry.
+                Showing applicants who are not yet enrolled. Create a new application or check another school.
               </p>
             </div>
           ) : (
