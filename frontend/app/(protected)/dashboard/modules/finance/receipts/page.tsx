@@ -123,24 +123,24 @@ const RECEIPT_CSS = `
   }
   .rcpt-meta {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px 48px;
-    column-gap: 48px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 28px;
+    row-gap: 7px;
     text-align: left;
-    margin: 0 auto 12px;
-    max-width: 92%;
-    width: 92%;
-    justify-content: center;
+    margin: 0 0 12px;
+    width: 100%;
+    max-width: 100%;
   }
   .rcpt-meta > div {
     text-align: left;
+    min-width: 0;
   }
   .rcpt-meta .lbl {
     font-size: 7.5pt;
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: #64748b;
-    margin: 0;
+    margin: 0 0 1px;
     text-align: left;
   }
   .rcpt-meta .val {
@@ -148,6 +148,9 @@ const RECEIPT_CSS = `
     font-weight: 600;
     margin: 0;
     text-align: left;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.3;
   }
   .rcpt-table {
     width: 100%;
