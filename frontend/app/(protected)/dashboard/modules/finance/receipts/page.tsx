@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import api from "@/utils/api";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
-import { resolveMediaUrl } from "@/utils/media";
+import { resolveMediaUrl, stripLogoBackground } from "@/utils/media";
 import { Loader2, ArrowLeft, Printer, Search } from "lucide-react";
 
 type PaymentRow = {
@@ -80,9 +80,10 @@ const RECEIPT_CSS = `
     margin-bottom: 8px;
   }
   .rcpt-logo {
-    width: 88px;
-    height: 88px;
+    width: 96px;
+    height: 96px;
     object-fit: contain;
+    background: transparent;
   }
   .rcpt-logo-fallback {
     width: 88px;
@@ -331,9 +332,25 @@ export default function ReceiptPrintPage() {
     );
   });
 
-  const logoSrc =
+  const rawLogoSrc =
     receipt?.school?.logo_url ||
     (currentSchool?.logo ? resolveMediaUrl(currentSchool.logo as any) : null);
+  const [logoSrc, setLogoSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLogoSrc(null);
+    if (!rawLogoSrc) return;
+    (async () => {
+      const cleaned = await stripLogoBackground(rawLogoSrc);
+      if (cancelled) return;
+      setLogoSrc(cleaned || rawLogoSrc);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [rawLogoSrc]);
+
   const schoolName = receipt?.school?.name || currentSchool?.name || "School";
   const cur = receipt?.school?.currency || currency;
   const dateStr =
