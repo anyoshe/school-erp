@@ -121,7 +121,7 @@ function FinanceNavLinks() {
   };
 
   return (
-    <nav className="mb-5 rounded-xl border border-slate-200 bg-white shadow-sm">
+    <nav className="sticky top-0 z-10 mb-5 rounded-xl border border-slate-200 bg-white/95 backdrop-blur-md shadow-sm supports-[backdrop-filter]:bg-white/90">
       <div className="flex items-center justify-between gap-3 px-3 py-2 sm:px-4">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">
