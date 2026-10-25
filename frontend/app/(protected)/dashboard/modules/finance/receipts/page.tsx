@@ -124,11 +124,12 @@ const RECEIPT_CSS = `
   .rcpt-meta {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px 20px;
+    gap: 8px 48px;
+    column-gap: 48px;
     text-align: left;
     margin: 0 auto 12px;
-    max-width: 85%;
-    width: 85%;
+    max-width: 92%;
+    width: 92%;
     justify-content: center;
   }
   .rcpt-meta > div {
