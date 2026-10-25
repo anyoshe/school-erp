@@ -42,7 +42,8 @@ interface Application {
   middle_name?: string;
   last_name: string;
   status: "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "TEST_SCHEDULED" | "OFFERED" | "ACCEPTED" | "REJECTED" | "ENROLLED";
-  class_applied?: { id: number | string; name: string; education_level?: string; pathway?: string };
+  class_applied?: { id: number | string; name: string; education_level?: string; pathway?: string } | number | string;
+  class_applied_name?: string;
   fee_payments?: Array<{ id: string; amount: number }>;
   student?: { id: string; full_name: string };
 }
