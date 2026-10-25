@@ -112,7 +112,7 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
                     name = si.description
                 if name:
                     ensure(name)
-        for fi in FeeItem.objects.filter(school_id__in=list(school_ids)).only("name"):
+        for fi in FeeItem.objects.filter(category__school_id__in=list(school_ids)).only("name"):
             if fi.name:
                 ensure(fi.name)
     except Exception as exc:
