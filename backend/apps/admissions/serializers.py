@@ -303,15 +303,25 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
 # Optional: Minimal serializer for list view (faster)
 class ApplicationListSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
-    status_display = serializers.CharField(source='get_status_display')
-    class_applied = GradeLevelSerializer(read_only=True)
-    photo = serializers.ImageField(read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    class_applied_name = serializers.CharField(
+        source="class_applied.name", read_only=True, default=""
+    )
 
     class Meta:
         model = Application
         fields = [
-            'id', 'admission_number', 'full_name', 'status', 'status_display',
-            'class_applied', 'submitted_at', 'school', 'photo',
+            "id",
+            "admission_number",
+            "full_name",
+            "first_name",
+            "last_name",
+            "status",
+            "status_display",
+            "class_applied",
+            "class_applied_name",
+            "submitted_at",
+            "school",
         ]
 
     def get_full_name(self, obj):
