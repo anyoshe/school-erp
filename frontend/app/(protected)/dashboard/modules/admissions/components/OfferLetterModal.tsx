@@ -1,5 +1,6 @@
-import { classAppliedName } from "@/types/admission";
 "use client";
+
+import { classAppliedName } from "@/types/admission";
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
