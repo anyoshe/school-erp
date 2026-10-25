@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import api from "@/utils/api";
 import { cn } from "@/lib/utils";
 import { Application } from "@/types/admission";
+import { classAppliedName } from "@/types/admission";
 import { fa } from "zod/v4/locales";
 
 interface Props {
@@ -63,7 +64,7 @@ const ClassLogisticsStep = ({
       <div>
         <Label>Class / Grade *</Label>
         <Input
-          value={applicationData.class_applied?.name ?? ""}
+          value={classAppliedName(applicationData)}
           disabled
         />
       </div>

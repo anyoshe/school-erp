@@ -97,3 +97,22 @@ export interface Application {
 }
 
 export type ApplicationStatus = Application['status'];
+
+/** Safe grade label whether API sent nested object, id, or class_applied_name. */
+export function classAppliedName(
+  app?: {
+    class_applied_name?: string | null;
+    class_applied?:
+      | { id?: string | number; name?: string }
+      | string
+      | number
+      | null;
+  } | null
+): string {
+  if (!app) return "";
+  if (app.class_applied_name) return String(app.class_applied_name);
+  const c = app.class_applied;
+  if (c && typeof c === "object" && c.name) return String(c.name);
+  if (typeof c === "string" || typeof c === "number") return String(c);
+  return "";
+}
