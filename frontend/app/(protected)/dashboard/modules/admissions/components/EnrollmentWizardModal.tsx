@@ -610,7 +610,7 @@ export default function EnrollmentWizardModal({
     (async () => {
       setChargesLoading(true);
       try {
-        const res = await api.post(`/admissions/applications/${applicationId}/ensure-charges/`);
+        const res = await api.post(`/admissions/applications/${applicationId}/ensure-charges/`, {}, { headers: currentSchool?.id ? { 'X-School-ID': String(currentSchool.id) } : undefined });
         if (!cancelled) setApplicationCharges(res.data?.charges || []);
       } catch (e) {
         console.warn("ensure-charges failed", e);

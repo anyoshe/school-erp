@@ -67,6 +67,7 @@ def _ensure_application_charges(application):
 
 
 class ApplicationViewSet(viewsets.ModelViewSet):
+    pagination_class = None  # school lists are typically small; avoid page overhead
     """
     Main ViewSet for school staff/admins - full CRUD + enrollment
     """
@@ -83,9 +84,24 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         if not self.request.user.is_authenticated:
             return Application.objects.none()
 
-        user = self.request.user
-
-        return self.queryset.filter(school_id__in=accessible_school_ids(self.request))
+        qs = Application.objects.filter(school_id__in=accessible_school_ids(self.request))
+        # List: minimal joins. Detail: full relations.
+        if getattr(self, "action", None) == "list":
+            return qs.select_related("class_applied").only(
+                "id",
+                "admission_number",
+                "first_name",
+                "middle_name",
+                "last_name",
+                "status",
+                "submitted_at",
+                "school_id",
+                "class_applied_id",
+                "created_at",
+            )
+        return qs.prefetch_related("documents", "fee_payments", "charges").select_related(
+            "class_applied", "school"
+        )
     
     def get_serializer_class(self):
         if self.action in ['list']:

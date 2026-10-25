@@ -160,7 +160,7 @@ export default function ApplicationTable({
                       <p className="text-[11px] text-slate-400 mt-1 uppercase font-medium tracking-tighter truncate">
                         Grade:{" "}
                         {(typeof app.class_applied === "object"
-                          ? app.class_applied?.name
+                          ? (app.class_applied_name || (typeof app.class_applied === 'object' ? app.class_applied?.name : app.class_applied))
                           : app.class_applied) || "Unassigned"}
                       </p>
                     </div>
@@ -223,7 +223,7 @@ export default function ApplicationTable({
                     {app.first_name} {app.last_name}
                   </h3>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">
-                    {app.class_applied?.name || "Unassigned"} • {app.admission_number || "No ID"}
+                    {(app.class_applied_name || (typeof app.class_applied === 'object' ? app.class_applied?.name : app.class_applied)) || "Unassigned"} • {app.admission_number || "No ID"}
                   </p>
                 </div>
               </div>

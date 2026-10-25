@@ -61,6 +61,8 @@ const AdmissionsPage = () => {
       return [];
     },
     enabled: !!currentSchool?.id && !schoolLoading,
+    staleTime: 45_000,
+    refetchOnWindowFocus: false,
   });
 
   const applicationList = Array.isArray(applications) ? applications : [];

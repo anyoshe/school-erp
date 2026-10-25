@@ -190,6 +190,10 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
             'admission_number_format',
             'admission_prefix',
             'admission_seq_padding',
+            'interview_fee_enabled',
+            'interview_fee_amount',
+            'admission_fee_amount',
+            'require_admission_fee_before_enroll',
         ]
         extra_kwargs = {
             'logo': {'required': False, 'allow_null': True},

@@ -60,6 +60,13 @@ export interface School {
   registration_authority?: string;
   registration_date?: string;
   admission_fee?: number;
+  admission_fee_amount?: number;
+  interview_fee_enabled?: boolean;
+  interview_fee_amount?: number;
+  require_admission_fee_before_enroll?: boolean;
+  admission_number_format?: string;
+  admission_prefix?: string;
+  admission_seq_padding?: number;
   logo?: string | null;
   module_ids?: number[];
   modules: Module[];
