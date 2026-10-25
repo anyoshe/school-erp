@@ -1,3 +1,4 @@
+import re
 from django.db import transaction
 from collections import defaultdict
 from datetime import timedelta
@@ -40,32 +41,26 @@ def _get_assignment_period_meta(assignment: StudentFeeAssignment):
     return (
         getattr(structure, "academic_year", "") or "",
         getattr(structure, "period_name", "") or "",
-    )
-
-
-
 
 def _empty_fee_groups():
-    names = [
-        "Interview",
-        "Admission / registration",
-        "Tuition",
-        "Examination",
-        "Co-curricular",
-        "Transport",
-        "Materials",
-        "Misc / Other",
-    ]
+    """Minimal fallback if aggregation fails."""
     return [
         {
-            "groupKey": n.lower().replace(" ", "_").replace("/", "_"),
-            "description": n,
+            "groupKey": "interview",
+            "description": "Interview fee",
             "allocated": 0.0,
             "pending": 0.0,
             "total": 0.0,
-            "isTuition": n == "Tuition",
-        }
-        for n in names
+            "isTuition": False,
+        },
+        {
+            "groupKey": "admission_registration",
+            "description": "Admission / registration fee",
+            "allocated": 0.0,
+            "pending": 0.0,
+            "total": 0.0,
+            "isTuition": False,
+        },
     ]
 
 
@@ -78,40 +73,64 @@ def _safe_fee_group_breakdown(**kwargs):
 
 
 def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admission_income):
-    """Aggregate collected vs pending by fee group for the dashboard."""
-    from collections import defaultdict
+    """
+    Dynamic fee groups from the school's fee items / invoice lines,
+    plus interview and admission income. No hardcoded Misc bucket.
+    """
+    from collections import defaultdict, OrderedDict
     from django.db.models import Prefetch
 
+    # label -> totals
     groups = defaultdict(lambda: {"collected": Decimal("0"), "billed": Decimal("0"), "pending": Decimal("0")})
+    # stable display order
+    order = []
 
-    def bucket_key(name: str) -> str:
-        n = (name or "").strip().lower()
-        if not n:
-            return "Misc / Other"
-        if "tuition" in n or "school fee" in n or "term fee" in n:
-            return "Tuition"
-        if "exam" in n:
-            return "Examination"
-        if "activity" in n or "co-curricular" in n or "sport" in n:
-            return "Co-curricular"
-        if "transport" in n or "bus" in n:
-            return "Transport"
-        if "uniform" in n or "book" in n or "assessment" in n:
-            return "Materials"
-        if "admission" in n or "registration" in n:
-            return "Admission / registration"
-        if "interview" in n:
-            return "Interview"
-        return (name or "Misc / Other").strip()[:40]
+    def ensure(label: str):
+        label = (label or "").strip() or "Unnamed fee"
+        label = label[:80]
+        if label not in groups:
+            order.append(label)
+        return label
 
-    line_qs = InvoiceLine.objects.filter(invoice__in=inv_term).select_related(
-        "item", "item__category", "invoice"
+    # Seed from active fee structure items for this school (names the school actually uses)
+    try:
+        structure_items = (
+            FeeStructure.objects.filter(school_id__in=list(school_ids))
+            .prefetch_related("structure_items__item")
+        )
+        for struct in structure_items:
+            for si in struct.structure_items.all():
+                name = ""
+                if si.item_id and getattr(si.item, "name", None):
+                    name = si.item.name
+                elif getattr(si, "description", None):
+                    name = si.description
+                if name:
+                    ensure(name)
+        # Also all fee items for school
+        for fi in FeeItem.objects.filter(school_id__in=list(school_ids)).only("name"):
+            if fi.name:
+                ensure(fi.name)
+    except Exception as exc:
+        print(f"[finance dashboard] seed fee items failed: {exc}")
+
+    # Always include pre-enrollment income slots first in output
+    ensure("Interview fee")
+    ensure("Admission / registration fee")
+
+    def line_label(line) -> str:
+        if line.item_id and getattr(line.item, "name", None):
+            return line.item.name.strip()[:80]
+        if (line.description or "").strip():
+            return line.description.strip()[:80]
+        return "Unnamed fee"
+
+    # Billed + pending from invoice lines
+    line_qs = InvoiceLine.objects.filter(invoice_id__in=inv_term.values_list("id", flat=True)).select_related(
+        "item", "invoice"
     )
     for line in line_qs:
-        cat = ""
-        if line.item_id and getattr(line.item, "category", None):
-            cat = getattr(line.item.category, "name", "") or ""
-        key = bucket_key(cat or line.description or "")
+        key = ensure(line_label(line))
         amt = Decimal(str(line.amount or 0))
         groups[key]["billed"] += amt
         inv = line.invoice
@@ -121,19 +140,21 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
             ratio = max(Decimal("0"), (due - paid) / due)
             groups[key]["pending"] += (amt * ratio).quantize(Decimal("0.01"))
 
+    # Collected from payments
     try:
         pays = list(
             pay_term.select_related("invoice")
             .prefetch_related(
                 Prefetch(
                     "invoice__lines",
-                    queryset=InvoiceLine.objects.select_related("item", "item__category"),
+                    queryset=InvoiceLine.objects.select_related("item"),
                 )
             )[:2000]
         )
     except Exception as exc:
         print(f"[finance dashboard] pay_term load failed: {exc}")
         pays = []
+
     for pay in pays:
         amt = Decimal(str(pay.amount or 0))
         if amt <= 0:
@@ -142,72 +163,75 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
             allocs = list(getattr(pay, "line_allocations", None) or [])
         except Exception:
             allocs = []
-        if allocs and isinstance(allocs, list):
+        if allocs:
             for a in allocs:
                 if not isinstance(a, dict):
                     continue
                 a_amt = Decimal(str(a.get("amount") or 0))
                 if a_amt <= 0:
                     continue
-                key = bucket_key(a.get("category") or a.get("description") or "")
+                key = ensure(str(a.get("description") or a.get("category") or "Fee item"))
                 groups[key]["collected"] += a_amt
             continue
         lines = list(pay.invoice.lines.all()) if pay.invoice_id else []
         if lines:
             total = sum((Decimal(str(ln.amount or 0)) for ln in lines), Decimal("0")) or Decimal("1")
             for ln in lines:
-                cat = ""
-                if ln.item_id and getattr(ln.item, "category", None):
-                    cat = getattr(ln.item.category, "name", "") or ""
-                key = bucket_key(cat or ln.description or "")
+                key = ensure(line_label(ln))
                 share = (Decimal(str(ln.amount or 0)) / total) * amt
                 groups[key]["collected"] += share
         else:
-            groups["Tuition"]["collected"] += amt
+            key = ensure("School fees")
+            groups[key]["collected"] += amt
 
-    groups["Interview"]["collected"] += Decimal(str(interview_income or 0))
-    groups["Admission / registration"]["collected"] += Decimal(str(admission_income or 0))
+    # Pre-enrollment
+    groups[ensure("Interview fee")]["collected"] += Decimal(str(interview_income or 0))
+    groups[ensure("Admission / registration fee")]["collected"] += Decimal(str(admission_income or 0))
 
-    # Always expose core groups (even zeros) so the UI never needs redesign later
-    order = [
-        "Interview",
-        "Admission / registration",
-        "Tuition",
-        "Examination",
-        "Co-curricular",
-        "Transport",
-        "Materials",
-        "Misc / Other",
-    ]
-    for name in order:
-        _ = groups[name]  # ensure key exists
-    out = []
+    # Prefer interview/admission first, then alphabetical by school items
+    preferred = ["Interview fee", "Admission / registration fee"]
     seen = set()
-    for name in order:
-        g = groups[name]
-        seen.add(name)
+    out = []
+
+    def push(label: str):
+        if label in seen:
+            return
+        seen.add(label)
+        g = groups[label]
         out.append({
-            "groupKey": name.lower().replace(" ", "_").replace("/", "_"),
-            "description": name,
+            "groupKey": re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")[:48],
+            "description": label,
             "allocated": float(_round_money(g["collected"])),
             "pending": float(_round_money(g["pending"])),
             "total": float(_round_money(g["billed"])),
-            "isTuition": name == "Tuition",
+            "isTuition": "tuition" in label.lower(),
         })
-    for name, g in sorted(groups.items()):
-        if name in seen:
-            continue
-        if g["collected"] == 0 and g["pending"] == 0 and g["billed"] == 0:
-            continue
-        out.append({
-            "groupKey": name.lower().replace(" ", "_")[:40],
-            "description": name,
-            "allocated": float(_round_money(g["collected"])),
-            "pending": float(_round_money(g["pending"])),
-            "total": float(_round_money(g["billed"])),
-            "isTuition": False,
-        })
+
+    for label in preferred:
+        if label in groups:
+            push(label)
+    # Remaining: only labels that have activity OR were seeded from fee structures
+    rest = [l for l in order if l not in preferred]
+    # Sort: items with money first, then name
+    rest.sort(key=lambda l: (
+        0 if (groups[l]["collected"] or groups[l]["pending"] or groups[l]["billed"]) else 1,
+        l.lower(),
+    ))
+    for label in rest:
+        g = groups[label]
+        # Skip empty seeded items that never appeared on invoices/structures activity?
+        # Keep structure-seeded items so ICT etc. show even at 0
+        push(label)
+
+    # Any leftover keys not in order
+    for label in groups.keys():
+        if label not in seen:
+            push(label)
+
     return out
+
+
+urn out
 
 
 def _build_finance_dashboard_summary(request):
