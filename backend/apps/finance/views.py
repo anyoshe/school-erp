@@ -43,6 +43,130 @@ def _get_assignment_period_meta(assignment: StudentFeeAssignment):
     )
 
 
+
+def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admission_income):
+    """Aggregate collected vs pending by fee group for the dashboard."""
+    from collections import defaultdict
+    from django.db.models import Prefetch
+
+    groups = defaultdict(lambda: {"collected": Decimal("0"), "billed": Decimal("0"), "pending": Decimal("0")})
+
+    def bucket_key(name: str) -> str:
+        n = (name or "").strip().lower()
+        if not n:
+            return "Other fees"
+        if "tuition" in n or "school fee" in n or "term fee" in n:
+            return "Tuition"
+        if "exam" in n:
+            return "Examination"
+        if "activity" in n or "co-curricular" in n or "sport" in n:
+            return "Co-curricular"
+        if "transport" in n or "bus" in n:
+            return "Transport"
+        if "uniform" in n or "book" in n or "assessment" in n:
+            return "Materials"
+        if "admission" in n or "registration" in n:
+            return "Admission / registration"
+        if "interview" in n:
+            return "Interview"
+        return (name or "Other fees").strip()[:40]
+
+    line_qs = InvoiceLine.objects.filter(invoice__in=inv_term).select_related(
+        "item", "item__category", "invoice"
+    )
+    for line in line_qs:
+        cat = ""
+        if line.item_id and getattr(line.item, "category", None):
+            cat = getattr(line.item.category, "name", "") or ""
+        key = bucket_key(cat or line.description or "")
+        amt = Decimal(str(line.amount or 0))
+        groups[key]["billed"] += amt
+        inv = line.invoice
+        due = Decimal(str(inv.amount_due or 0)) + Decimal(str(getattr(inv, "late_fee_applied", 0) or 0))
+        paid = Decimal(str(inv.amount_paid or 0))
+        if due > 0:
+            ratio = max(Decimal("0"), (due - paid) / due)
+            groups[key]["pending"] += (amt * ratio).quantize(Decimal("0.01"))
+
+    pays = list(
+        pay_term.select_related("invoice").prefetch_related(
+            Prefetch("invoice__lines", queryset=InvoiceLine.objects.select_related("item__category"))
+        )
+    )
+    for pay in pays:
+        amt = Decimal(str(pay.amount or 0))
+        if amt <= 0:
+            continue
+        allocs = getattr(pay, "line_allocations", None) or []
+        if allocs and isinstance(allocs, list):
+            for a in allocs:
+                if not isinstance(a, dict):
+                    continue
+                a_amt = Decimal(str(a.get("amount") or 0))
+                if a_amt <= 0:
+                    continue
+                key = bucket_key(a.get("category") or a.get("description") or "")
+                groups[key]["collected"] += a_amt
+            continue
+        lines = list(pay.invoice.lines.all()) if pay.invoice_id else []
+        if lines:
+            total = sum((Decimal(str(ln.amount or 0)) for ln in lines), Decimal("0")) or Decimal("1")
+            for ln in lines:
+                cat = ""
+                if ln.item_id and getattr(ln.item, "category", None):
+                    cat = getattr(ln.item.category, "name", "") or ""
+                key = bucket_key(cat or ln.description or "")
+                share = (Decimal(str(ln.amount or 0)) / total) * amt
+                groups[key]["collected"] += share
+        else:
+            groups["Tuition"]["collected"] += amt
+
+    groups["Interview"]["collected"] += Decimal(str(interview_income or 0))
+    groups["Admission / registration"]["collected"] += Decimal(str(admission_income or 0))
+
+    order = [
+        "Interview",
+        "Admission / registration",
+        "Tuition",
+        "Examination",
+        "Co-curricular",
+        "Transport",
+        "Materials",
+        "Other fees",
+    ]
+    out = []
+    seen = set()
+    for name in order:
+        if name not in groups:
+            continue
+        g = groups[name]
+        if g["collected"] == 0 and g["pending"] == 0 and g["billed"] == 0:
+            continue
+        seen.add(name)
+        out.append({
+            "groupKey": name.lower().replace(" ", "_").replace("/", "_"),
+            "description": name,
+            "allocated": float(_round_money(g["collected"])),
+            "pending": float(_round_money(g["pending"])),
+            "total": float(_round_money(g["billed"])),
+            "isTuition": name == "Tuition",
+        })
+    for name, g in sorted(groups.items()):
+        if name in seen:
+            continue
+        if g["collected"] == 0 and g["pending"] == 0 and g["billed"] == 0:
+            continue
+        out.append({
+            "groupKey": name.lower().replace(" ", "_")[:40],
+            "description": name,
+            "allocated": float(_round_money(g["collected"])),
+            "pending": float(_round_money(g["pending"])),
+            "total": float(_round_money(g["billed"])),
+            "isTuition": False,
+        })
+    return out
+
+
 def _build_finance_dashboard_summary(request):
     school_ids = _resolve_school_ids(request)
     today = timezone.now().date()
