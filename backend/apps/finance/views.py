@@ -75,31 +75,63 @@ def _safe_fee_group_breakdown(**kwargs):
         return _empty_fee_groups()
 
 
+
 def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admission_income):
     """
-    Dynamic fee groups from the school's fee items / invoice lines,
-    plus interview and admission income. No hardcoded Misc bucket.
+    Dynamic fee groups from fee items / invoice lines + interview/admission.
+    Near-duplicates like "Exams" and "Exams fee" are merged; prefer the label
+    that has money, otherwise the shorter name without a redundant "fee" suffix.
     """
     from collections import defaultdict
     from django.db.models import Prefetch
 
+    # norm_key -> totals + preferred display label
     groups = defaultdict(
         lambda: {
             "collected": Decimal("0"),
             "billed": Decimal("0"),
             "pending": Decimal("0"),
+            "label": "",
+            "label_score": -1,
         }
     )
-    order = []
+    order = []  # first-seen norm keys
 
-    def ensure(label: str) -> str:
-        label = (label or "").strip() or "Unnamed fee"
-        label = label[:80]
-        if label not in groups:
-            order.append(label)
-            _ = groups[label]
-        return label
+    def norm_key(label: str) -> str:
+        s = re.sub(r"\s+", " ", (label or "").strip())
+        s = re.sub(r"[\s\-_]*fees?$", "", s, flags=re.IGNORECASE).strip()
+        s = re.sub(r"[\s\-_]+", " ", s).strip().lower()
+        return s or "unnamed fee"
 
+    def label_score(label: str, has_money: bool) -> int:
+        """Higher = preferred display name."""
+        score = 0
+        if has_money:
+            score += 100
+        # Prefer names that already look like parent items (no trailing "fee")
+        if not re.search(r"\bfees?$", label.strip(), flags=re.I):
+            score += 10
+        # Prefer shorter labels slightly
+        score -= min(len(label), 40) // 10
+        return score
+
+    def ensure(label: str, *, has_money: bool = False) -> str:
+        label = re.sub(r"\s+", " ", (label or "").strip())[:80] or "Unnamed fee"
+        key = norm_key(label)
+        if key not in groups:
+            order.append(key)
+        g = groups[key]
+        sc = label_score(label, has_money)
+        if not g["label"] or sc > g["label_score"]:
+            g["label"] = label
+            g["label_score"] = sc
+        elif has_money and sc >= g["label_score"]:
+            g["label"] = label
+            g["label_score"] = sc
+        return key
+
+    # Seed structure items (may be zero — will be dropped later if still zero
+    # and not interview/admission, unless we keep structure seeds with activity only)
     try:
         for struct in FeeStructure.objects.filter(
             school_id__in=list(school_ids)
@@ -111,15 +143,17 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
                 elif getattr(si, "description", None):
                     name = si.description
                 if name:
-                    ensure(name)
-        for fi in FeeItem.objects.filter(category__school_id__in=list(school_ids)).only("name"):
+                    ensure(name, has_money=False)
+        for fi in FeeItem.objects.filter(
+            category__school_id__in=list(school_ids)
+        ).only("name"):
             if fi.name:
-                ensure(fi.name)
+                ensure(fi.name, has_money=False)
     except Exception as exc:
         print(f"[finance dashboard] seed fee items failed: {exc}")
 
-    ensure("Interview fee")
-    ensure("Admission / registration fee")
+    ensure("Interview fee", has_money=False)
+    ensure("Admission / registration fee", has_money=False)
 
     def line_label(line) -> str:
         if line.item_id and getattr(line.item, "name", None):
@@ -133,7 +167,7 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
         "item", "invoice"
     )
     for line in line_qs:
-        key = ensure(line_label(line))
+        key = ensure(line_label(line), has_money=True)
         amt = Decimal(str(line.amount or 0))
         groups[key]["billed"] += amt
         inv = line.invoice
@@ -175,7 +209,8 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
                 if a_amt <= 0:
                     continue
                 key = ensure(
-                    str(a.get("description") or a.get("category") or "Fee item")
+                    str(a.get("description") or a.get("category") or "Fee item"),
+                    has_money=True,
                 )
                 groups[key]["collected"] += a_amt
             continue
@@ -185,34 +220,36 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
                 (Decimal(str(ln.amount or 0)) for ln in lines), Decimal("0")
             ) or Decimal("1")
             for ln in lines:
-                key = ensure(line_label(ln))
+                key = ensure(line_label(ln), has_money=True)
                 share = (Decimal(str(ln.amount or 0)) / total) * amt
                 groups[key]["collected"] += share
         else:
-            key = ensure("School fees")
+            key = ensure("School fees", has_money=True)
             groups[key]["collected"] += amt
 
-    groups[ensure("Interview fee")]["collected"] += Decimal(
-        str(interview_income or 0)
-    )
-    groups[ensure("Admission / registration fee")]["collected"] += Decimal(
-        str(admission_income or 0)
-    )
+    groups[ensure("Interview fee", has_money=bool(interview_income))][
+        "collected"
+    ] += Decimal(str(interview_income or 0))
+    groups[ensure("Admission / registration fee", has_money=bool(admission_income))][
+        "collected"
+    ] += Decimal(str(admission_income or 0))
 
-    preferred = ["Interview fee", "Admission / registration fee"]
+    preferred_norms = {
+        norm_key("Interview fee"),
+        norm_key("Admission / registration fee"),
+    }
     seen = set()
     out = []
 
-    def push(label: str):
-        if label in seen:
+    def push(key: str):
+        if key in seen:
             return
-        seen.add(label)
-        g = groups[label]
+        seen.add(key)
+        g = groups[key]
+        label = g["label"] or key
         out.append(
             {
-                "groupKey": re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")[
-                    :48
-                ],
+                "groupKey": re.sub(r"[^a-z0-9]+", "_", key)[:48],
                 "description": label,
                 "allocated": float(_round_money(g["collected"])),
                 "pending": float(_round_money(g["pending"])),
@@ -221,28 +258,31 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
             }
         )
 
-    for label in preferred:
-        if label in groups:
-            push(label)
+    # Interview & admission first (always shown)
+    for key in list(preferred_norms):
+        if key in groups:
+            push(key)
 
-    rest = [l for l in order if l not in preferred]
+    rest = [k for k in order if k not in preferred_norms]
     rest.sort(
-        key=lambda l: (
+        key=lambda k: (
             0
             if (
-                groups[l]["collected"]
-                or groups[l]["pending"]
-                or groups[l]["billed"]
+                groups[k]["collected"]
+                or groups[k]["pending"]
+                or groups[k]["billed"]
             )
             else 1,
-            l.lower(),
+            (groups[k]["label"] or k).lower(),
         )
     )
-    for label in rest:
-        push(label)
-    for label in list(groups.keys()):
-        if label not in seen:
-            push(label)
+    for key in rest:
+        g = groups[key]
+        has_fig = bool(g["collected"] or g["pending"] or g["billed"])
+        # Drop zero-only seeds that never received activity
+        if not has_fig:
+            continue
+        push(key)
 
     return out
 
