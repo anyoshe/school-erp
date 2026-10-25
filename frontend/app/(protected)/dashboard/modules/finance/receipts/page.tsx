@@ -123,10 +123,15 @@ const RECEIPT_CSS = `
   .rcpt-meta {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px 16px;
-    text-align: left;
+    gap: 8px 20px;
+    text-align: center;
     margin: 0 auto 12px;
-    max-width: 100%;
+    max-width: 92%;
+    justify-items: center;
+  }
+  .rcpt-meta > div {
+    width: 100%;
+    text-align: center;
   }
   .rcpt-meta .lbl {
     font-size: 7.5pt;
@@ -134,11 +139,13 @@ const RECEIPT_CSS = `
     letter-spacing: 0.04em;
     color: #64748b;
     margin: 0;
+    text-align: center;
   }
   .rcpt-meta .val {
     font-size: 9.5pt;
     font-weight: 600;
     margin: 0;
+    text-align: center;
   }
   .rcpt-table {
     width: 100%;
