@@ -382,69 +382,61 @@ export default function FinanceDashboard() {
         </CardContent>
       </Card>
 
-      {/* Money by fee group — always show core buckets */}
+      {/* Money by fee group — dynamic from structure items */}
       <Card className="border-slate-200/80 shadow-sm overflow-hidden">
         <CardHeader className="pb-2 border-b bg-gradient-to-r from-teal-50/80 to-white">
           <CardTitle className="text-base text-teal-950">Money by fee group</CardTitle>
           <p className="text-xs text-muted-foreground font-normal">
-            Interview & admission income, plus term fee collections for{" "}
+            Built from your fee structure items, plus interview and admission fees. Period:{" "}
             <span className="font-medium text-foreground">
               {filterTerm || detectedTerm} · {filterYear || detectedYear}
             </span>
-            . Zero means nothing recorded yet — slots stay ready.
+            .
           </p>
         </CardHeader>
         <CardContent className="pt-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {(feeItemTotals.length
-              ? feeItemTotals
-              : [
-                  { groupKey: "interview", description: "Interview", allocated: 0, pending: 0, total: 0, isTuition: false },
-                  { groupKey: "admission", description: "Admission / registration", allocated: 0, pending: 0, total: 0, isTuition: false },
-                  { groupKey: "tuition", description: "Tuition", allocated: 0, pending: 0, total: 0, isTuition: true },
-                  { groupKey: "examination", description: "Examination", allocated: 0, pending: 0, total: 0, isTuition: false },
-                  { groupKey: "co_curricular", description: "Co-curricular", allocated: 0, pending: 0, total: 0, isTuition: false },
-                  { groupKey: "transport", description: "Transport", allocated: 0, pending: 0, total: 0, isTuition: false },
-                  { groupKey: "materials", description: "Materials", allocated: 0, pending: 0, total: 0, isTuition: false },
-                  { groupKey: "misc_other", description: "Misc / Other", allocated: 0, pending: 0, total: 0, isTuition: false },
-                ]
-            ).map((item) => {
-              const tone =
-                item.description.startsWith("Interview")
+          {feeItemTotals.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No fee items yet. Create fee structures (and optional interview/admission fees) to populate this section.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {feeItemTotals.map((item) => {
+                const d = (item.description || "").toLowerCase();
+                const tone = d.includes("interview")
                   ? "from-violet-50 border-violet-300"
-                  : item.description.startsWith("Admission")
+                  : d.includes("admission") || d.includes("registration")
                     ? "from-sky-50 border-sky-300"
-                    : item.isTuition
+                    : item.isTuition || d.includes("tuition")
                       ? "from-teal-50 border-teal-300"
-                      : item.description.startsWith("Misc")
-                        ? "from-stone-50 border-stone-300"
-                        : "from-slate-50 border-slate-300";
-              return (
-                <div
-                  key={item.groupKey}
-                  className={`rounded-xl border-2 bg-gradient-to-br ${tone} to-white p-3 min-h-[110px] flex flex-col shadow-sm`}
-                >
-                  <p className="font-semibold text-sm text-slate-900 leading-tight">
-                    {item.description}
-                  </p>
-                  <div className="mt-auto pt-3 space-y-1">
-                    <div className="flex justify-between text-xs gap-2">
-                      <span className="text-muted-foreground">Collected</span>
-                      <span className="font-semibold text-emerald-800 tabular-nums">
-                        {currency} {Number(item.allocated || 0).toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-xs gap-2">
-                      <span className="text-muted-foreground">Pending</span>
-                      <span className="font-semibold text-amber-800 tabular-nums">
-                        {currency} {Number(item.pending || 0).toLocaleString()}
-                      </span>
+                      : "from-slate-50 border-slate-300";
+                return (
+                  <div
+                    key={item.groupKey}
+                    className={`rounded-xl border-2 bg-gradient-to-br ${tone} to-white p-3 min-h-[110px] flex flex-col shadow-sm`}
+                  >
+                    <p className="font-semibold text-sm text-slate-900 leading-tight">
+                      {item.description}
+                    </p>
+                    <div className="mt-auto pt-3 space-y-1">
+                      <div className="flex justify-between text-xs gap-2">
+                        <span className="text-muted-foreground">Collected</span>
+                        <span className="font-semibold text-emerald-800 tabular-nums">
+                          {currency} {Number(item.allocated || 0).toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-xs gap-2">
+                        <span className="text-muted-foreground">Pending</span>
+                        <span className="font-semibold text-amber-800 tabular-nums">
+                          {currency} {Number(item.pending || 0).toLocaleString()}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 

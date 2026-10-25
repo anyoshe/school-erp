@@ -36,11 +36,14 @@ def _resolve_school_ids(request):
     return list(accessible_school_ids(request))
 
 
+
 def _get_assignment_period_meta(assignment: StudentFeeAssignment):
     structure = getattr(assignment, "fee_structure", None)
     return (
         getattr(structure, "academic_year", "") or "",
         getattr(structure, "period_name", "") or "",
+    )
+
 
 def _empty_fee_groups():
     """Minimal fallback if aggregation fails."""
@@ -77,28 +80,30 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
     Dynamic fee groups from the school's fee items / invoice lines,
     plus interview and admission income. No hardcoded Misc bucket.
     """
-    from collections import defaultdict, OrderedDict
+    from collections import defaultdict
     from django.db.models import Prefetch
 
-    # label -> totals
-    groups = defaultdict(lambda: {"collected": Decimal("0"), "billed": Decimal("0"), "pending": Decimal("0")})
-    # stable display order
+    groups = defaultdict(
+        lambda: {
+            "collected": Decimal("0"),
+            "billed": Decimal("0"),
+            "pending": Decimal("0"),
+        }
+    )
     order = []
 
-    def ensure(label: str):
+    def ensure(label: str) -> str:
         label = (label or "").strip() or "Unnamed fee"
         label = label[:80]
         if label not in groups:
             order.append(label)
+            _ = groups[label]
         return label
 
-    # Seed from active fee structure items for this school (names the school actually uses)
     try:
-        structure_items = (
-            FeeStructure.objects.filter(school_id__in=list(school_ids))
-            .prefetch_related("structure_items__item")
-        )
-        for struct in structure_items:
+        for struct in FeeStructure.objects.filter(
+            school_id__in=list(school_ids)
+        ).prefetch_related("structure_items__item"):
             for si in struct.structure_items.all():
                 name = ""
                 if si.item_id and getattr(si.item, "name", None):
@@ -107,14 +112,12 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
                     name = si.description
                 if name:
                     ensure(name)
-        # Also all fee items for school
         for fi in FeeItem.objects.filter(school_id__in=list(school_ids)).only("name"):
             if fi.name:
                 ensure(fi.name)
     except Exception as exc:
         print(f"[finance dashboard] seed fee items failed: {exc}")
 
-    # Always include pre-enrollment income slots first in output
     ensure("Interview fee")
     ensure("Admission / registration fee")
 
@@ -125,8 +128,8 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
             return line.description.strip()[:80]
         return "Unnamed fee"
 
-    # Billed + pending from invoice lines
-    line_qs = InvoiceLine.objects.filter(invoice_id__in=inv_term.values_list("id", flat=True)).select_related(
+    inv_ids = list(inv_term.values_list("id", flat=True)[:5000])
+    line_qs = InvoiceLine.objects.filter(invoice_id__in=inv_ids).select_related(
         "item", "invoice"
     )
     for line in line_qs:
@@ -134,13 +137,14 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
         amt = Decimal(str(line.amount or 0))
         groups[key]["billed"] += amt
         inv = line.invoice
-        due = Decimal(str(inv.amount_due or 0)) + Decimal(str(getattr(inv, "late_fee_applied", 0) or 0))
+        due = Decimal(str(inv.amount_due or 0)) + Decimal(
+            str(getattr(inv, "late_fee_applied", 0) or 0)
+        )
         paid = Decimal(str(inv.amount_paid or 0))
         if due > 0:
             ratio = max(Decimal("0"), (due - paid) / due)
             groups[key]["pending"] += (amt * ratio).quantize(Decimal("0.01"))
 
-    # Collected from payments
     try:
         pays = list(
             pay_term.select_related("invoice")
@@ -170,12 +174,16 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
                 a_amt = Decimal(str(a.get("amount") or 0))
                 if a_amt <= 0:
                     continue
-                key = ensure(str(a.get("description") or a.get("category") or "Fee item"))
+                key = ensure(
+                    str(a.get("description") or a.get("category") or "Fee item")
+                )
                 groups[key]["collected"] += a_amt
             continue
         lines = list(pay.invoice.lines.all()) if pay.invoice_id else []
         if lines:
-            total = sum((Decimal(str(ln.amount or 0)) for ln in lines), Decimal("0")) or Decimal("1")
+            total = sum(
+                (Decimal(str(ln.amount or 0)) for ln in lines), Decimal("0")
+            ) or Decimal("1")
             for ln in lines:
                 key = ensure(line_label(ln))
                 share = (Decimal(str(ln.amount or 0)) / total) * amt
@@ -184,11 +192,13 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
             key = ensure("School fees")
             groups[key]["collected"] += amt
 
-    # Pre-enrollment
-    groups[ensure("Interview fee")]["collected"] += Decimal(str(interview_income or 0))
-    groups[ensure("Admission / registration fee")]["collected"] += Decimal(str(admission_income or 0))
+    groups[ensure("Interview fee")]["collected"] += Decimal(
+        str(interview_income or 0)
+    )
+    groups[ensure("Admission / registration fee")]["collected"] += Decimal(
+        str(admission_income or 0)
+    )
 
-    # Prefer interview/admission first, then alphabetical by school items
     preferred = ["Interview fee", "Admission / registration fee"]
     seen = set()
     out = []
@@ -198,40 +208,43 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
             return
         seen.add(label)
         g = groups[label]
-        out.append({
-            "groupKey": re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")[:48],
-            "description": label,
-            "allocated": float(_round_money(g["collected"])),
-            "pending": float(_round_money(g["pending"])),
-            "total": float(_round_money(g["billed"])),
-            "isTuition": "tuition" in label.lower(),
-        })
+        out.append(
+            {
+                "groupKey": re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_")[
+                    :48
+                ],
+                "description": label,
+                "allocated": float(_round_money(g["collected"])),
+                "pending": float(_round_money(g["pending"])),
+                "total": float(_round_money(g["billed"])),
+                "isTuition": "tuition" in label.lower(),
+            }
+        )
 
     for label in preferred:
         if label in groups:
             push(label)
-    # Remaining: only labels that have activity OR were seeded from fee structures
-    rest = [l for l in order if l not in preferred]
-    # Sort: items with money first, then name
-    rest.sort(key=lambda l: (
-        0 if (groups[l]["collected"] or groups[l]["pending"] or groups[l]["billed"]) else 1,
-        l.lower(),
-    ))
-    for label in rest:
-        g = groups[label]
-        # Skip empty seeded items that never appeared on invoices/structures activity?
-        # Keep structure-seeded items so ICT etc. show even at 0
-        push(label)
 
-    # Any leftover keys not in order
-    for label in groups.keys():
+    rest = [l for l in order if l not in preferred]
+    rest.sort(
+        key=lambda l: (
+            0
+            if (
+                groups[l]["collected"]
+                or groups[l]["pending"]
+                or groups[l]["billed"]
+            )
+            else 1,
+            l.lower(),
+        )
+    )
+    for label in rest:
+        push(label)
+    for label in list(groups.keys()):
         if label not in seen:
             push(label)
 
     return out
-
-
-urn out
 
 
 def _build_finance_dashboard_summary(request):
