@@ -14,7 +14,9 @@ export interface Application {
   passport_number?: string;
 
   // Class
-  class_applied?: { id: number | string; name: string; education_level?: string; pathway?: string };
+  class_applied?: { id: number | string; name: string; education_level?: string; pathway?: string } | number | string;
+  /** Present on list API (light serializer) */
+  class_applied_name?: string;
 
   // Guardian
   primary_guardian_name?: string;
