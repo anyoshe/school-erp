@@ -124,6 +124,7 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
     groups["Interview"]["collected"] += Decimal(str(interview_income or 0))
     groups["Admission / registration"]["collected"] += Decimal(str(admission_income or 0))
 
+    # Always expose core groups (even zeros) so the UI never needs redesign later
     order = [
         "Interview",
         "Admission / registration",
@@ -134,14 +135,12 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
         "Materials",
         "Other fees",
     ]
+    for name in order:
+        _ = groups[name]  # ensure key exists
     out = []
     seen = set()
     for name in order:
-        if name not in groups:
-            continue
         g = groups[name]
-        if g["collected"] == 0 and g["pending"] == 0 and g["billed"] == 0:
-            continue
         seen.add(name)
         out.append({
             "groupKey": name.lower().replace(" ", "_").replace("/", "_"),

@@ -9,7 +9,11 @@ import {
   Users,
   BarChart2,
   TrendingUp,
-  Calendar
+  Calendar,
+  CreditCard,
+  ClipboardList,
+  Scale,
+  ScrollText,
 } from "lucide-react";
 import api from "@/utils/api";
 import { toast } from "sonner";
@@ -371,104 +375,156 @@ export default function FinanceDashboard() {
         </CardContent>
       </Card>
 
-      {/* Itemized Revenue by Fee Group */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Money by fee group</CardTitle>
+      {/* Money by fee group — always show core buckets */}
+      <Card className="border-slate-200/80 shadow-sm overflow-hidden">
+        <CardHeader className="pb-2 border-b bg-gradient-to-r from-teal-50/80 to-white">
+          <CardTitle className="text-base text-teal-950">Money by fee group</CardTitle>
           <p className="text-xs text-muted-foreground font-normal">
-            Interview & admission income, plus term collections (tuition and other items) for the selected period.
+            Interview & admission income, plus term fee collections for{" "}
+            <span className="font-medium text-foreground">
+              {filterTerm || detectedTerm} · {filterYear || detectedYear}
+            </span>
+            . Zero means nothing recorded yet — slots stay ready.
           </p>
         </CardHeader>
-        <CardContent>
-          {feeItemTotals.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No collections or invoices in this period yet.
-            </p>
-          ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {feeItemTotals.map((item) => (
+        <CardContent className="pt-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {(feeItemTotals.length
+              ? feeItemTotals
+              : [
+                  { groupKey: "interview", description: "Interview", allocated: 0, pending: 0, total: 0, isTuition: false },
+                  { groupKey: "admission", description: "Admission / registration", allocated: 0, pending: 0, total: 0, isTuition: false },
+                  { groupKey: "tuition", description: "Tuition", allocated: 0, pending: 0, total: 0, isTuition: true },
+                  { groupKey: "examination", description: "Examination", allocated: 0, pending: 0, total: 0, isTuition: false },
+                  { groupKey: "co_curricular", description: "Co-curricular", allocated: 0, pending: 0, total: 0, isTuition: false },
+                  { groupKey: "transport", description: "Transport", allocated: 0, pending: 0, total: 0, isTuition: false },
+                  { groupKey: "materials", description: "Materials", allocated: 0, pending: 0, total: 0, isTuition: false },
+                  { groupKey: "other", description: "Other fees", allocated: 0, pending: 0, total: 0, isTuition: false },
+                ]
+            ).map((item) => {
+              const tone =
+                item.description.startsWith("Interview")
+                  ? "from-violet-50 border-violet-100"
+                  : item.description.startsWith("Admission")
+                    ? "from-sky-50 border-sky-100"
+                    : item.isTuition
+                      ? "from-teal-50 border-teal-100"
+                      : "from-slate-50 border-slate-100";
+              return (
                 <div
                   key={item.groupKey}
-                  className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+                  className={`rounded-xl border bg-gradient-to-br ${tone} to-white p-3 min-h-[110px] flex flex-col`}
                 >
-                  <p className="font-semibold text-sm text-slate-900">{item.description}</p>
-                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Collected</p>
-                      <p className="font-semibold text-emerald-700 tabular-nums">
+                  <p className="font-semibold text-sm text-slate-900 leading-tight">
+                    {item.description}
+                  </p>
+                  <div className="mt-auto pt-3 space-y-1">
+                    <div className="flex justify-between text-xs gap-2">
+                      <span className="text-muted-foreground">Collected</span>
+                      <span className="font-semibold text-emerald-800 tabular-nums">
                         {currency} {Number(item.allocated || 0).toLocaleString()}
-                      </p>
+                      </span>
                     </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Pending</p>
-                      <p className="font-semibold text-amber-700 tabular-nums">
+                    <div className="flex justify-between text-xs gap-2">
+                      <span className="text-muted-foreground">Pending</span>
+                      <span className="font-semibold text-amber-800 tabular-nums">
                         {currency} {Number(item.pending || 0).toLocaleString()}
-                      </p>
+                      </span>
                     </div>
                   </div>
-                  {Number(item.total || 0) > 0 ? (
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Billed {currency} {Number(item.total).toLocaleString()}
-                    </p>
-                  ) : null}
                 </div>
-              ))}
-            </div>
-          )}
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Secondary actions not in top nav */}
-      <div className="flex flex-wrap gap-2">
-        {[
-          { href: "/dashboard/modules/finance/payment-plans", label: "Payment plans" },
-          { href: "/dashboard/modules/finance/student-assignments", label: "Assign fees" },
-          { href: "/dashboard/modules/finance/post-balances", label: "Post balances" },
-          { href: "/dashboard/modules/finance/statements", label: "Statements" },
-        ].map((action) => (
-          <Link
-            key={action.href}
-            href={action.href}
-            className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:border-teal-600/40 hover:bg-teal-50 hover:text-teal-900 transition no-underline"
-          >
-            {action.label}
-          </Link>
-        ))}
+      {/* Supporting tools — distinct jobs, not nav duplicates */}
+      <div>
+        <h2 className="text-sm font-semibold text-slate-800 mb-2">Supporting tools</h2>
+        <p className="text-xs text-muted-foreground mb-3">
+          Optional setup and reporting. Day-to-day collect &amp; print lives in the top nav (Clearance, Record payment, Receipts).
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            {
+              href: "/dashboard/modules/finance/payment-plans",
+              label: "Payment plans",
+              desc: "Define installments (e.g. 50/50 or monthly) applied when billing students.",
+              icon: CreditCard,
+              ring: "border-teal-200 bg-teal-50/50 hover:bg-teal-50",
+              iconBg: "bg-teal-600",
+            },
+            {
+              href: "/dashboard/modules/finance/student-assignments",
+              label: "Assign fee structures",
+              desc: "Link a student to a grade/term fee structure so invoices can be generated.",
+              icon: ClipboardList,
+              ring: "border-amber-200 bg-amber-50/50 hover:bg-amber-50",
+              iconBg: "bg-amber-600",
+            },
+            {
+              href: "/dashboard/modules/finance/post-balances",
+              label: "Opening balances",
+              desc: "Carry forward prior-term arrears when students join mid-year or migrate from paper books.",
+              icon: Scale,
+              ring: "border-violet-200 bg-violet-50/50 hover:bg-violet-50",
+              iconBg: "bg-violet-600",
+            },
+            {
+              href: "/dashboard/modules/finance/statements",
+              label: "Student statements",
+              desc: "Printable ledger of billed vs paid for a learner — for parents and clearance.",
+              icon: ScrollText,
+              ring: "border-sky-200 bg-sky-50/50 hover:bg-sky-50",
+              iconBg: "bg-sky-600",
+            },
+          ].map((tool) => (
+            <Link
+              key={tool.href}
+              href={tool.href}
+              className={`group rounded-xl border p-4 shadow-sm transition no-underline text-left ${tool.ring}`}
+            >
+              <div className="flex items-start gap-3">
+                <span
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white ${tool.iconBg}`}
+                >
+                  <tool.icon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm text-slate-900 group-hover:text-teal-900">
+                    {tool.label}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                    {tool.desc}
+                  </p>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
       </div>
 
-      {/* Quick Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Quick Summary</CardTitle>
+      {/* Compact period snapshot */}
+      <Card className="border-slate-200/80 shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Period snapshot</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div>
-            <h4 className="font-semibold mb-4">Financial Health</h4>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Total Billed:</span><span>{currency} {stats.totalAssigned.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Admission Payments:</span><span className="text-primary-700">{currency} {stats.totalAdmissionPayments.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Received:</span><span className="text-secondary-600 font-medium">{currency} {stats.totalRevenue.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Outstanding:</span><span className="text-amber-600">{currency} {stats.totalOutstanding.toLocaleString()}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Overdue:</span><span className="text-red-600">{currency} {stats.overdueBalance.toLocaleString()}</span></div>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="font-semibold mb-4">Workflow Checklist</h4>
-            <div className="space-y-3 text-sm">
-              {[
-                "Fee structures created",
-                "Payment plans defined",
-                "Students assigned fees",
-                "Invoices auto-generated",
-                "Payments tracked"
-              ].map((item, i) => (
-                <label key={i} className="flex items-center gap-2">
-                  <input type="checkbox" disabled checked className="accent-secondary" />
-                  <span>✓ {item}</span>
-                </label>
-              ))}
-            </div>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            {[
+              { label: "Billed", value: stats.totalInvoiced, color: "text-slate-800" },
+              { label: "Received", value: stats.totalRevenue, color: "text-emerald-700" },
+              { label: "Outstanding", value: stats.totalOutstanding, color: "text-amber-700" },
+              { label: "Overdue", value: stats.overdueBalance, color: "text-red-700" },
+            ].map((row) => (
+              <div key={row.label} className="rounded-lg border bg-slate-50/80 px-3 py-2">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{row.label}</p>
+                <p className={`text-lg font-bold tabular-nums ${row.color}`}>
+                  {loading ? "…" : `${currency} ${Number(row.value || 0).toLocaleString()}`}
+                </p>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
