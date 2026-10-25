@@ -1466,7 +1466,16 @@ export default function EnrollmentWizardModal({
                 <p className="text-xs text-muted-foreground">Loading charge status…</p>
               ) : applicationCharges?.length ? (
                 <ul className="divide-y rounded-lg border bg-white">
-                  {applicationCharges.map((c: any) => (
+                  {applicationCharges
+                    .filter((c: any) => {
+                      if (String(c.charge_type).toUpperCase() === "INTERVIEW") {
+                        if (c.policy === "NOT_APPLICABLE") return false;
+                        if (Number(c.amount_due || 0) <= 0 && Number(c.amount_paid || 0) <= 0)
+                          return false;
+                      }
+                      return true;
+                    })
+                    .map((c: any) => (
                     <li key={c.id || c.charge_type} className="flex justify-between px-3 py-2 text-sm">
                       <span>
                         {c.charge_type === "INTERVIEW"
