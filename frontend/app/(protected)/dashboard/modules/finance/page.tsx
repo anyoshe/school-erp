@@ -399,21 +399,23 @@ export default function FinanceDashboard() {
                   { groupKey: "co_curricular", description: "Co-curricular", allocated: 0, pending: 0, total: 0, isTuition: false },
                   { groupKey: "transport", description: "Transport", allocated: 0, pending: 0, total: 0, isTuition: false },
                   { groupKey: "materials", description: "Materials", allocated: 0, pending: 0, total: 0, isTuition: false },
-                  { groupKey: "other", description: "Other fees", allocated: 0, pending: 0, total: 0, isTuition: false },
+                  { groupKey: "misc_other", description: "Misc / Other", allocated: 0, pending: 0, total: 0, isTuition: false },
                 ]
             ).map((item) => {
               const tone =
                 item.description.startsWith("Interview")
-                  ? "from-violet-50 border-violet-100"
+                  ? "from-violet-50 border-violet-300"
                   : item.description.startsWith("Admission")
-                    ? "from-sky-50 border-sky-100"
+                    ? "from-sky-50 border-sky-300"
                     : item.isTuition
-                      ? "from-teal-50 border-teal-100"
-                      : "from-slate-50 border-slate-100";
+                      ? "from-teal-50 border-teal-300"
+                      : item.description.startsWith("Misc")
+                        ? "from-stone-50 border-stone-300"
+                        : "from-slate-50 border-slate-300";
               return (
                 <div
                   key={item.groupKey}
-                  className={`rounded-xl border bg-gradient-to-br ${tone} to-white p-3 min-h-[110px] flex flex-col`}
+                  className={`rounded-xl border-2 bg-gradient-to-br ${tone} to-white p-3 min-h-[110px] flex flex-col shadow-sm`}
                 >
                   <p className="font-semibold text-sm text-slate-900 leading-tight">
                     {item.description}
@@ -483,7 +485,7 @@ export default function FinanceDashboard() {
             <Link
               key={tool.href}
               href={tool.href}
-              className={`group rounded-xl border p-4 shadow-sm transition no-underline text-left ${tool.ring}`}
+              className={`group rounded-xl border-2 p-4 shadow-sm transition no-underline text-left ${tool.ring}`}
             >
               <div className="flex items-start gap-3">
                 <span

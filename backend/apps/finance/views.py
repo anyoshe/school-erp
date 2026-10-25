@@ -54,7 +54,7 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
     def bucket_key(name: str) -> str:
         n = (name or "").strip().lower()
         if not n:
-            return "Other fees"
+            return "Misc / Other"
         if "tuition" in n or "school fee" in n or "term fee" in n:
             return "Tuition"
         if "exam" in n:
@@ -69,7 +69,7 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
             return "Admission / registration"
         if "interview" in n:
             return "Interview"
-        return (name or "Other fees").strip()[:40]
+        return (name or "Misc / Other").strip()[:40]
 
     line_qs = InvoiceLine.objects.filter(invoice__in=inv_term).select_related(
         "item", "item__category", "invoice"
@@ -133,7 +133,7 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
         "Co-curricular",
         "Transport",
         "Materials",
-        "Other fees",
+        "Misc / Other",
     ]
     for name in order:
         _ = groups[name]  # ensure key exists
