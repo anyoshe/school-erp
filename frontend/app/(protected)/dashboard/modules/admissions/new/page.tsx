@@ -143,7 +143,7 @@ const FIELD_STEP: Record<string, number> = {
 };
 
 /** Required fields enforced per tab before Next / Submit */
-const STEP_REQUIRED: Record<number, string[]> = {
+const STEP_REQUIRED: Record<number, (keyof FormValues)[]> = {
   0: ["first_name", "last_name", "nationality", "class_applied"],
   1: ["primary_guardian_name", "primary_guardian_phone", "primary_guardian_relationship"],
   2: [],
@@ -909,7 +909,7 @@ function NewApplicationPageInner() {
                     onClick={async (e) => {
                       e.preventDefault();
                       const fields = STEP_REQUIRED[currentStep] || [];
-                      const ok = fields.length ? await trigger(fields as any) : true;
+                      const ok = fields.length ? await trigger(fields) : true;
                       if (!ok) {
                         const labels = fields
                           .filter((f) => !getValues(f) || (f === "primary_guardian_phone" && String(getValues(f) || "").length < 9))

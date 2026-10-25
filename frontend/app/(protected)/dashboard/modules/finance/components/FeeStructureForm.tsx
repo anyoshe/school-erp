@@ -266,7 +266,7 @@ export default function FeeStructureForm({
 
         // Prefill all structure lines into category groups
         const items = Array.isArray(data.structure_items) ? data.structure_items : [];
-        const mappedGroups = (catsForMap as FeeCategory[]).map((cat) => {
+        const mappedGroups: CategoryGroup[] = (catsForMap as FeeCategory[]).map((cat) => {
           const matches = items.filter((si: any) => {
             const itemCatId =
               si.category_id ??

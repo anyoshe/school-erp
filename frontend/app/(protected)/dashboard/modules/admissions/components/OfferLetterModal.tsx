@@ -302,7 +302,7 @@ export default function OfferLetterModal({
 
     doc.text(`Dear ${applicationData.primary_guardian_name || "Guardian"},`, 20, 105);
 
-    const bodyText = `We are pleased to inform you that ${applicationData.first_name} ${applicationData.last_name} has been offered admission to ${classAppliedName(applicationData) || "N/A"} for the 2026 Academic Year.\n\n${customMessage}\n\nPlease find the detailed breakdown of fees per term attached on the next page.`;
+    const bodyText = `We are pleased to inform you that ${applicationData.first_name} ${applicationData.last_name} has been offered admission to ${className} for the 2026 Academic Year.\n\n${customMessage}\n\nPlease find the detailed breakdown of fees per term attached on the next page.`;
     doc.text(doc.splitTextToSize(bodyText, 170), 20, 115);
 
     doc.text("Sincerely,", 20, 210);
@@ -313,7 +313,7 @@ export default function OfferLetterModal({
     doc.addPage();
     doc.setFontSize(16).setTextColor(44, 62, 80).text("ANNUAL FEE SCHEDULE", 105, 20, { align: "center" });
     doc.setFontSize(10).setTextColor(100).text(
-      `Student: ${applicationData.first_name} ${applicationData.last_name} | Class: ${classAppliedName(applicationData) || "N/A"}`,
+      `Student: ${applicationData.first_name} ${applicationData.last_name} | Class: ${className}`,
       105,
       28,
       { align: "center" }
@@ -325,7 +325,7 @@ export default function OfferLetterModal({
 
     doc.setFontSize(9).setTextColor(80).setFont("helvetica", "normal");
     doc.text(
-      `Fee schedule for ${classAppliedName(applicationData) || "the offered class"} (amounts in KES). Optional items are marked.`,
+      `Fee schedule for ${className} (amounts in KES). Optional items are marked.`,
       20,
       currentY
     );

@@ -28,8 +28,7 @@ import { Loader2, CheckCircle2, ArrowLeft, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/utils/api";
 import { cn } from "@/lib/utils";
-import {Application, classAppliedId} from "@/types/admission";
-import { classAppliedName, classAppliedId } from "@/types/admission";
+import { Application, classAppliedId, classAppliedName } from "@/types/admission";
 import { fa } from "zod/v4/locales";
 
 interface Props {
