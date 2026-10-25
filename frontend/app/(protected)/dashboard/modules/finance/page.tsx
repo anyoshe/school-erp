@@ -373,32 +373,44 @@ export default function FinanceDashboard() {
 
       {/* Itemized Revenue by Fee Group */}
       <Card>
-        <CardHeader>
-          <CardTitle>Revenue & Pending Balance by Fee Group</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Money by fee group</CardTitle>
+          <p className="text-xs text-muted-foreground font-normal">
+            Interview & admission income, plus term collections (tuition and other items) for the selected period.
+          </p>
         </CardHeader>
         <CardContent>
           {feeItemTotals.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Fee group breakdown is not available yet. Generate invoices with item-level lines or assign student fees for detailed reporting.
+              No collections or invoices in this period yet.
             </p>
           ) : (
-            <div className="space-y-3">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {feeItemTotals.map((item) => (
-                <div key={item.groupKey} className="rounded-lg border border-slate-200 p-3">
-                  <div className="flex items-center justify-between gap-4">
+                <div
+                  key={item.groupKey}
+                  className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+                >
+                  <p className="font-semibold text-sm text-slate-900">{item.description}</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
                     <div>
-                      <p className="font-medium">{item.description}</p>
-                      <p className="text-xs text-muted-foreground">{item.isTuition ? "Tuition" : "Other fees"}</p>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Collected</p>
+                      <p className="font-semibold text-emerald-700 tabular-nums">
+                        {currency} {Number(item.allocated || 0).toLocaleString()}
+                      </p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm text-muted-foreground">Collected Amount</p>
-                      <p className="text-lg font-semibold text-secondary-600">{currency} {item.allocated.toLocaleString()}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-muted-foreground">Pending Balance</p>
-                      <p className="text-lg font-semibold text-amber-600">{currency} {item.pending.toLocaleString()}</p>
+                    <div>
+                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Pending</p>
+                      <p className="font-semibold text-amber-700 tabular-nums">
+                        {currency} {Number(item.pending || 0).toLocaleString()}
+                      </p>
                     </div>
                   </div>
+                  {Number(item.total || 0) > 0 ? (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Billed {currency} {Number(item.total).toLocaleString()}
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -406,22 +418,20 @@ export default function FinanceDashboard() {
         </CardContent>
       </Card>
 
-      {/* Action Buttons */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* Secondary actions not in top nav */}
+      <div className="flex flex-wrap gap-2">
         {[
-          { href: "/dashboard/modules/finance/fee-structures", label: "Manage Fee Structures", variant: "outline" as const },
-          { href: "/dashboard/modules/finance/payment-plans", label: "Manage Payment Plans", variant: "default" as const, className: "bg-primary hover:bg-primary-700" },
-          { href: "/dashboard/modules/finance/student-assignments", label: "Assign Fees to Students", variant: "outline" as const },
-          { href: "/dashboard/modules/finance/invoices", label: "View & Manage Invoices", variant: "outline" as const },
-          { href: "/dashboard/modules/finance/clearance", label: "Awaiting clearance", variant: "default" as const, className: "bg-emerald-600 hover:bg-emerald-700 text-white" },
-          { href: "/dashboard/modules/finance/payments", label: "Record term payments", variant: "default" as const, className: "bg-secondary hover:bg-secondary-700" },
-          { href: "/dashboard/modules/finance/receipts", label: "Print Receipts", variant: "outline" as const },
-          { href: "/dashboard/modules/finance/reports", label: "View Reports", variant: "outline" as const },
-        ].map((btn, i) => (
-          <Link key={i} href={btn.href}>
-            <Button className={`w-full ${btn.className || ""}`} variant={btn.variant}>
-              {btn.label}
-            </Button>
+          { href: "/dashboard/modules/finance/payment-plans", label: "Payment plans" },
+          { href: "/dashboard/modules/finance/student-assignments", label: "Assign fees" },
+          { href: "/dashboard/modules/finance/post-balances", label: "Post balances" },
+          { href: "/dashboard/modules/finance/statements", label: "Statements" },
+        ].map((action) => (
+          <Link
+            key={action.href}
+            href={action.href}
+            className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 shadow-sm hover:border-teal-600/40 hover:bg-teal-50 hover:text-teal-900 transition no-underline"
+          >
+            {action.label}
           </Link>
         ))}
       </div>

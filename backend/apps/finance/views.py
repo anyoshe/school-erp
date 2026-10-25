@@ -216,7 +216,13 @@ def _build_finance_dashboard_summary(request):
             "availableTerms": sorted(set(str(x) for x in term_labels if x)),
             "availableYears": sorted(set(str(x) for x in year_labels if x), reverse=True),
             "isCurrentTerm": (selected_term == auto_term and selected_year == auto_year),
-            "feeGroupBreakdown": [],
+            "feeGroupBreakdown": _fee_group_breakdown(
+                school_ids=list(school_ids),
+                inv_term=inv_term,
+                pay_term=pay_term,
+                interview_income=interview_income_amt,
+                admission_income=admission_income_amt,
+            ),
         }
 
 
