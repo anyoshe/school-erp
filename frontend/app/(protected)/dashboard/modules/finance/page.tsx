@@ -63,6 +63,32 @@ interface DashboardSummaryResponse {
   feeGroupBreakdown: FeeItemTotal[];
 }
 
+
+/** Prefer 3–4 columns so fee-group cards fill balanced rows. */
+function balancedFeeGroupColumns(count: number): number {
+  if (count <= 1) return 1;
+  if (count === 2) return 2;
+  // Prefer exact divisors in the 3–4 range first
+  for (const c of [4, 3, 5, 2]) {
+    if (count % c === 0 && c <= 4) return c;
+  }
+  for (const c of [4, 3]) {
+    if (count % c === 0) return c;
+  }
+  // Minimize leftover cards on the last row
+  let best = 3;
+  let bestScore = 999;
+  for (let c = 2; c <= 4; c++) {
+    const rem = count % c;
+    const score = rem === 0 ? 0 : c - rem;
+    if (score < bestScore || (score === bestScore && c > best)) {
+      bestScore = score;
+      best = c;
+    }
+  }
+  return best;
+}
+
 function FinanceNavLinks() {
   const links = [
     { href: "/dashboard/modules/finance/clearance", label: "Clearance" },
@@ -400,7 +426,20 @@ export default function FinanceDashboard() {
               No fee items yet. Create fee structures (and optional interview/admission fees) to populate this section.
             </p>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            (() => {
+              const cols = balancedFeeGroupColumns(feeItemTotals.length);
+              const mdClass =
+                cols <= 1
+                  ? "md:grid-cols-1"
+                  : cols === 2
+                    ? "md:grid-cols-2"
+                    : cols === 3
+                      ? "md:grid-cols-3"
+                      : cols === 4
+                        ? "md:grid-cols-4"
+                        : "md:grid-cols-3";
+              return (
+            <div className={`grid grid-cols-2 ${mdClass} gap-3`}>
               {feeItemTotals.map((item) => {
                 const d = (item.description || "").toLowerCase();
                 const tone = d.includes("interview")
@@ -436,6 +475,8 @@ export default function FinanceDashboard() {
                 );
               })}
             </div>
+              );
+            })()
           )}
         </CardContent>
       </Card>
