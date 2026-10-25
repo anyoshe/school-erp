@@ -47,6 +47,7 @@ type Receipt = {
     category: string;
     line_amount?: number;
     amount: number;
+    allocated?: boolean;
   }>;
   notes?: string;
   school?: {
@@ -58,6 +59,157 @@ type Receipt = {
     currency?: string;
   };
 };
+
+/** Shared styles — preview and print use the same rules so output matches. */
+const RECEIPT_CSS = `
+  * { box-sizing: border-box; }
+  .rcpt {
+    width: 100%;
+    max-width: 148mm;
+    margin: 0 auto;
+    padding: 12mm 10mm;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: #0f172a;
+    font-size: 10pt;
+    line-height: 1.35;
+    text-align: center;
+  }
+  .rcpt-logo-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 8px;
+  }
+  .rcpt-logo {
+    width: 88px;
+    height: 88px;
+    object-fit: contain;
+  }
+  .rcpt-logo-fallback {
+    width: 88px;
+    height: 88px;
+    border-radius: 12px;
+    background: #f0fdfa;
+    border: 1px solid #99f6e4;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: #0f766e;
+    font-size: 28px;
+  }
+  .rcpt-school {
+    font-size: 14pt;
+    font-weight: 700;
+    margin: 0 0 2px;
+    letter-spacing: 0.01em;
+  }
+  .rcpt-contact {
+    font-size: 8.5pt;
+    color: #64748b;
+    margin: 0;
+  }
+  .rcpt-rule {
+    border: none;
+    border-top: 2px solid #0f766e;
+    margin: 10px 0 8px;
+  }
+  .rcpt-title {
+    font-size: 11pt;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #0f766e;
+    margin: 0 0 10px;
+  }
+  .rcpt-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 16px;
+    text-align: left;
+    margin: 0 auto 12px;
+    max-width: 100%;
+  }
+  .rcpt-meta .lbl {
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    margin: 0;
+  }
+  .rcpt-meta .val {
+    font-size: 9.5pt;
+    font-weight: 600;
+    margin: 0;
+  }
+  .rcpt-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 9.5pt;
+    margin-bottom: 10px;
+  }
+  .rcpt-table th {
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b;
+    border-bottom: 1px solid #94a3b8;
+    padding: 4px 2px;
+    font-weight: 600;
+  }
+  .rcpt-table th.num, .rcpt-table td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .rcpt-table td {
+    padding: 4px 2px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+  }
+  .rcpt-cat {
+    color: #94a3b8;
+    font-size: 8pt;
+  }
+  .rcpt-summary {
+    text-align: left;
+    margin: 0 auto;
+    max-width: 100%;
+  }
+  .rcpt-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 9.5pt;
+    padding: 2px 0;
+  }
+  .rcpt-row strong { font-weight: 600; }
+  .rcpt-paid {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #f0fdfa;
+    border: 1px solid #5eead4;
+    border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 700;
+    font-size: 12pt;
+    color: #115e59;
+  }
+  .rcpt-foot {
+    margin-top: 14px;
+    padding-top: 8px;
+    border-top: 1px dashed #94a3b8;
+    font-size: 7.5pt;
+    color: #64748b;
+    display: flex;
+    justify-content: space-between;
+  }
+  @page { size: A5 portrait; margin: 8mm; }
+  @media print {
+    body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .rcpt { max-width: none; padding: 0; }
+  }
+`;
 
 function asList(data: unknown): any[] {
   if (Array.isArray(data)) return data;
@@ -81,7 +233,10 @@ function studentLabel(p: PaymentRow): string {
 }
 
 function money(n: number, cur: string) {
-  return `${cur} ${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  return `${cur} ${Number(n || 0).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 export default function ReceiptPrintPage() {
@@ -142,8 +297,8 @@ export default function ReceiptPrintPage() {
       toast.error("Select a receipt first.");
       return;
     }
-    const html = printRef.current.innerHTML;
-    const w = window.open("", "_blank", "width=560,height=800");
+    const html = printRef.current.outerHTML;
+    const w = window.open("", "_blank", "width=640,height=900");
     if (!w) {
       toast.error("Allow pop-ups to print");
       return;
@@ -151,97 +306,10 @@ export default function ReceiptPrintPage() {
     w.document.write(`<!DOCTYPE html><html><head>
 <meta charset="utf-8"/>
 <title>Receipt ${receipt.receipt_number}</title>
-<style>
-  @page { size: A5 portrait; margin: 10mm; }
-  * { box-sizing: border-box; }
-  body {
-    font-family: "Segoe UI", system-ui, sans-serif;
-    color: #0f172a;
-    margin: 0;
-    font-size: 10.5pt;
-    line-height: 1.25;
-  }
-  .sheet {
-    width: 100%;
-    max-width: 148mm;
-    margin: 0 auto;
-    padding: 0;
-  }
-  .head {
-    display: grid;
-    grid-template-columns: 48px 1fr;
-    gap: 8px;
-    align-items: center;
-    border-bottom: 2px solid #0f766e;
-    padding-bottom: 6px;
-    margin-bottom: 8px;
-  }
-  .logo { width: 48px; height: 48px; object-fit: contain; }
-  .logo-fallback {
-    width: 48px; height: 48px; border-radius: 6px;
-    background: #f0fdfa; border: 1px solid #99f6e4;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700; color: #0f766e; font-size: 16px;
-  }
-  .school-name { font-size: 12pt; font-weight: 700; margin: 0; }
-  .meta-line { font-size: 8pt; color: #64748b; margin: 1px 0 0; }
-  .title {
-    text-align: center; font-size: 10pt; font-weight: 700;
-    letter-spacing: 0.06em; color: #0f766e; margin: 6px 0 8px;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 3px 12px;
-    margin-bottom: 8px;
-    font-size: 9pt;
-  }
-  .grid .lbl { color: #64748b; font-size: 7.5pt; text-transform: uppercase; }
-  .grid .val { font-weight: 600; }
-  table { width: 100%; border-collapse: collapse; font-size: 9pt; }
-  th {
-    text-align: left; font-size: 7.5pt; text-transform: uppercase;
-    color: #64748b; border-bottom: 1px solid #cbd5e1; padding: 3px 2px;
-  }
-  td { padding: 3px 2px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-  .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .summary {
-    margin-top: 8px;
-    border-top: 1px solid #cbd5e1;
-    padding-top: 6px;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 2px 16px;
-    font-size: 9pt;
-  }
-  .summary .amt { text-align: right; font-variant-numeric: tabular-nums; }
-  .summary .paid {
-    grid-column: 1 / -1;
-    margin-top: 4px;
-    padding: 6px 8px;
-    background: #f0fdfa;
-    border: 1px solid #99f6e4;
-    border-radius: 4px;
-    display: flex;
-    justify-content: space-between;
-    font-weight: 700;
-    font-size: 11pt;
-    color: #115e59;
-  }
-  .foot {
-    margin-top: 10px;
-    padding-top: 6px;
-    border-top: 1px dashed #94a3b8;
-    font-size: 7.5pt;
-    color: #64748b;
-    display: flex;
-    justify-content: space-between;
-  }
-  @media print {
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  }
-</style></head><body><div class="sheet">${html}</div>
-<script>window.onload=function(){window.print();}</script></body></html>`);
+<style>${RECEIPT_CSS}</style>
+</head><body>${html}
+<script>window.onload=function(){window.print();}</script>
+</body></html>`);
     w.document.close();
   };
 
@@ -264,9 +332,12 @@ export default function ReceiptPrintPage() {
   const dateStr =
     receipt?.payment_date ||
     (receipt?.paid_at ? String(receipt.paid_at).slice(0, 10) : "—");
+  const hasAlloc = (receipt?.line_items || []).some((l) => l.allocated);
 
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-6xl mx-auto">
+      <style dangerouslySetInnerHTML={{ __html: RECEIPT_CSS }} />
+
       <div className="flex flex-wrap items-center gap-3">
         <Button asChild variant="outline" size="sm">
           <Link href="/dashboard/modules/finance">
@@ -276,7 +347,7 @@ export default function ReceiptPrintPage() {
         <div className="flex-1 min-w-[200px]">
           <h1 className="text-2xl font-bold tracking-tight">Payment receipts</h1>
           <p className="text-sm text-muted-foreground">
-            A5 official receipts — fee bill, amount received, and balance.
+            Preview and print match exactly (A5).
           </p>
         </div>
         <Button
@@ -285,7 +356,7 @@ export default function ReceiptPrintPage() {
           disabled={!receipt}
           onClick={printReceipt}
         >
-          <Printer className="h-4 w-4 mr-1" /> Print A5
+          <Printer className="h-4 w-4 mr-1" /> Print
         </Button>
       </div>
 
@@ -323,7 +394,9 @@ export default function ReceiptPrintPage() {
                           : ""
                       }`}
                     >
-                      <p className="font-semibold text-sm leading-tight">{studentLabel(p)}</p>
+                      <p className="font-semibold text-sm leading-tight">
+                        {studentLabel(p)}
+                      </p>
                       <p className="text-[11px] text-muted-foreground">
                         {p.admission_number ? `${p.admission_number} · ` : ""}
                         {p.invoice_number || "Invoice"}
@@ -347,14 +420,14 @@ export default function ReceiptPrintPage() {
 
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="border-b bg-slate-50/80 flex flex-row items-center justify-between py-3">
-            <CardTitle className="text-base">Preview (A5)</CardTitle>
+            <CardTitle className="text-base">Preview (same as print)</CardTitle>
             {receipt && (
               <Button type="button" size="sm" variant="outline" onClick={printReceipt}>
                 <Printer className="h-4 w-4 mr-1" /> Print
               </Button>
             )}
           </CardHeader>
-          <CardContent className="p-4 flex justify-center bg-slate-100/50">
+          <CardContent className="p-4 flex justify-center bg-slate-100/60">
             {loadingReceipt ? (
               <p className="py-16 text-sm text-muted-foreground flex items-center gap-2">
                 <Loader2 className="h-5 w-5 animate-spin" /> Loading…
@@ -364,92 +437,93 @@ export default function ReceiptPrintPage() {
                 Select a payment to preview the receipt.
               </p>
             ) : (
-              <div
-                className="bg-white shadow-md border border-slate-200 w-full max-w-[148mm] p-4"
-                style={{ minHeight: "180mm" }}
-              >
-                <div ref={printRef}>
-                  <div className="head" style={{ display: "grid", gridTemplateColumns: "48px 1fr", gap: 8, alignItems: "center", borderBottom: "2px solid #0f766e", paddingBottom: 6, marginBottom: 8 }}>
+              <div className="bg-white shadow-md border border-slate-200 w-full max-w-[148mm]">
+                <div className="rcpt" ref={printRef}>
+                  <div className="rcpt-logo-wrap">
                     {logoSrc ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={logoSrc} alt="" className="logo" style={{ width: 48, height: 48, objectFit: "contain" }} />
+                      <img src={logoSrc} alt={schoolName} className="rcpt-logo" />
                     ) : (
-                      <div className="logo-fallback" style={{ width: 48, height: 48, borderRadius: 6, background: "#f0fdfa", border: "1px solid #99f6e4", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "#0f766e" }}>
+                      <div className="rcpt-logo-fallback">
                         {(schoolName || "S").slice(0, 1)}
                       </div>
                     )}
+                  </div>
+                  <p className="rcpt-school">{schoolName}</p>
+                  {receipt.school?.address ? (
+                    <p className="rcpt-contact">{receipt.school.address}</p>
+                  ) : null}
+                  <p className="rcpt-contact">
+                    {[receipt.school?.phone, receipt.school?.email]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                  <hr className="rcpt-rule" />
+                  <p className="rcpt-title">FEE RECEIPT</p>
+
+                  <div className="rcpt-meta">
                     <div>
-                      <p className="school-name" style={{ fontSize: "12pt", fontWeight: 700, margin: 0 }}>{schoolName}</p>
-                      {receipt.school?.address ? (
-                        <p className="meta-line" style={{ fontSize: "8pt", color: "#64748b", margin: "1px 0 0" }}>{receipt.school.address}</p>
-                      ) : null}
-                      <p className="meta-line" style={{ fontSize: "8pt", color: "#64748b", margin: 0 }}>
-                        {[receipt.school?.phone, receipt.school?.email].filter(Boolean).join(" · ")}
+                      <p className="lbl">Receipt No.</p>
+                      <p className="val">{receipt.receipt_number}</p>
+                    </div>
+                    <div>
+                      <p className="lbl">Date</p>
+                      <p className="val">{dateStr}</p>
+                    </div>
+                    <div>
+                      <p className="lbl">Student</p>
+                      <p className="val">{receipt.student_name}</p>
+                    </div>
+                    <div>
+                      <p className="lbl">Admission No.</p>
+                      <p className="val">{receipt.admission_number || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="lbl">Class</p>
+                      <p className="val">{receipt.grade || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="lbl">Term / Year</p>
+                      <p className="val">
+                        {receipt.invoice_term || "—"} · {receipt.invoice_year || "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="lbl">Invoice</p>
+                      <p className="val" style={{ fontFamily: "ui-monospace, monospace", fontSize: "9pt" }}>
+                        {receipt.invoice_number}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="lbl">Method</p>
+                      <p className="val">
+                        {receipt.payment_method}
+                        {receipt.reference_number
+                          ? ` · ${receipt.reference_number}`
+                          : ""}
                       </p>
                     </div>
                   </div>
 
-                  <p className="title" style={{ textAlign: "center", fontSize: "10pt", fontWeight: 700, letterSpacing: "0.06em", color: "#0f766e", margin: "6px 0 8px" }}>
-                    FEE RECEIPT
-                  </p>
-
-                  <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px 12px", marginBottom: 8, fontSize: "9pt" }}>
-                    <div>
-                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Receipt No.</div>
-                      <div className="val" style={{ fontWeight: 600 }}>{receipt.receipt_number}</div>
-                    </div>
-                    <div>
-                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Date</div>
-                      <div className="val" style={{ fontWeight: 600 }}>{dateStr}</div>
-                    </div>
-                    <div>
-                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Student</div>
-                      <div className="val" style={{ fontWeight: 600 }}>{receipt.student_name}</div>
-                    </div>
-                    <div>
-                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Admission No.</div>
-                      <div className="val" style={{ fontWeight: 600 }}>{receipt.admission_number || "—"}</div>
-                    </div>
-                    <div>
-                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Class</div>
-                      <div className="val" style={{ fontWeight: 600 }}>{receipt.grade || "—"}</div>
-                    </div>
-                    <div>
-                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Term / Year</div>
-                      <div className="val" style={{ fontWeight: 600 }}>
-                        {receipt.invoice_term || "—"} · {receipt.invoice_year || "—"}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Invoice</div>
-                      <div className="val" style={{ fontWeight: 600, fontFamily: "monospace", fontSize: "8.5pt" }}>{receipt.invoice_number}</div>
-                    </div>
-                    <div>
-                      <div className="lbl" style={{ color: "#64748b", fontSize: "7.5pt" }}>Method</div>
-                      <div className="val" style={{ fontWeight: 600 }}>
-                        {receipt.payment_method}
-                        {receipt.reference_number ? ` · ${receipt.reference_number}` : ""}
-                      </div>
-                    </div>
-                  </div>
-
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "9pt" }}>
+                  <table className="rcpt-table">
                     <thead>
                       <tr>
-                        <th style={{ textAlign: "left", fontSize: "7.5pt", textTransform: "uppercase", color: "#64748b", borderBottom: "1px solid #cbd5e1", padding: "3px 2px" }}>Fee item</th>
-                        <th style={{ textAlign: "right", fontSize: "7.5pt", textTransform: "uppercase", color: "#64748b", borderBottom: "1px solid #cbd5e1", padding: "3px 2px" }}>{(receipt.line_items || []).some((l: any) => l.allocated) ? "This payment" : "Billed"}</th>
+                        <th>Fee item</th>
+                        <th className="num">
+                          {hasAlloc ? "This payment" : "Billed"}
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {(receipt.line_items || []).map((ln, i) => (
                         <tr key={i}>
-                          <td style={{ padding: "3px 2px", borderBottom: "1px solid #f1f5f9" }}>
+                          <td>
                             {ln.description}
                             {ln.category ? (
-                              <span style={{ color: "#94a3b8", fontSize: "7.5pt" }}> · {ln.category}</span>
+                              <span className="rcpt-cat"> · {ln.category}</span>
                             ) : null}
                           </td>
-                          <td className="num" style={{ textAlign: "right", padding: "3px 2px", borderBottom: "1px solid #f1f5f9", fontVariantNumeric: "tabular-nums" }}>
+                          <td className="num">
                             {Number(ln.amount || ln.line_amount || 0).toLocaleString()}
                           </td>
                         </tr>
@@ -457,20 +531,26 @@ export default function ReceiptPrintPage() {
                     </tbody>
                   </table>
 
-                  <div className="summary" style={{ marginTop: 8, borderTop: "1px solid #cbd5e1", paddingTop: 6, display: "grid", gridTemplateColumns: "1fr auto", gap: "2px 16px", fontSize: "9pt" }}>
-                    <span>Invoice total</span>
-                    <span className="amt" style={{ textAlign: "right" }}>{money(receipt.invoice_amount_due, cur)}</span>
-                    <span>Paid to date</span>
-                    <span className="amt" style={{ textAlign: "right" }}>{money(receipt.invoice_amount_paid, cur)}</span>
-                    <span>Balance due</span>
-                    <span className="amt" style={{ textAlign: "right", fontWeight: 600 }}>{money(receipt.invoice_balance, cur)}</span>
-                    <div className="paid" style={{ gridColumn: "1 / -1", marginTop: 4, padding: "6px 8px", background: "#f0fdfa", border: "1px solid #99f6e4", borderRadius: 4, display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "11pt", color: "#115e59" }}>
+                  <div className="rcpt-summary">
+                    <div className="rcpt-row">
+                      <span>Invoice total</span>
+                      <strong>{money(receipt.invoice_amount_due, cur)}</strong>
+                    </div>
+                    <div className="rcpt-row">
+                      <span>Paid to date</span>
+                      <strong>{money(receipt.invoice_amount_paid, cur)}</strong>
+                    </div>
+                    <div className="rcpt-row">
+                      <span>Balance due</span>
+                      <strong>{money(receipt.invoice_balance, cur)}</strong>
+                    </div>
+                    <div className="rcpt-paid">
                       <span>Amount received</span>
                       <span>{money(receipt.amount, cur)}</span>
                     </div>
                   </div>
 
-                  <div className="foot" style={{ marginTop: 10, paddingTop: 6, borderTop: "1px dashed #94a3b8", fontSize: "7.5pt", color: "#64748b", display: "flex", justifyContent: "space-between" }}>
+                  <div className="rcpt-foot">
                     <span>Computer-generated · Keep for your records</span>
                     <span>Thank you</span>
                   </div>
