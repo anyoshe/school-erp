@@ -172,8 +172,15 @@ export default function FinanceDashboard() {
       const status = error?.response?.status;
       if (status === 401) {
         // interceptor will refresh or redirect
+      } else if (!error?.response) {
+        toast.error(
+          "Cannot reach finance API. Is the backend running? Try: python manage.py migrate finance"
+        );
       } else {
-        toast.error("Failed to load finance dashboard");
+        toast.error(
+          error?.response?.data?.detail ||
+            `Finance dashboard failed (${status || "error"})`
+        );
       }
     } finally {
       setLoading(false);

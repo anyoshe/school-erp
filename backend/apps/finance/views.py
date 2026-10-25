@@ -44,6 +44,39 @@ def _get_assignment_period_meta(assignment: StudentFeeAssignment):
 
 
 
+
+def _empty_fee_groups():
+    names = [
+        "Interview",
+        "Admission / registration",
+        "Tuition",
+        "Examination",
+        "Co-curricular",
+        "Transport",
+        "Materials",
+        "Misc / Other",
+    ]
+    return [
+        {
+            "groupKey": n.lower().replace(" ", "_").replace("/", "_"),
+            "description": n,
+            "allocated": 0.0,
+            "pending": 0.0,
+            "total": 0.0,
+            "isTuition": n == "Tuition",
+        }
+        for n in names
+    ]
+
+
+def _safe_fee_group_breakdown(**kwargs):
+    try:
+        return _fee_group_breakdown(**kwargs)
+    except Exception as exc:
+        print(f"[finance dashboard] fee group breakdown failed: {exc}")
+        return _empty_fee_groups()
+
+
 def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admission_income):
     """Aggregate collected vs pending by fee group for the dashboard."""
     from collections import defaultdict
@@ -88,16 +121,27 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
             ratio = max(Decimal("0"), (due - paid) / due)
             groups[key]["pending"] += (amt * ratio).quantize(Decimal("0.01"))
 
-    pays = list(
-        pay_term.select_related("invoice").prefetch_related(
-            Prefetch("invoice__lines", queryset=InvoiceLine.objects.select_related("item__category"))
+    try:
+        pays = list(
+            pay_term.select_related("invoice")
+            .prefetch_related(
+                Prefetch(
+                    "invoice__lines",
+                    queryset=InvoiceLine.objects.select_related("item", "item__category"),
+                )
+            )[:2000]
         )
-    )
+    except Exception as exc:
+        print(f"[finance dashboard] pay_term load failed: {exc}")
+        pays = []
     for pay in pays:
         amt = Decimal(str(pay.amount or 0))
         if amt <= 0:
             continue
-        allocs = getattr(pay, "line_allocations", None) or []
+        try:
+            allocs = list(getattr(pay, "line_allocations", None) or [])
+        except Exception:
+            allocs = []
         if allocs and isinstance(allocs, list):
             for a in allocs:
                 if not isinstance(a, dict):
@@ -217,7 +261,11 @@ def _build_finance_dashboard_summary(request):
         admission_income_amt = Decimal("0")
 
     # ── Detect current academic year / term (or use query filters) ──
-    from apps.finance.clearance import _detect_year_term
+    try:
+        from apps.finance.clearance import _detect_year_term
+    except Exception:
+        def _detect_year_term(_school):
+            return (str(today.year), "Term 1")
     school_obj = None
     try:
         from apps.school.models import School
@@ -225,7 +273,10 @@ def _build_finance_dashboard_summary(request):
             school_obj = School.objects.filter(pk=list(school_ids)[0]).first()
     except Exception:
         school_obj = None
-    auto_year, auto_term = _detect_year_term(school_obj) if school_obj else (str(today.year), "Term 1")
+    try:
+        auto_year, auto_term = _detect_year_term(school_obj) if school_obj else (str(today.year), "Term 1")
+    except Exception:
+        auto_year, auto_term = str(today.year), "Term 1"
 
     q_year = (request.GET.get("academic_year") or request.GET.get("year") or "").strip()
     q_term = (request.GET.get("term") or "").strip()
@@ -339,7 +390,7 @@ def _build_finance_dashboard_summary(request):
             "availableTerms": sorted(set(str(x) for x in term_labels if x)),
             "availableYears": sorted(set(str(x) for x in year_labels if x), reverse=True),
             "isCurrentTerm": (selected_term == auto_term and selected_year == auto_year),
-            "feeGroupBreakdown": _fee_group_breakdown(
+            "feeGroupBreakdown": _safe_fee_group_breakdown(
                 school_ids=list(school_ids),
                 inv_term=inv_term,
                 pay_term=pay_term,
