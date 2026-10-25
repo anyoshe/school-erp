@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import api from "@/utils/api";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -100,8 +100,26 @@ export default function AdmissionActions({
   const [isAcceptOfferOpen, setIsAcceptOfferOpen] = useState(false);
   const [isEnrollmentWizardOpen, setIsEnrollmentWizardOpen] = useState(false);
   const [enrolledStudent, setEnrolledStudent] = useState<{ id: string; full_name?: string } | null>(null);
+  /** Optimistic status so pipeline advances immediately (parent refetch can lag). */
+  const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null);
+  const actionLock = useRef(false);
 
-  const status = currentStatus?.toUpperCase() || "SUBMITTED";
+  useEffect(() => {
+    // Parent caught up — drop optimistic override
+    if (
+      currentStatus &&
+      optimisticStatus &&
+      currentStatus.toUpperCase() === optimisticStatus.toUpperCase()
+    ) {
+      setOptimisticStatus(null);
+    }
+  }, [currentStatus, optimisticStatus]);
+
+  const status = (
+    optimisticStatus ||
+    currentStatus ||
+    "SUBMITTED"
+  ).toUpperCase();
 
   const isLoading = (key: string) => loading === key;
 
@@ -110,6 +128,8 @@ export default function AdmissionActions({
     value?: string,
     metadata?: { reason?: string; notes?: string }
   ) => {
+    if (actionLock.current || loading) return;
+    actionLock.current = true;
     try {
       setLoading(value || action);
 
@@ -119,9 +139,20 @@ export default function AdmissionActions({
           if (metadata?.reason) payload.rejection_reason = metadata.reason;
           if (metadata?.notes) payload.internal_notes = metadata.notes;
         }
-        await api.patch(`/admissions/applications/${applicationId}/`, payload);
+        const res = await api.patch(
+          `/admissions/applications/${applicationId}/`,
+          payload
+        );
+        const next =
+          (res.data?.status as string) ||
+          value ||
+          currentStatus ||
+          "";
+        if (next) setOptimisticStatus(String(next).toUpperCase());
 
-        toast.success(`Status updated to ${STATUS_LABELS[value || ""] || value}`);
+        toast.success(
+          `Status updated to ${STATUS_LABELS[next || value || ""] || next || value}`
+        );
 
         if (value === "REJECTED") {
           const sentMethods: string[] = [];
@@ -137,16 +168,19 @@ export default function AdmissionActions({
         setIsRejectOpen(false);
       }
 
-      onUpdated?.();
+      await onUpdated?.();
     } catch (err: any) {
+      setOptimisticStatus(null);
       const msg =
         err.response?.data?.detail ||
         err.response?.data?.non_field_errors?.[0] ||
+        err.response?.data?.status?.[0] ||
         "Action failed. Please try again.";
-      toast.error(msg);
+      toast.error(typeof msg === "string" ? msg : "Action failed. Please try again.");
       console.error("Admission action error:", err);
     } finally {
       setLoading(null);
+      actionLock.current = false;
     }
   };
 
