@@ -159,9 +159,11 @@ export default function ApplicationTable({
                       </p>
                       <p className="text-[11px] text-slate-400 mt-1 uppercase font-medium tracking-tighter truncate">
                         Grade:{" "}
-                        {(typeof app.class_applied === "object"
-                          ? (app.class_applied_name || (typeof app.class_applied === 'object' ? app.class_applied?.name : app.class_applied))
-                          : app.class_applied) || "Unassigned"}
+                        {app.class_applied_name ||
+                          (typeof app.class_applied === "object"
+                            ? app.class_applied?.name
+                            : app.class_applied) ||
+                          "Unassigned"}
                       </p>
                     </div>
                   </div>
