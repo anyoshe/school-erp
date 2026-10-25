@@ -22,48 +22,115 @@ from django.utils import timezone
 
 
 
+def _application_had_interview(application) -> bool:
+    """True only if interview was booked or completed (not pure document review path)."""
+    status = str(getattr(application, "status", "") or "").upper()
+    if status in ("TEST_SCHEDULED", "INTERVIEW_COMPLETED"):
+        return True
+    if getattr(application, "interview_date", None):
+        return True
+    if getattr(application, "interview_completed_at", None):
+        return True
+    outcome = (getattr(application, "interview_outcome", None) or "").strip()
+    if outcome:
+        return True
+    return False
+
+
 def _ensure_application_charges(application):
-    """Create INTERVIEW/ADMISSION charges from school defaults without overwriting staff edits."""
+    """
+    Create INTERVIEW/ADMISSION charges from school defaults without overwriting staff edits.
+
+    Interview fee is only due when an interview was scheduled/completed.
+    Applicants who skip interview (review → offer) get interview = Not applicable.
+    """
     from decimal import Decimal
     from .models import ApplicationCharge
     school = application.school
+    had_interview = _application_had_interview(application)
+
+    interview_amt = Decimal(str(getattr(school, "interview_fee_amount", 0) or 0))
+    interview_enabled = bool(getattr(school, "interview_fee_enabled", False)) and interview_amt > 0
+    # Only charge interview if school enables it AND this applicant went through interview
+    interview_applies = interview_enabled and had_interview
+
+    admission_amt = Decimal(str(getattr(school, "admission_fee_amount", 0) or 0))
+    admission_enabled = admission_amt > 0
+
     specs = [
         (
             ApplicationCharge.ChargeType.INTERVIEW,
-            bool(getattr(school, "interview_fee_enabled", False)),
-            Decimal(str(getattr(school, "interview_fee_amount", 0) or 0)),
+            interview_applies,
+            interview_amt if interview_enabled else Decimal("0"),
+            not had_interview,  # auto N/A decision when no interview path
         ),
         (
             ApplicationCharge.ChargeType.ADMISSION,
-            Decimal(str(getattr(school, "admission_fee_amount", 0) or 0)) > 0,
-            Decimal(str(getattr(school, "admission_fee_amount", 0) or 0)),
+            admission_enabled,
+            admission_amt,
+            False,
         ),
     ]
-    for charge_type, enabled, amount in specs:
-        list_amt = amount if enabled else Decimal("0")
-        if charge_type == ApplicationCharge.ChargeType.INTERVIEW and amount > 0:
-            list_amt = amount
-            enabled = True
+    for charge_type, enabled, list_amt, auto_na in specs:
+        if auto_na:
+            default_policy = ApplicationCharge.Policy.NOT_APPLICABLE
+            default_due = Decimal("0")
+            default_decision = True
+        elif enabled and list_amt > 0:
+            default_policy = ApplicationCharge.Policy.FULL
+            default_due = list_amt
+            default_decision = False
+        else:
+            default_policy = ApplicationCharge.Policy.NOT_APPLICABLE
+            default_due = Decimal("0")
+            default_decision = True
+
         charge, created = ApplicationCharge.objects.get_or_create(
             application=application,
             charge_type=charge_type,
             defaults={
-                "policy": (
-                    ApplicationCharge.Policy.FULL
-                    if enabled and list_amt > 0
-                    else ApplicationCharge.Policy.NOT_APPLICABLE
-                ),
+                "policy": default_policy,
                 "list_amount": list_amt,
-                "amount_due": list_amt if enabled and list_amt > 0 else Decimal("0"),
-                "decision_made": False,
+                "amount_due": default_due,
+                "decision_made": default_decision,
             },
         )
         if not created and not charge.decision_made:
             charge.list_amount = list_amt
-            if list_amt > 0 and charge.policy == ApplicationCharge.Policy.NOT_APPLICABLE:
+            if auto_na or not enabled:
+                charge.policy = ApplicationCharge.Policy.NOT_APPLICABLE
+                charge.decision_made = True
+            elif list_amt > 0 and charge.policy == ApplicationCharge.Policy.NOT_APPLICABLE:
                 charge.policy = ApplicationCharge.Policy.FULL
             charge.recompute_due()
-            charge.save(update_fields=["list_amount", "policy", "amount_due", "updated_at"])
+            charge.save(
+                update_fields=[
+                    "list_amount",
+                    "policy",
+                    "amount_due",
+                    "decision_made",
+                    "updated_at",
+                ]
+            )
+        elif not created and auto_na and charge.charge_type == ApplicationCharge.ChargeType.INTERVIEW:
+            # Staff never decided; applicant never interviewed — force N/A
+            if charge.policy != ApplicationCharge.Policy.NOT_APPLICABLE or not charge.decision_made:
+                if charge.amount_paid and Decimal(str(charge.amount_paid)) > 0:
+                    pass  # keep paid records
+                else:
+                    charge.policy = ApplicationCharge.Policy.NOT_APPLICABLE
+                    charge.decision_made = True
+                    charge.list_amount = list_amt
+                    charge.recompute_due()
+                    charge.save(
+                        update_fields=[
+                            "list_amount",
+                            "policy",
+                            "amount_due",
+                            "decision_made",
+                            "updated_at",
+                        ]
+                    )
 
 
 class ApplicationViewSet(viewsets.ModelViewSet):
@@ -198,72 +265,23 @@ class ApplicationViewSet(viewsets.ModelViewSet):
     def ensure_charges(self, request, pk=None):
         """
         Create/sync INTERVIEW + ADMISSION charges from school defaults.
-        Existing apps get N/A when school amounts are 0 / interview disabled.
+        Interview is auto Not applicable when no interview was scheduled/completed.
         """
-        from decimal import Decimal
         application = self.get_object()
-        school = application.school
-        created = []
-
-        specs = [
-            (
-                ApplicationCharge.ChargeType.INTERVIEW,
-                bool(getattr(school, "interview_fee_enabled", False)),
-                Decimal(str(getattr(school, "interview_fee_amount", 0) or 0)),
-            ),
-            (
-                ApplicationCharge.ChargeType.ADMISSION,
-                Decimal(str(getattr(school, "admission_fee_amount", 0) or 0)) > 0,
-                Decimal(str(getattr(school, "admission_fee_amount", 0) or 0)),
-            ),
-        ]
-
-        for charge_type, enabled, amount in specs:
-            list_amt = amount if enabled else Decimal("0")
-            # If interview amount set but toggle off, still expose the amount so staff can decide
-            if charge_type == ApplicationCharge.ChargeType.INTERVIEW and amount > 0:
-                list_amt = amount
-                enabled = True
-            charge, was_created = ApplicationCharge.objects.get_or_create(
-                application=application,
-                charge_type=charge_type,
-                defaults={
-                    "policy": (
-                        ApplicationCharge.Policy.FULL
-                        if enabled and list_amt > 0
-                        else ApplicationCharge.Policy.NOT_APPLICABLE
-                    ),
-                    "list_amount": list_amt,
-                    "amount_due": list_amt if enabled and list_amt > 0 else Decimal("0"),
-                    "decision_made": False,
-                },
-            )
-            if was_created:
-                created.append(charge_type)
-            else:
-                # Sync list price from school settings until staff has decided
-                if not charge.decision_made:
-                    charge.list_amount = list_amt
-                    if list_amt > 0 and charge.policy == ApplicationCharge.Policy.NOT_APPLICABLE:
-                        # Prefer FULL as suggested default when school has a price
-                        charge.policy = ApplicationCharge.Policy.FULL
-                    charge.recompute_due()
-                    charge.save(
-                        update_fields=[
-                            "list_amount",
-                            "policy",
-                            "amount_due",
-                            "updated_at",
-                        ]
-                    )
+        _ensure_application_charges(application)
         from .serializers import ApplicationChargeSerializer
-        qs = application.charges.all()
+        from .models import ApplicationCharge
+
+        qs = ApplicationCharge.objects.filter(application=application).order_by("charge_type")
+        # Hide interview from "due" UX when N/A (still returned with flag for transparency)
+        charges = ApplicationChargeSerializer(qs, many=True).data
         return Response(
             {
-                "created": created,
-                "charges": ApplicationChargeSerializer(qs, many=True).data,
+                "had_interview": _application_had_interview(application),
+                "charges": charges,
             }
         )
+
 
     @action(detail=True, methods=["patch"], url_path="charges/(?P<charge_type>[^/.]+)")
     def update_charge(self, request, pk=None, charge_type=None):
