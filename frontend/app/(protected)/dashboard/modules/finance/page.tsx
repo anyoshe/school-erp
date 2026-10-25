@@ -60,27 +60,29 @@ interface DashboardSummaryResponse {
 }
 
 function FinanceNavLinks() {
+  const links = [
+    { href: "/dashboard/modules/finance/clearance", label: "Clearance" },
+    { href: "/dashboard/modules/finance/payments", label: "Record payment" },
+    { href: "/dashboard/modules/finance/receipts", label: "Receipts" },
+    { href: "/dashboard/modules/finance/invoices", label: "Invoices" },
+    { href: "/dashboard/modules/finance/fee-structures", label: "Fee structures" },
+    { href: "/dashboard/modules/finance/standing", label: "P&L" },
+    { href: "/dashboard/modules/finance/expenses", label: "Expenses" },
+    { href: "/dashboard/modules/finance/bills", label: "Bills" },
+    { href: "/dashboard/modules/finance/income-receipts", label: "Pre-enroll income" },
+  ];
   return (
-    <div className="mb-4 flex flex-wrap gap-3 text-sm">
-      <Link href="/dashboard/modules/finance/clearance" className="font-medium text-amber-900 underline underline-offset-2">
-        Awaiting clearance
-      </Link>
-      <Link href="/dashboard/modules/finance/standing" className="font-medium text-emerald-800 underline underline-offset-2">
-        School standing (P&L)
-      </Link>
-      <Link href="/dashboard/modules/finance/expenses" className="font-medium text-slate-800 underline underline-offset-2">
-        Expenses
-      </Link>
-      <Link href="/dashboard/modules/finance/bills" className="font-medium text-slate-800 underline underline-offset-2">
-        Vendor bills
-      </Link>
-      <Link href="/dashboard/modules/finance/income-receipts" className="font-medium text-amber-800 underline underline-offset-2">
-        Pre-enrollment income
-      </Link>
-      <Link href="/dashboard/modules/finance/fee-structures" className="font-medium text-slate-800 underline underline-offset-2">
-        Fee structures
-      </Link>
-    </div>
+    <nav className="mb-5 flex flex-wrap items-center justify-end gap-1 sm:gap-1.5">
+      {links.map((l) => (
+        <Link
+          key={l.href}
+          href={l.href}
+          className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 shadow-sm hover:border-teal-600/40 hover:bg-teal-50 hover:text-teal-900 transition no-underline"
+        >
+          {l.label}
+        </Link>
+      ))}
+    </nav>
   );
 }
 

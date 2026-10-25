@@ -936,30 +936,85 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'], url_path='receipt')
     def receipt(self, request, pk=None):
+        from decimal import Decimal
         payment = self.get_object()
         invoice = payment.invoice
+        student = invoice.student
+        school = invoice.school or getattr(student, "school", None)
+
+        inv_due = Decimal(str(invoice.amount_due or 0)) + Decimal(str(invoice.late_fee_applied or 0))
+        pay_amt = Decimal(str(payment.amount or 0))
+        # Allocate this payment across invoice lines proportionally
+        raw_lines = list(invoice.lines.select_related("item__category").all())
+        line_total = sum((Decimal(str(ln.amount or 0)) for ln in raw_lines), Decimal("0"))
         lines = []
-        for line in invoice.lines.select_related('item__category').all():
+        if raw_lines and line_total > 0:
+            allocated = Decimal("0")
+            for i, line in enumerate(raw_lines):
+                share = (Decimal(str(line.amount or 0)) / line_total) * pay_amt
+                if i == len(raw_lines) - 1:
+                    share = pay_amt - allocated
+                else:
+                    share = share.quantize(Decimal("0.01"))
+                    allocated += share
+                lines.append({
+                    "description": line.description or (
+                        line.item.name if line.item_id else "Fee item"
+                    ),
+                    "category": (
+                        line.item.category.name
+                        if line.item_id and line.item and line.item.category_id
+                        else "Fees"
+                    ),
+                    "line_amount": float(line.amount or 0),
+                    "amount": float(share),
+                })
+        else:
             lines.append({
-                'description': line.description,
-                'category': line.item.category.name if line.item and line.item.category else 'Unknown',
-                'amount': float(line.amount),
+                "description": f"Payment toward {invoice.invoice_number}",
+                "category": "Fees",
+                "line_amount": float(inv_due),
+                "amount": float(pay_amt),
             })
 
+        logo_url = None
+        if school and getattr(school, "logo", None):
+            try:
+                logo_url = request.build_absolute_uri(school.logo.url)
+            except Exception:
+                logo_url = None
+
+        paid_on = getattr(payment, "payment_date", None) or (
+            payment.paid_at.date() if payment.paid_at else None
+        )
+
         return Response({
-            'payment_id': str(payment.id),
-            'invoice_number': invoice.invoice_number,
-            'student_name': invoice.student.full_name,
-            'payment_method': payment.payment_method,
-            'reference_number': payment.reference_number,
-            'amount': float(payment.amount),
-            'paid_at': payment.paid_at,
-            'invoice_amount_due': float(invoice.amount_due),
-            'invoice_amount_paid': float(invoice.amount_paid),
-            'invoice_balance': float(invoice.balance),
-            'invoice_term': invoice.term,
-            'invoice_year': invoice.academic_year,
-            'line_items': lines,
+            "payment_id": str(payment.id),
+            "receipt_number": getattr(payment, "receipt_number", None) or payment.reference_number or str(payment.id)[:8],
+            "invoice_number": invoice.invoice_number,
+            "student_name": getattr(student, "full_name", None) or f"{student.first_name} {student.last_name}",
+            "admission_number": getattr(student, "admission_number", "") or "",
+            "grade": getattr(getattr(student, "current_class", None), "name", "") or "",
+            "payment_method": payment.payment_method,
+            "reference_number": payment.reference_number or "",
+            "amount": float(pay_amt),
+            "payment_date": paid_on.isoformat() if paid_on else None,
+            "paid_at": payment.paid_at,
+            "invoice_amount_due": float(inv_due),
+            "invoice_amount_paid": float(invoice.amount_paid or 0),
+            "invoice_balance": float(invoice.balance or 0),
+            "invoice_term": invoice.term or "",
+            "invoice_year": invoice.academic_year or "",
+            "line_items": lines,
+            "notes": payment.notes or "",
+            "school": {
+                "name": getattr(school, "name", "") if school else "",
+                "address": getattr(school, "address", "") if school else "",
+                "phone": getattr(school, "phone", "") or getattr(school, "contact_phone", "") if school else "",
+                "email": getattr(school, "email", "") or getattr(school, "contact_email", "") if school else "",
+                "logo_url": logo_url,
+                "currency": getattr(school, "currency", "KES") if school else "KES",
+            },
         })
     
 class PaymentPlanViewSet(viewsets.ModelViewSet):
