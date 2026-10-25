@@ -77,8 +77,8 @@ class ApplicationViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'school', 'class_applied', 'gender', 'nationality']
     search_fields = ['first_name', 'last_name', 'admission_number', 'primary_guardian_name', 'primary_guardian_phone']
-    ordering_fields = ['submitted_at', 'admission_number', 'status', 'created_at']
-    ordering = ['-submitted_at']
+    ordering_fields = ['submitted_at', 'admission_number', 'status', 'updated_at']
+    ordering = ['-submitted_at', '-updated_at']
 
     def get_queryset(self):
         if not self.request.user.is_authenticated:
@@ -93,7 +93,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             if not include_enrolled:
                 qs = qs.exclude(status=Application.Status.ENROLLED)
             return qs.select_related("class_applied").order_by(
-                "-submitted_at", "-created_at"
+                "-submitted_at", "-updated_at"
             )
         return qs.prefetch_related("documents", "fee_payments", "charges").select_related(
             "class_applied", "school"
