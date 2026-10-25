@@ -437,7 +437,7 @@ export default function ReceiptPrintPage() {
                     <thead>
                       <tr>
                         <th style={{ textAlign: "left", fontSize: "7.5pt", textTransform: "uppercase", color: "#64748b", borderBottom: "1px solid #cbd5e1", padding: "3px 2px" }}>Fee item</th>
-                        <th style={{ textAlign: "right", fontSize: "7.5pt", textTransform: "uppercase", color: "#64748b", borderBottom: "1px solid #cbd5e1", padding: "3px 2px" }}>Billed</th>
+                        <th style={{ textAlign: "right", fontSize: "7.5pt", textTransform: "uppercase", color: "#64748b", borderBottom: "1px solid #cbd5e1", padding: "3px 2px" }}>{(receipt.line_items || []).some((l: any) => l.allocated) ? "This payment" : "Billed"}</th>
                       </tr>
                     </thead>
                     <tbody>

@@ -50,6 +50,11 @@ export default function FinanceClearancePage() {
   const [extraName, setExtraName] = useState("");
   const [extraAmount, setExtraAmount] = useState("");
   const [addingExtra, setAddingExtra] = useState(false);
+  const [invoiceLines, setInvoiceLines] = useState<
+    Array<{ id: string; description: string; category?: string; amount: number }>
+  >([]);
+  const [allocations, setAllocations] = useState<Record<string, string>>({});
+  const [loadingLines, setLoadingLines] = useState(false);
 
   const listQ = useQuery({
     queryKey: ["awaiting-clearance", schoolId],
@@ -60,6 +65,32 @@ export default function FinanceClearancePage() {
     },
   });
 
+  const loadInvoiceLines = async (id: string) => {
+    if (!id) {
+      setInvoiceLines([]);
+      setAllocations({});
+      return;
+    }
+    setLoadingLines(true);
+    try {
+      const res = await api.get(`/finance/invoices/${id}/`, { headers });
+      const lines = Array.isArray(res.data?.lines) ? res.data.lines : [];
+      setInvoiceLines(
+        lines.map((ln: any) => ({
+          id: String(ln.id),
+          description: ln.description || "Fee item",
+          category: ln.category_name || ln.category || "",
+          amount: Number(ln.amount || 0),
+        }))
+      );
+      setAllocations({});
+    } catch {
+      setInvoiceLines([]);
+    } finally {
+      setLoadingLines(false);
+    }
+  };
+
   const openPay = (r: any) => {
     setRow(r);
     setAmount(r.balance > 0 ? String(r.balance) : r.total_due > 0 ? String(r.total_due) : "");
@@ -67,10 +98,45 @@ export default function FinanceClearancePage() {
     setMethod("CASH");
     setReference("");
     const invs = r.invoices || [];
-    setInvoiceId(invs[0] ? String(invs[0].id) : "");
+    const iid = invs[0] ? String(invs[0].id) : "";
+    setInvoiceId(iid);
     setExtraName("");
     setExtraAmount("");
     setPayOpen(true);
+    void loadInvoiceLines(iid);
+  };
+
+  const allocTotal = Object.values(allocations).reduce(
+    (s, v) => s + (Number(v) || 0),
+    0
+  );
+
+  const applyProportional = () => {
+    const amt = Number(amount) || 0;
+    if (amt <= 0 || invoiceLines.length === 0) return;
+    const billTotal = invoiceLines.reduce((s, l) => s + l.amount, 0) || 1;
+    const next: Record<string, string> = {};
+    let remaining = amt;
+    invoiceLines.forEach((ln, i) => {
+      if (i === invoiceLines.length - 1) {
+        next[ln.id] = String(Math.round(remaining * 100) / 100);
+      } else {
+        const share = Math.round((ln.amount / billTotal) * amt * 100) / 100;
+        next[ln.id] = String(share);
+        remaining -= share;
+      }
+    });
+    setAllocations(next);
+  };
+
+  const applyToFirst = () => {
+    const amt = Number(amount) || 0;
+    if (amt <= 0 || invoiceLines.length === 0) return;
+    const next: Record<string, string> = {};
+    invoiceLines.forEach((ln, i) => {
+      next[ln.id] = i === 0 ? String(amt) : "0";
+    });
+    setAllocations(next);
   };
 
   const addExtra = async () => {
@@ -127,15 +193,35 @@ export default function FinanceClearancePage() {
     }
     setSaving(true);
     try {
+      const amt = Number(amount);
+      const line_allocations = invoiceLines
+        .map((ln) => ({
+          line_id: ln.id,
+          description: ln.description,
+          category: ln.category || "",
+          amount: Number(allocations[ln.id] || 0),
+        }))
+        .filter((r) => r.amount > 0);
+      if (line_allocations.length > 0) {
+        const sum = line_allocations.reduce((s, r) => s + r.amount, 0);
+        if (Math.abs(sum - amt) > 0.05) {
+          toast.error(
+            `Allocation total (${sum.toLocaleString()}) must equal payment (${amt.toLocaleString()}).`
+          );
+          setSaving(false);
+          return;
+        }
+      }
       const res = await api.post(
         "/finance/payments/",
         {
           invoice: invoiceId,
-          amount,
+          amount: amt,
           payment_method: method,
           payment_date: paymentDate,
           reference_number: reference,
           notes: `Finance clearance — ${row?.admission_number || ""}`,
+          ...(line_allocations.length ? { line_allocations } : {}),
         },
         { headers }
       );
@@ -338,6 +424,50 @@ export default function FinanceClearancePage() {
             </Button>
           </div>
 
+
+          {invoiceId && (
+            <div className="rounded-lg border bg-slate-50 p-3 space-y-2">
+              <div className="flex flex-wrap justify-between gap-2 items-center">
+                <p className="text-sm font-medium">Allocate to fee items</p>
+                <div className="flex gap-1">
+                  <Button type="button" size="sm" variant="outline" onClick={applyProportional}>
+                    Split by ratio
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={applyToFirst}>
+                    First item
+                  </Button>
+                </div>
+              </div>
+              {loadingLines ? (
+                <p className="text-xs text-muted-foreground">Loading items…</p>
+              ) : invoiceLines.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No line items.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {invoiceLines.map((ln) => (
+                    <li key={ln.id} className="grid grid-cols-[1fr_90px] gap-2 items-center text-sm">
+                      <span className="truncate">{ln.description}</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="h-8"
+                        value={allocations[ln.id] ?? ""}
+                        onChange={(e) =>
+                          setAllocations((prev) => ({ ...prev, [ln.id]: e.target.value }))
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Allocated {allocTotal.toLocaleString()}
+                {amount ? ` / ${Number(amount).toLocaleString()}` : ""}
+              </p>
+            </div>
+          )}
+
           <div className="space-y-3 border-t pt-3">
             <div>
               <Label>Payment date *</Label>
@@ -351,7 +481,7 @@ export default function FinanceClearancePage() {
               <Label>Invoice / term bill *</Label>
               <Select
                 value={invoiceId || "none"}
-                onValueChange={(v) => setInvoiceId(v === "none" ? "" : v)}
+                onValueChange={(v) => { const id = v === "none" ? "" : v; setInvoiceId(id); void loadInvoiceLines(id); }}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select invoice" />

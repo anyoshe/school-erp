@@ -63,6 +63,11 @@ export default function PaymentsPage() {
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [referenceNumber, setReferenceNumber] = useState("");
   const [notes, setNotes] = useState("");
+  const [invoiceLines, setInvoiceLines] = useState<
+    Array<{ id: string; description: string; category?: string; amount: number }>
+  >([]);
+  const [allocations, setAllocations] = useState<Record<string, string>>({});
+  const [loadingLines, setLoadingLines] = useState(false);
 
   const loadInvoices = useCallback(async () => {
     if (!schoolId) {
@@ -126,8 +131,10 @@ export default function PaymentsPage() {
     });
   }, [invoices, searchQuery]);
 
-  const onSelectInvoice = (id: string) => {
+  const onSelectInvoice = async (id: string) => {
     setSelectedInvoice(id);
+    setInvoiceLines([]);
+    setAllocations({});
     const inv = invoices.find((i) => String(i.id) === String(id));
     if (inv) {
       const bal = Number(
@@ -136,7 +143,61 @@ export default function PaymentsPage() {
       );
       setPaymentAmount(bal > 0 ? String(bal) : "");
     }
+    if (!id) return;
+    setLoadingLines(true);
+    try {
+      const res = await api.get(`/finance/invoices/${id}/`, { headers });
+      const lines = Array.isArray(res.data?.lines) ? res.data.lines : [];
+      const mapped = lines.map((ln: any) => ({
+        id: String(ln.id),
+        description: ln.description || "Fee item",
+        category: ln.category_name || ln.category || "",
+        amount: Number(ln.amount || 0),
+      }));
+      setInvoiceLines(mapped);
+      // Default: empty allocations — user fills, or "Apply full balance" buttons
+    } catch (e) {
+      console.warn("Could not load invoice lines", e);
+      setInvoiceLines([]);
+    } finally {
+      setLoadingLines(false);
+    }
   };
+
+  const allocTotal = Object.values(allocations).reduce(
+    (s, v) => s + (Number(v) || 0),
+    0
+  );
+
+  const applyProportional = () => {
+    const amt = Number(paymentAmount) || 0;
+    if (amt <= 0 || invoiceLines.length === 0) return;
+    const billTotal = invoiceLines.reduce((s, l) => s + l.amount, 0) || 1;
+    const next: Record<string, string> = {};
+    let remaining = amt;
+    invoiceLines.forEach((ln, i) => {
+      if (i === invoiceLines.length - 1) {
+        next[ln.id] = String(Math.round(remaining * 100) / 100);
+      } else {
+        const share = Math.round((ln.amount / billTotal) * amt * 100) / 100;
+        next[ln.id] = String(share);
+        remaining -= share;
+      }
+    });
+    setAllocations(next);
+  };
+
+  const applyToFirst = () => {
+    const amt = Number(paymentAmount) || 0;
+    if (amt <= 0 || invoiceLines.length === 0) return;
+    const next: Record<string, string> = {};
+    invoiceLines.forEach((ln, i) => {
+      next[ln.id] = i === 0 ? String(amt) : "0";
+    });
+    setAllocations(next);
+  };
+
+  const clearAllocations = () => setAllocations({});
 
   const handleRecordPayment = async () => {
     if (!selectedInvoice) {
@@ -155,6 +216,26 @@ export default function PaymentsPage() {
 
     setSubmitting(true);
     try {
+      const line_allocations = invoiceLines
+        .map((ln) => ({
+          line_id: ln.id,
+          description: ln.description,
+          category: ln.category || "",
+          amount: Number(allocations[ln.id] || 0),
+        }))
+        .filter((r) => r.amount > 0);
+
+      if (line_allocations.length > 0) {
+        const sum = line_allocations.reduce((s, r) => s + r.amount, 0);
+        if (Math.abs(sum - amt) > 0.05) {
+          toast.error(
+            `Allocation total (${sum.toLocaleString()}) must equal payment (${amt.toLocaleString()}).`
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+
       const res = await api.post(
         "/finance/payments/",
         {
@@ -164,6 +245,7 @@ export default function PaymentsPage() {
           payment_date: paymentDate,
           reference_number: referenceNumber || "",
           notes: notes || "",
+          ...(line_allocations.length ? { line_allocations } : {}),
         },
         { headers }
       );
@@ -174,6 +256,8 @@ export default function PaymentsPage() {
       setPaymentAmount("");
       setReferenceNumber("");
       setNotes("");
+      setInvoiceLines([]);
+      setAllocations({});
       setPaymentDate(new Date().toISOString().slice(0, 10));
       void loadInvoices();
       void loadPayments();
@@ -264,6 +348,78 @@ export default function PaymentsPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+
+          {selectedInvoice && (
+            <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-medium">Allocate payment to fee items</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <Button type="button" size="sm" variant="outline" onClick={applyProportional}>
+                    Split by ratio
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" onClick={applyToFirst}>
+                    Apply to first item
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" onClick={clearAllocations}>
+                    Clear
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Optional but recommended. Allocation total must equal the payment amount.
+                Receipt will show how this payment was applied.
+              </p>
+              {loadingLines ? (
+                <p className="text-xs text-muted-foreground">Loading fee items…</p>
+              ) : invoiceLines.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No line items on this invoice.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {invoiceLines.map((ln) => (
+                    <li
+                      key={ln.id}
+                      className="grid grid-cols-[1fr_100px_110px] gap-2 items-center text-sm bg-white rounded-lg border px-2 py-1.5"
+                    >
+                      <span>
+                        {ln.description}
+                        {ln.category ? (
+                          <span className="text-xs text-muted-foreground"> · {ln.category}</span>
+                        ) : null}
+                      </span>
+                      <span className="text-xs text-muted-foreground text-right tabular-nums">
+                        billed {ln.amount.toLocaleString()}
+                      </span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="h-8"
+                        placeholder="0"
+                        value={allocations[ln.id] ?? ""}
+                        onChange={(e) =>
+                          setAllocations((prev) => ({ ...prev, [ln.id]: e.target.value }))
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {invoiceLines.length > 0 && (
+                <p
+                  className={`text-xs font-medium ${
+                    Math.abs(allocTotal - Number(paymentAmount || 0)) < 0.05 || allocTotal === 0
+                      ? "text-emerald-700"
+                      : "text-amber-700"
+                  }`}
+                >
+                  Allocated: {allocTotal.toLocaleString()}
+                  {paymentAmount
+                    ? ` / payment ${Number(paymentAmount).toLocaleString()}`
+                    : ""}
+                </p>
+              )}
+            </div>
+          )}
 
           <div>
             <Label>Amount *</Label>

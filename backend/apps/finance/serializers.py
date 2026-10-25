@@ -641,17 +641,18 @@ class PaymentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'invoice', 'amount', 'payment_method', 'reference_number',
             'payment_date', 'academic_year', 'term', 'receipt_number',
-            'paid_at', 'paid_by', 'notes'
+            'paid_at', 'paid_by', 'notes', 'line_allocations'
         ]
     
 class PaymentCreateUpdateSerializer(serializers.ModelSerializer):
+    line_allocations = serializers.JSONField(required=False)
 
     class Meta:
         model = Payment
         fields = [
             'id', 'school', 'invoice', 'amount', 'payment_method', 'reference_number',
             'payment_date', 'academic_year', 'term', 'receipt_number',
-            'paid_by', 'notes'
+            'paid_by', 'notes', 'line_allocations'
         ]
     def validate(self, data):
         school = _selected_school_for_serializer(self)
@@ -702,6 +703,45 @@ class PaymentCreateUpdateSerializer(serializers.ModelSerializer):
                         )
                     }
                 )
+
+
+        # Optional per-line allocation (must sum to payment amount)
+        allocs = data.get("line_allocations")
+        if allocs is None and self.initial_data.get("line_allocations") is not None:
+            allocs = self.initial_data.get("line_allocations")
+        if allocs:
+            if not isinstance(allocs, list):
+                raise serializers.ValidationError({"line_allocations": "Must be a list of line allocations."})
+            total_alloc = Decimal("0")
+            cleaned = []
+            for row in allocs:
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    a = Decimal(str(row.get("amount") or 0))
+                except Exception:
+                    a = Decimal("0")
+                if a < 0:
+                    raise serializers.ValidationError({"line_allocations": "Amounts cannot be negative."})
+                if a == 0:
+                    continue
+                cleaned.append({
+                    "line_id": str(row.get("line_id") or row.get("id") or ""),
+                    "description": str(row.get("description") or "Fee item")[:200],
+                    "category": str(row.get("category") or "")[:100],
+                    "amount": float(a),
+                })
+                total_alloc += a
+            pay_amt = Decimal(str(amount))
+            if abs(total_alloc - pay_amt) > Decimal("0.05"):
+                raise serializers.ValidationError(
+                    {
+                        "line_allocations": (
+                            f"Allocation total ({total_alloc}) must equal payment amount ({pay_amt})."
+                        )
+                    }
+                )
+            data["line_allocations"] = cleaned
 
         return data
     

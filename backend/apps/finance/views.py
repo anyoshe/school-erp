@@ -944,29 +944,47 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
         inv_due = Decimal(str(invoice.amount_due or 0)) + Decimal(str(invoice.late_fee_applied or 0))
         pay_amt = Decimal(str(payment.amount or 0))
-        # Invoice fee breakdown (what was billed) — payment is shown as a single received amount
+        # Prefer cashier allocations on this payment; else show billed invoice lines
+        allocs = getattr(payment, "line_allocations", None) or []
         raw_lines = list(invoice.lines.select_related("item__category").all())
         lines = []
-        for line in raw_lines:
-            lines.append({
-                "description": line.description or (
-                    line.item.name if line.item_id else "Fee item"
-                ),
-                "category": (
-                    line.item.category.name
-                    if line.item_id and line.item and line.item.category_id
-                    else "Fees"
-                ),
-                "line_amount": float(line.amount or 0),
-                "amount": float(line.amount or 0),
-            })
-        if not lines:
-            lines.append({
-                "description": f"School fees — {invoice.invoice_number}",
-                "category": "Fees",
-                "line_amount": float(inv_due),
-                "amount": float(inv_due),
-            })
+        if allocs and isinstance(allocs, list) and any(float(a.get("amount") or 0) > 0 for a in allocs if isinstance(a, dict)):
+            for a in allocs:
+                if not isinstance(a, dict):
+                    continue
+                amt = float(a.get("amount") or 0)
+                if amt <= 0:
+                    continue
+                lines.append({
+                    "description": a.get("description") or "Fee item",
+                    "category": a.get("category") or "Fees",
+                    "line_amount": amt,
+                    "amount": amt,
+                    "allocated": True,
+                })
+        else:
+            for line in raw_lines:
+                lines.append({
+                    "description": line.description or (
+                        line.item.name if line.item_id else "Fee item"
+                    ),
+                    "category": (
+                        line.item.category.name
+                        if line.item_id and line.item and line.item.category_id
+                        else "Fees"
+                    ),
+                    "line_amount": float(line.amount or 0),
+                    "amount": float(line.amount or 0),
+                    "allocated": False,
+                })
+            if not lines:
+                lines.append({
+                    "description": f"School fees — {invoice.invoice_number}",
+                    "category": "Fees",
+                    "line_amount": float(inv_due),
+                    "amount": float(inv_due),
+                    "allocated": False,
+                })
 
         logo_url = None
         if school and getattr(school, "logo", None):

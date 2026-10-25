@@ -463,6 +463,9 @@ class Payment(models.Model):
     paid_by = models.ForeignKey('students.StudentGuardian', on_delete=models.SET_NULL, null=True, blank=True, related_name="payments")
     notes = models.TextField(blank=True)
     receipt_number = models.CharField(max_length=50, blank=True)
+    # How this payment was allocated across invoice lines (cashier choice)
+    # [{"line_id": "...", "description": "...", "amount": 100.0}, ...]
+    line_allocations = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ["-payment_date", "-paid_at"]
