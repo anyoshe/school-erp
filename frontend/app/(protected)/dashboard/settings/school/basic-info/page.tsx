@@ -3,6 +3,7 @@
 import { useState, useEffect, ChangeEvent } from "react";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import api from "@/utils/api";
+import { resolveMediaUrl } from "@/utils/media";
 import { toast } from "sonner";
 import {
   Phone,
@@ -332,7 +333,7 @@ export default function EditSchoolBasicInfoPage() {
                       className="w-32 h-32 rounded-2xl overflow-hidden border-2 border-white shadow-lg"
                     >
                       <img
-                        src={currentSchool.logo}
+                        src={resolveMediaUrl(currentSchool.logo as any) || undefined}
                         alt="Current school logo"
                         className="w-full h-full object-cover"
                       />

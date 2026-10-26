@@ -1,3 +1,4 @@
+import { resolveMediaUrl } from "@/utils/media";
 "use client";
 
 import { useState, useEffect, ChangeEvent } from "react";
@@ -37,7 +38,7 @@ export default function BrandingPage() {
   // Show existing logo from backend
   useEffect(() => {
     if (currentSchool?.logo) {
-      setLogoPreview(currentSchool.logo);
+      setLogoPreview(resolveMediaUrl(currentSchool.logo as any) || null);
     }
   }, [currentSchool]);
 
