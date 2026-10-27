@@ -31,38 +31,96 @@ def _detect_year_term(school):
     return year, term
 
 
+def _normalize_year_token(value):
+    """Extract a comparable year token from '2026', '2025/2026', '2025-26', etc."""
+    s = str(value or "").strip()
+    if not s:
+        return ""
+    import re
+    nums = re.findall(r"20\d{2}", s)
+    if nums:
+        return nums[-1]  # prefer end year in ranges
+    nums = re.findall(r"\d{2,4}", s)
+    return nums[-1] if nums else s
+
+
+def _normalize_term_token(value):
+    """Return digit or lower keyword for term matching ('Term 2' → '2')."""
+    s = str(value or "").strip().lower()
+    if not s:
+        return ""
+    import re
+    m = re.search(r"(\d+)", s)
+    if m:
+        return m.group(1)
+    for key in ("term", "semester", "session"):
+        if key in s:
+            return s
+    return s
+
+
 def find_fee_structure(student, academic_year=None, period_name=None):
+    """
+    Match active FeeStructure for student's grade + enrollment year/term.
+    Matching is intentionally flexible: year '2026' matches '2025/2026';
+    term 'Term 2' matches 'Term2' / 'T2'.
+    """
     from .models import FeeStructure
 
     school = student.school
     grade = student.current_class
     if not grade:
         return None
-    year, term = _detect_year_term(school)
-    academic_year = academic_year or year
-    period_name = period_name or term
 
-    qs = FeeStructure.objects.filter(
+    detected_year, detected_term = _detect_year_term(school)
+    academic_year = academic_year or detected_year
+    period_name = period_name or detected_term
+
+    year_tok = _normalize_year_token(academic_year)
+    term_tok = _normalize_term_token(period_name)
+
+    # Grade: exact FK first, then same name (handles duplicate grade rows)
+    base = FeeStructure.objects.filter(
         school=school,
-        grade_level=grade,
         is_active=True,
+    ).filter(
+        Q(grade_level_id=getattr(grade, "id", None))
+        | Q(grade_level=grade)
+        | Q(grade_level__name__iexact=getattr(grade, "name", "") or "")
     ).prefetch_related("structure_items__item")
 
-    # Prefer exact year + period
-    exact = qs.filter(academic_year=academic_year, period_name__icontains=period_name.split()[-1] if period_name else "").first()
-    if exact:
-        return exact
-    exact = qs.filter(academic_year=academic_year).filter(
-        Q(period_name__iexact=period_name) | Q(period_name__icontains=period_name)
-    ).first()
-    if exact:
-        return exact
-    # Same grade any period this year
-    by_year = qs.filter(academic_year=academic_year).order_by("period_name").first()
-    if by_year:
-        return by_year
-    # Latest structure for grade
-    return qs.order_by("-academic_year", "period_name").first()
+    if not base.exists():
+        # Last resort: any active structure for school with matching grade name substring
+        base = FeeStructure.objects.filter(
+            school=school,
+            is_active=True,
+            grade_level__name__icontains=(getattr(grade, "name", "") or "")[:20],
+        ).prefetch_related("structure_items__item")
+
+    if not base.exists():
+        return None
+
+    def score(s):
+        sc = 0
+        sy = _normalize_year_token(s.academic_year)
+        st = _normalize_term_token(s.period_name)
+        if year_tok and sy == year_tok:
+            sc += 100
+        elif year_tok and year_tok in str(s.academic_year or ""):
+            sc += 60
+        if term_tok and st == term_tok:
+            sc += 50
+        elif term_tok and term_tok in str(s.period_name or "").lower():
+            sc += 30
+        # Prefer exact grade FK
+        if getattr(s, "grade_level_id", None) == getattr(grade, "id", None):
+            sc += 10
+        return sc
+
+    ranked = sorted(base, key=lambda s: (-score(s), str(s.period_name or "")))
+    best = ranked[0]
+    # If best score is 0, still return it (only grade matched) so clearance can bill
+    return best
 
 
 def ensure_student_billing(student, user=None, academic_year=None, period_name=None):
@@ -79,13 +137,24 @@ def ensure_student_billing(student, user=None, academic_year=None, period_name=N
     )
     from .signals import create_invoice_lines_for_assignment
 
-    # Prefer term/year chosen at enrollment (Application Step 6)
+    # Prefer term/year chosen at enrollment wizard
     if not academic_year or not period_name:
         try:
             from apps.admissions.models import Application
-            app = Application.objects.filter(student=student).only(
-                "enrollment_term", "enrollment_academic_year"
-            ).first()
+            app = (
+                Application.objects.filter(student=student)
+                .only("enrollment_term", "enrollment_academic_year", "admission_number")
+                .first()
+            )
+            if app is None and getattr(student, "admission_number", None):
+                app = (
+                    Application.objects.filter(
+                        school_id=student.school_id,
+                        admission_number=student.admission_number,
+                    )
+                    .only("enrollment_term", "enrollment_academic_year")
+                    .first()
+                )
             if app:
                 period_name = period_name or (app.enrollment_term or None)
                 academic_year = academic_year or (app.enrollment_academic_year or None)
@@ -115,6 +184,14 @@ def ensure_student_billing(student, user=None, academic_year=None, period_name=N
     year, term = _detect_year_term(student.school)
     year = academic_year or (structure.academic_year if structure else year)
     term = period_name or (structure.period_name if structure else term)
+    match_error = None
+    if structure is None:
+        gname = getattr(getattr(student, "current_class", None), "name", None) or "—"
+        match_error = (
+            f"No active fee structure for grade '{gname}' "
+            f"(year={year or '—'}, term={term or '—'}). "
+            "Create one under Finance → Fee structures for this grade/term."
+        )
 
     invoices = list(Invoice.objects.filter(student=student).order_by("due_date", "generated_at"))
     if not invoices and assignment and structure:
@@ -194,8 +271,9 @@ def ensure_student_billing(student, user=None, academic_year=None, period_name=N
         "total_due": float(due),
         "total_paid": float(paid),
         "balance": float(max(Decimal("0"), due - paid)),
-        "matched_year": str(year),
+        "matched_year": str(year) if year else None,
         "matched_term": term,
+        "error": match_error,
     }
 
 
