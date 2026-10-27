@@ -965,8 +965,13 @@ class FeeStructureViewSet(viewsets.ModelViewSet):
         source = self.get_object()
         school = source.school
 
-        period_name = (request.data.get("period_name") or source.period_name or "Term 1").strip()
+        period_name = (request.data.get("period_name") or source.period_name or "").strip()
         academic_year = (request.data.get("academic_year") or source.academic_year or "").strip()
+        if not period_name or not academic_year:
+            return Response(
+                {"detail": "A billing period and academic year are required to clone a fee structure."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         name = (request.data.get("name") or "").strip()
         if not name:
             name = f"{source.grade_level.name} – {period_name} – {academic_year}"
@@ -1048,12 +1053,24 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='generate-invoice')
     def generate_invoice(self, request, pk=None):
         assignment = self.get_object()
+        structure = assignment.fee_structure
+        if structure is None:
+            return Response(
+                {"detail": "Assign a fee structure before generating invoices."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        academic_year = structure.academic_year
+        term = structure.period_name
+        if not academic_year or not term:
+            return Response(
+                {"detail": "The fee structure must specify an academic year and period."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         plan = assignment.payment_plan
         
         # Determine the start date for payment schedules
         start_date = timezone.now().date()
-        academic_year = request.data.get('academic_year', assignment.fee_structure.academic_year)
-        term = request.data.get('term', assignment.fee_structure.period_name)
 
         # 1. Logic for Single/Full Payment (No Plan)
         if not plan or plan.number_of_installments <= 1:
@@ -1448,6 +1465,7 @@ class AwaitingClearanceView(APIView):
         ids = [s.id for s in qs]
         inv_map = {}
         inv_meta = {}  # student_id -> {term, academic_year} from first open invoice
+        invoices_by_student = defaultdict(list)
         if ids:
             for row in (
                 Invoice.objects.filter(student_id__in=ids)
@@ -1460,6 +1478,7 @@ class AwaitingClearanceView(APIView):
                 inv_map[str(row["student_id"])] = row
             for inv in Invoice.objects.filter(student_id__in=ids).order_by("generated_at", "id"):
                 sid = str(inv.student_id)
+                invoices_by_student[sid].append(inv)
                 if sid not in inv_meta:
                     inv_meta[sid] = {
                         "term": (inv.term or "").strip() or None,
@@ -1505,24 +1524,41 @@ class AwaitingClearanceView(APIView):
                 pass
 
         rows = []
+        from apps.finance.clearance import (
+            _normalize_term_token,
+            _normalize_year_token,
+            fee_structure_matches,
+        )
+
         for s in qs:
             agg = inv_map.get(str(s.id)) or {}
             due = float(agg.get("total_due") or 0)
             paid = float(agg.get("total_paid") or 0)
-            fs = getattr(s, "fee_structure", None) or assign_struct.get(str(s.id))
             meta = inv_meta.get(str(s.id)) or {}
             ameta = app_meta.get(str(s.id)) or {}
+            if ameta.get("term") and ameta.get("academic_year"):
+                period_invoices = [
+                    invoice
+                    for invoice in invoices_by_student.get(str(s.id), [])
+                    if _normalize_term_token(invoice.term) == _normalize_term_token(ameta["term"])
+                    and _normalize_year_token(invoice.academic_year)
+                    == _normalize_year_token(ameta["academic_year"])
+                ]
+                due = sum(float(invoice.amount_due or 0) for invoice in period_invoices)
+                paid = sum(float(invoice.amount_paid or 0) for invoice in period_invoices)
+            fs = getattr(s, "fee_structure", None) or assign_struct.get(str(s.id))
+            if fs and (ameta.get("term") or ameta.get("academic_year")) and not fee_structure_matches(
+                s, fs, ameta.get("academic_year"), ameta.get("term")
+            ):
+                fs = None
             structure = None
             gname = getattr(getattr(s, "current_class", None), "name", None)
-            term = None
-            year = None
+            term = ameta.get("term") or meta.get("term")
+            year = ameta.get("academic_year") or meta.get("academic_year")
             if fs is not None:
                 gname = getattr(getattr(fs, "grade_level", None), "name", None) or gname
-                term = (fs.period_name or "").strip() or None
-                year = (str(fs.academic_year or "").strip() or None)
-            # Prefer invoice / enrollment when structure fields blank
-            term = term or meta.get("term") or ameta.get("term")
-            year = year or meta.get("academic_year") or ameta.get("academic_year")
+                term = term or (fs.period_name or "").strip() or None
+                year = year or (str(fs.academic_year or "").strip() or None)
             raw_name = getattr(fs, "name", None) if fs is not None else None
             display_name = _clearance_structure_label(
                 grade=gname, term=term, year=year, raw_name=raw_name
@@ -1533,7 +1569,7 @@ class AwaitingClearanceView(APIView):
             term = f"Term {_tm.group(1)}" if _tm else term
             _ym = _re.search(r"(20\d{2})", display_name or "")
             year = _ym.group(1) if _ym else year
-            if fs is not None or display_name:
+            if fs is not None:
                 structure = {
                     "id": str(fs.id) if fs is not None else None,
                     "name": display_name,
@@ -1606,7 +1642,7 @@ class ClearancePrepareView(APIView):
 
     def get(self, request, student_id):
         from apps.students.models import Student
-        from apps.finance.clearance import ensure_student_billing
+        from apps.finance.clearance import ensure_student_billing, fee_structure_matches
 
         school_ids = _resolve_school_ids(request)
         student = Student.objects.filter(id=student_id, school_id__in=school_ids).first()
@@ -1616,19 +1652,27 @@ class ClearancePrepareView(APIView):
         term = request.query_params.get("term")
         structure_id = request.query_params.get("structure_id") or request.data.get("structure_id")
         if structure_id:
-            from apps.finance.models import FeeStructure
+            from apps.finance.models import FeeStructure, StudentFeeAssignment
             fs = FeeStructure.objects.filter(id=structure_id, school_id=student.school_id).first()
-            if fs:
-                student.fee_structure = fs
-                student.save(update_fields=["fee_structure"])
-                # force re-link assignment on next ensure
-                try:
-                    fa = getattr(student, "fee_assignment", None)
-                    if fa and fa.fee_structure_id != fs.id:
-                        fa.fee_structure = fs
-                        fa.save(update_fields=["fee_structure"])
-                except Exception:
-                    pass
+            if not fs:
+                return Response({"detail": "Fee structure not found for this school"}, status=404)
+            if not year or not term:
+                from apps.admissions.models import Application
+                application = Application.objects.filter(student=student).first()
+                if application:
+                    year = year or application.enrollment_academic_year
+                    term = term or application.enrollment_term
+            if not fee_structure_matches(student, fs, year, term):
+                return Response(
+                    {"detail": "Fee structure must match the learner's grade, enrollment year, and term."},
+                    status=400,
+                )
+            student.fee_structure = fs
+            student.save(update_fields=["fee_structure"])
+            assignment = StudentFeeAssignment.objects.filter(student=student).first()
+            if assignment and assignment.fee_structure_id != fs.id:
+                assignment.fee_structure = fs
+                assignment.save(update_fields=["fee_structure"])
         try:
             billing = ensure_student_billing(
                 student, user=request.user, academic_year=year, period_name=term

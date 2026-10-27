@@ -439,13 +439,10 @@ export default function EnrollmentWizardModal({
   }));
 
   const [feeStructures, setFeeStructures] = useState<any[]>([]);
-  const [feeLoading, setFeeLoading] = useState(false);
-  const [feeError, setFeeError] = useState<string | null>(null);
   const [applicationCharges, setApplicationCharges] = useState<any[]>([]);
   const [chargesLoading, setChargesLoading] = useState(false);
 
   // 1. Add this to your State/useEffect at the top of the component
-  const [optionalItems, setOptionalItems] = useState<any[]>([]);
   const [paymentPlans, setPaymentPlans] = useState<any[]>([]);
   const [paymentBreakdown, setPaymentBreakdown] = useState<{
     initialPayment: number;
@@ -629,9 +626,7 @@ export default function EnrollmentWizardModal({
 
 
   useEffect(() => {
-    const classId = classAppliedId(applicationData) || undefined;
-
-    if (!open || !classId) return;
+    if (!open) return;
 
     const asList = (data: any): any[] => {
       if (Array.isArray(data)) return data;
@@ -640,59 +635,11 @@ export default function EnrollmentWizardModal({
       return [];
     };
 
-    const rank = (s: any) => {
-      const p = String(s.period_name || "").toLowerCase();
-      const m = p.match(/(\d+)/);
-      if (m) return Number(m[1]);
-      if (p.includes("term 1") || p.includes("semester 1")) return 1;
-      return 99;
-    };
-
-    const loadFinanceData = async () => {
-      setFeeLoading(true);
-      setFeeError(null);
+    const loadPaymentPlans = async () => {
       try {
-        // Fast path: lite list (no nested line items) + payment plans only.
-        // Detail for one structure is loaded by the fee_structure_id effect below.
-        const [structuresRes, plansRes] = await Promise.all([
-          api.get("/finance/structures/", {
-            params: {
-              grade_level: classId,
-              is_active: true,
-            },
-            timeout: 20000,
-          }),
-          api.get("/finance/payment-plans/", { timeout: 15000 }).catch(() => ({ data: [] })),
-        ]);
-
-        let list = asList(structuresRes.data).filter(
-          (s: any) =>
-            !s.grade_level ||
-            String(s.grade_level) === String(classId) ||
-            String(s.grade_level?.id) === String(classId)
-        );
-
-        list = [...list].sort(
-          (a, b) => rank(a) - rank(b) || String(a.name || "").localeCompare(String(b.name || ""))
-        );
-
-        setFeeStructures(list);
-        setOptionalItems([]); // come from structure detail available_optional_items
+        const plansRes = await api.get("/finance/payment-plans/", { timeout: 15000 });
         const plans = asList(plansRes.data);
         setPaymentPlans(plans);
-
-        if (list.length > 0) {
-          setFormData((prev) => {
-            if (prev.fee_structure_id && list.some((s) => String(s.id) === String(prev.fee_structure_id))) {
-              return prev;
-            }
-            return { ...prev, fee_structure_id: String(list[0].id) };
-          });
-        } else {
-          setFeeError(
-            "No active fee structure for this grade in Finance. Create one under Finance → Fee structures (same as used on the offer letter)."
-          );
-        }
 
         if (plans.length > 0) {
           setFormData((prev) => {
@@ -703,15 +650,12 @@ export default function EnrollmentWizardModal({
         }
       } catch (err) {
         console.error(err);
-        setFeeError("Failed to load fee structures from Finance");
-        toast.error("Failed to load financial data from Finance");
-      } finally {
-        setFeeLoading(false);
+        toast.error("Failed to load payment plans from Finance");
       }
     };
 
-    loadFinanceData();
-  }, [open, applicationData?.class_applied]);
+    loadPaymentPlans();
+  }, [open]);
 
   // Ensure interview/admission charges exist (N/A by default if school amounts are 0)
   useEffect(() => {
@@ -1069,10 +1013,6 @@ export default function EnrollmentWizardModal({
       payload.set("initial_payment_amount", "0");
       payload.set("enrollment_term", String(formData.enrollment_term || ""));
       payload.set("enrollment_academic_year", String(formData.enrollment_academic_year || ""));
-      if (formData.fee_structure_id) {
-        payload.set("fee_structure", String(formData.fee_structure_id));
-        payload.set("fee_structure_id", String(formData.fee_structure_id));
-      }
 
       if (formData.payment_plan) {
         payload.set("payment_plan", String(formData.payment_plan));   // This is important
@@ -1716,7 +1656,7 @@ export default function EnrollmentWizardModal({
               <>
               {!validateStep(6) && (
                 <p className="text-xs text-amber-700 max-w-xs text-right">
-                  To enable Confirm & Enroll: select a fee structure
+                  To enable Confirm & Enroll: select the academic year and term
                   {paymentPlans.length > 0 && !formData.payment_plan ? ", choose a payment plan" : ""}
                   {!formData.terms_accepted ? ", accept terms" : ""}
                   {!formData.summary_confirmed ? ", confirm summary" : ""}

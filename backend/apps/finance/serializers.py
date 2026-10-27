@@ -460,6 +460,18 @@ class StudentFeeAssignmentCreateUpdateSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate(self, attrs):
+        structure = attrs.get("fee_structure", getattr(self.instance, "fee_structure", None))
+        if structure is None:
+            raise serializers.ValidationError(
+                {"fee_structure": "A fee structure is required for a fee assignment."}
+            )
+        if not structure.academic_year or not structure.period_name:
+            raise serializers.ValidationError(
+                {"fee_structure": "The fee structure must specify an academic year and period."}
+            )
+        return attrs
+
     def create(self, validated_data):
         validated_data['assigned_by'] = self.context['request'].user
         validated_data['assigned_at'] = timezone.now().date()

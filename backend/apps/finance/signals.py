@@ -43,12 +43,18 @@ def regenerate_invoices_for_assignment(assignment, academic_year=None):
     """Delete existing invoices and create fresh invoices for the current assignment state."""
     print(f"[INVOICE SIGNAL] Regenerating invoices for assignment {assignment.id}")
 
+    structure = assignment.fee_structure
+    if structure is None:
+        raise ValueError("A fee structure is required before generating invoices.")
+    academic_year = academic_year or structure.academic_year
+    term = structure.period_name
+    if not academic_year or not term:
+        raise ValueError("The fee structure must specify an academic year and period.")
+
     Invoice.objects.filter(fee_assignment=assignment).delete()
 
     plan = assignment.payment_plan
     start_date = timezone.now().date()
-    academic_year = academic_year or getattr(assignment.fee_structure, 'academic_year', "2026")
-    term = getattr(assignment.fee_structure, 'period_name', "Term 1")
 
     effective_total = assignment.remaining_total or Decimal('0')
 

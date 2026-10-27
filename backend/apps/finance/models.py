@@ -86,7 +86,7 @@ class FeeStructure(models.Model):
         related_name="fee_structures"
     )
 
-    academic_year = models.CharField(max_length=9, default="2026")
+    academic_year = models.CharField(max_length=9)
     billing_period_type = models.CharField(
         max_length=20,
         choices=PERIOD_TYPES,
@@ -95,7 +95,6 @@ class FeeStructure(models.Model):
     period_name = models.CharField(
         max_length=50, 
         help_text="e.g. Term 1, Semester 2, etc.",
-        default="Term 1"
     )
 
     is_active = models.BooleanField(default=True)

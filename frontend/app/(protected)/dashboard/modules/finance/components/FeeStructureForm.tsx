@@ -98,9 +98,9 @@ export default function FeeStructureForm({
     name: "",
     description: "",
     grade_level: "",
-    academic_year: new Date().getFullYear().toString(),
+    academic_year: "",
     billing_period_type: "term",
-    period_name: "Term 1",
+    period_name: "",
     is_active: true,
   });
 
@@ -252,7 +252,7 @@ export default function FeeStructureForm({
             : (data.name || ""),
           description: data.description || "",
           grade_level: gradeId,
-          academic_year: String(data.academic_year || new Date().getFullYear()),
+          academic_year: String(data.academic_year || ""),
           billing_period_type: data.billing_period_type || "term",
           period_name: cloneFromId
             ? (String(data.period_name || "").includes("1")
@@ -260,7 +260,7 @@ export default function FeeStructureForm({
                 : String(data.period_name || "").includes("2")
                   ? "Term 3"
                   : `${data.period_name || "Term"} (Copy)`)
-            : (data.period_name || "Term 1"),
+            : (data.period_name || ""),
           is_active: data.is_active !== false,
         });
 
@@ -356,9 +356,9 @@ export default function FeeStructureForm({
         name: "",
         description: "",
         grade_level: "",
-        academic_year: new Date().getFullYear().toString(),
+        academic_year: "",
         billing_period_type: "term",
-        period_name: "Term 1",
+        period_name: "",
         is_active: true,
       });
       setCategoryGroups([]);
@@ -424,6 +424,8 @@ export default function FeeStructureForm({
     if (!currentSchool?.id) return toast.error("No school selected");
     if (!formData.name.trim()) return toast.error("Name required");
     if (!formData.grade_level) return toast.error("Grade required");
+    if (!formData.academic_year.trim()) return toast.error("Academic year required");
+    if (!formData.period_name.trim()) return toast.error("Billing period required");
     if (!hasSelection) return toast.error("Select at least one fee line (tick a category and add amounts)");
 
     setLoading(true);
@@ -486,7 +488,7 @@ export default function FeeStructureForm({
         grade_level: formData.grade_level,
         academic_year: formData.academic_year,
         billing_period_type: formData.billing_period_type || "term",
-        period_name: formData.period_name || "Term 1",
+        period_name: formData.period_name,
         is_active: formData.is_active !== false,
         school: currentSchool.id,
         structure_items: structureItems,

@@ -201,35 +201,15 @@ export default function FinanceClearancePage() {
     try {
       const res = await api.get(`/finance/awaiting-clearance/${r.id}/prepare/`, {
         headers,
-        params: structureId ? { structure_id: structureId } : undefined,
+        params: structureId
+          ? {
+              structure_id: structureId,
+              academic_year: r.matched_year,
+              term: r.matched_term,
+            }
+          : undefined,
       });
       applyBilling(res.data, r);
-      if (!res.data?.structure && !(res.data?.lines || []).length) {
-        // Fallback: load all school structures for manual pick
-        try {
-          const sres = await api.get("/finance/structures/", {
-            headers,
-            params: r.grade_id ? { grade_level: r.grade_id } : undefined,
-          });
-          const list = Array.isArray(sres.data)
-            ? sres.data
-            : sres.data?.results || [];
-          if (list.length) {
-            setStructureCandidates(
-              list.map((s: any) => ({
-                id: String(s.id),
-                name: s.name,
-                academic_year: s.academic_year,
-                period_name: s.period_name,
-                grade: s.grade_level?.name || s.grade_level_name || r.grade,
-                is_active: s.is_active !== false,
-              }))
-            );
-          }
-        } catch {
-          /* ignore */
-        }
-      }
     } catch (e: any) {
       toast.error(
         e?.response?.data?.detail || "Could not prepare billing for this student"

@@ -89,14 +89,19 @@ class Command(BaseCommand):
     def _generate_invoices(self, assignment, academic_year=None):
         """Generate invoices for a single assignment"""
         plan = assignment.payment_plan
-        
+        structure = assignment.fee_structure
+        if structure is None:
+            raise ValueError("A fee structure is required before generating invoices.")
+        academic_year = academic_year or structure.academic_year
+        term = structure.period_name
+        if not academic_year or not term:
+            raise ValueError("The fee structure must specify an academic year and period.")
+
         # Delete existing invoices if force regenerate
         if Invoice.objects.filter(fee_assignment=assignment).exists():
             Invoice.objects.filter(fee_assignment=assignment).delete()
 
         start_date = timezone.now().date()
-        academic_year = academic_year or (assignment.fee_structure.academic_year if assignment.fee_structure else "2026")
-        term = assignment.fee_structure.period_name if assignment.fee_structure else "Term 1"
 
         # Single payment (no plan or 1 installment) or custom partial plan
         if not plan or plan.number_of_installments <= 1 or plan.plan_type.lower() == 'custom':

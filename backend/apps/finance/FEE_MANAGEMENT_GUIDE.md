@@ -62,7 +62,11 @@ The School ERP **Fee Management System** is a complete, synchronized student bil
 
 **Triggered when:**
 - User creates a fee assignment for a student
-- Or via enrollment wizard (automatic during student enrollment)
+- Finance creates a fee assignment during clearance using the grade, academic year, and term selected at enrollment
+
+Enrollment does not assign a fee structure. Clearance uses an active structure only when its grade,
+academic year, and term match the enrollment selection exactly; if no matching structure exists,
+Finance must create it before billing.
 
 **Features:**
 - Single invoice for full payment plans

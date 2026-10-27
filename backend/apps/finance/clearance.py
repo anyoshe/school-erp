@@ -80,95 +80,69 @@ def resolve_student_grade(student):
     return None
 
 
+def fee_structure_matches(student, structure, academic_year=None, period_name=None):
+    grade = resolve_student_grade(student)
+    year_tok = _normalize_year_token(academic_year)
+    term_tok = _normalize_term_token(period_name)
+    return bool(
+        grade
+        and structure
+        and structure.is_active
+        and structure.school_id == student.school_id
+        and structure.grade_level_id == grade.id
+        and year_tok
+        and term_tok
+        and _normalize_year_token(structure.academic_year) == year_tok
+        and _normalize_term_token(structure.period_name) == term_tok
+    )
+
+
 def find_fee_structure(student, academic_year=None, period_name=None):
     """
-    Best-effort match of an active FeeStructure for clearance.
-    Never fails solely on year/term string format differences.
+    Find the active fee structure for this student's exact grade, year, and term.
     """
     from .models import FeeStructure
 
-    school = student.school
     grade = resolve_student_grade(student)
-    detected_year, detected_term = _detect_year_term(school)
-    academic_year = academic_year or detected_year
-    period_name = period_name or detected_term
     year_tok = _normalize_year_token(academic_year)
     term_tok = _normalize_term_token(period_name)
-
-    school_qs = FeeStructure.objects.filter(
-        school=school, is_active=True
-    ).prefetch_related("structure_items__item")
-
-    if not school_qs.exists():
-        # Try inactive as last resort (admin may have toggled off)
-        school_qs = FeeStructure.objects.filter(school=school).prefetch_related(
-            "structure_items__item"
-        )
-    if not school_qs.exists():
+    if grade is None or not year_tok or not term_tok:
         return None
 
-    candidates = list(school_qs)
-
-    def score(s):
-        sc = 0
-        # Grade match
-        if grade is not None:
-            if getattr(s, "grade_level_id", None) == getattr(grade, "id", None):
-                sc += 200
-            elif getattr(getattr(s, "grade_level", None), "name", None) and getattr(grade, "name", None):
-                sn = str(s.grade_level.name).strip().lower()
-                gn = str(grade.name).strip().lower()
-                if sn == gn:
-                    sc += 150
-                elif sn in gn or gn in sn:
-                    sc += 80
-        sy = _normalize_year_token(s.academic_year)
-        st = _normalize_term_token(s.period_name)
-        if year_tok and sy == year_tok:
-            sc += 40
-        elif year_tok and year_tok in str(s.academic_year or ""):
-            sc += 20
-        if term_tok and st == term_tok:
-            sc += 30
-        elif term_tok and term_tok in str(s.period_name or "").lower():
-            sc += 15
-        # Prefer structures that actually have line items
-        try:
-            if s.structure_items.exists():
-                sc += 5
-        except Exception:
-            pass
-        return sc
-
-    ranked = sorted(candidates, key=lambda s: (-score(s), str(s.period_name or ""), str(s.name or "")))
-    best = ranked[0]
-    best_score = score(best)
-
-    # If we have a grade and nothing scored on grade, still return best school structure
-    # so cashier can bill; UI can show a warning.
-    return best
+    candidates = [
+        structure
+        for structure in FeeStructure.objects.filter(
+            school_id=student.school_id,
+            grade_level_id=grade.id,
+            is_active=True,
+        ).prefetch_related("structure_items__item")
+        if fee_structure_matches(student, structure, academic_year, period_name)
+    ]
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def list_structure_candidates(student, academic_year=None, period_name=None, limit=20):
-    """Return scored structure options for manual selection in clearance UI."""
+    """Return active structures matching the student's exact grade/year/term."""
     from .models import FeeStructure
 
-    school = student.school
     grade = resolve_student_grade(student)
     year_tok = _normalize_year_token(academic_year)
     term_tok = _normalize_term_token(period_name)
-    qs = FeeStructure.objects.filter(school=school).select_related("grade_level")[:50]
+    if grade is None or not year_tok or not term_tok:
+        return []
+
+    qs = FeeStructure.objects.filter(
+        school_id=student.school_id,
+        grade_level_id=grade.id,
+        is_active=True,
+    ).select_related("grade_level")
     out = []
     for s in qs:
-        sc = 0
-        if grade and s.grade_level_id == getattr(grade, "id", None):
-            sc += 100
-        elif grade and getattr(s.grade_level, "name", None) == getattr(grade, "name", None):
-            sc += 80
-        if year_tok and _normalize_year_token(s.academic_year) == year_tok:
-            sc += 20
-        if term_tok and _normalize_term_token(s.period_name) == term_tok:
-            sc += 20
+        if (
+            _normalize_year_token(s.academic_year) != year_tok
+            or _normalize_term_token(s.period_name) != term_tok
+        ):
+            continue
         out.append({
             "id": str(s.id),
             "name": s.name,
@@ -176,9 +150,7 @@ def list_structure_candidates(student, academic_year=None, period_name=None, lim
             "period_name": s.period_name,
             "grade": getattr(s.grade_level, "name", None),
             "is_active": s.is_active,
-            "score": sc,
         })
-    out.sort(key=lambda x: (-x["score"], x.get("name") or ""))
     return out[:limit]
 
 
@@ -189,7 +161,6 @@ student, user=None, academic_year=None, period_name=None):
     Returns dict with structure, assignment, invoices, lines summary.
     """
     from .models import (
-        FeeStructure,
         StudentFeeAssignment,
         Invoice,
         InvoiceLine,
@@ -197,42 +168,44 @@ student, user=None, academic_year=None, period_name=None):
     )
     from .signals import create_invoice_lines_for_assignment
 
-    # Prefer term/year chosen at enrollment wizard
+    # Enrollment selections are authoritative; do not infer a current/default period.
     if not academic_year or not period_name:
-        try:
-            from apps.admissions.models import Application
+        from apps.admissions.models import Application
+        app = (
+            Application.objects.filter(student=student)
+            .only("enrollment_term", "enrollment_academic_year", "admission_number")
+            .first()
+        )
+        if app is None and getattr(student, "admission_number", None):
             app = (
-                Application.objects.filter(student=student)
-                .only("enrollment_term", "enrollment_academic_year", "admission_number")
+                Application.objects.filter(
+                    school_id=student.school_id,
+                    admission_number=student.admission_number,
+                )
+                .only("enrollment_term", "enrollment_academic_year")
                 .first()
             )
-            if app is None and getattr(student, "admission_number", None):
-                app = (
-                    Application.objects.filter(
-                        school_id=student.school_id,
-                        admission_number=student.admission_number,
-                    )
-                    .only("enrollment_term", "enrollment_academic_year")
-                    .first()
-                )
-            if app:
-                period_name = period_name or (app.enrollment_term or None)
-                academic_year = academic_year or (app.enrollment_academic_year or None)
-        except Exception:
-            pass
+        if app:
+            period_name = period_name or app.enrollment_term or None
+            academic_year = academic_year or app.enrollment_academic_year or None
 
     # Backfill grade from application when missing
     resolve_student_grade(student)
     student.refresh_from_db()
 
-    structure = student.fee_structure
+    structure = None
+    if student.fee_structure_id and academic_year and period_name:
+        linked_structure = student.fee_structure
+        if fee_structure_matches(student, linked_structure, academic_year, period_name):
+            structure = linked_structure
+
     if structure is None:
         structure = find_fee_structure(student, academic_year, period_name)
-        if structure:
-            student.fee_structure = structure
-            student.save(update_fields=["fee_structure"])
+    if structure and student.fee_structure_id != structure.id:
+        student.fee_structure = structure
+        student.save(update_fields=["fee_structure"])
 
-    assignment = getattr(student, "fee_assignment", None)
+    assignment = StudentFeeAssignment.objects.filter(student=student).first()
     if assignment is None and structure is not None:
         assignment, _ = StudentFeeAssignment.objects.get_or_create(
             student=student,
@@ -245,9 +218,8 @@ student, user=None, academic_year=None, period_name=None):
             assignment.fee_structure = structure
             assignment.save(update_fields=["fee_structure"])
 
-    year, term = _detect_year_term(student.school)
-    year = academic_year or (structure.academic_year if structure else year)
-    term = period_name or (structure.period_name if structure else term)
+    year = academic_year or (structure.academic_year if structure else None)
+    term = period_name or (structure.period_name if structure else None)
     match_error = None
     if structure is None:
         gname = getattr(getattr(student, "current_class", None), "name", None) or "—"
@@ -257,32 +229,39 @@ student, user=None, academic_year=None, period_name=None):
             "Create one under Finance → Fee structures for this grade/term."
         )
 
-    invoices = list(Invoice.objects.filter(student=student).order_by("due_date", "generated_at"))
+    invoices = []
+    if structure:
+        year_token = _normalize_year_token(academic_year)
+        term_token = _normalize_term_token(period_name)
+        invoices = [
+            invoice
+            for invoice in Invoice.objects.filter(student=student).order_by("due_date", "generated_at")
+            if _normalize_year_token(invoice.academic_year) == year_token
+            and _normalize_term_token(invoice.term) == term_token
+        ]
     if not invoices and assignment and structure:
         total = structure.total_amount or Decimal("0")
-        # Signal may also fire on assignment create — avoid duplicate
-        if not Invoice.objects.filter(student=student, fee_assignment=assignment).exists():
-            inv = Invoice.objects.create(
-                student=student,
-                fee_assignment=assignment,
-                school=student.school,
-                term=term,
-                academic_year=str(year)[:9],
-                amount_due=total,
-                due_date=timezone.now().date(),
-                generated_by=user if getattr(user, "is_authenticated", False) else None,
-            )
-            try:
-                create_invoice_lines_for_assignment(inv, assignment, Decimal("1"))
-            except Exception:
-                for si in structure.structure_items.select_related("item").all():
-                    InvoiceLine.objects.create(
-                        invoice=inv,
-                        item=si.item,
-                        description=getattr(si.item, "name", "Fee") or "Fee",
-                        amount=si.amount,
-                    )
-            invoices = [inv]
+        inv = Invoice.objects.create(
+            student=student,
+            fee_assignment=assignment,
+            school=student.school,
+            term=term,
+            academic_year=str(year)[:9],
+            amount_due=total,
+            due_date=timezone.now().date(),
+            generated_by=user if getattr(user, "is_authenticated", False) else None,
+        )
+        try:
+            create_invoice_lines_for_assignment(inv, assignment, Decimal("1"))
+        except Exception:
+            for si in structure.structure_items.select_related("item").all():
+                InvoiceLine.objects.create(
+                    invoice=inv,
+                    item=si.item,
+                    description=getattr(si.item, "name", "Fee") or "Fee",
+                    amount=si.amount,
+                )
+        invoices = [inv]
 
     # Build line preview
     lines = []

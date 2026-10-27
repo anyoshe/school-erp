@@ -178,10 +178,7 @@ export default function StudentAssignmentsPage() {
   const handleGenerateInvoices = async (assignmentId: string) => {
     setGeneratingInvoices((prev) => new Set([...prev, assignmentId]));
     try {
-      await api.post(`/finance/student-assignments/${assignmentId}/generate-invoice/`, {
-        academic_year: new Date().getFullYear().toString(),
-        term: "Term 1",
-      });
+      await api.post(`/finance/student-assignments/${assignmentId}/generate-invoice/`);
       toast.success("Invoices generated successfully");
       // Refresh assignments to reflect invoice count
       await fetchInitialData();

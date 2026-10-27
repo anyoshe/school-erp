@@ -638,11 +638,6 @@ class Application(models.Model):
 
         wd = wizard_data or {}
 
-        # === Payment Handling ===
-        # School fees are collected only in Finance (clearance desk).
-        initial_amount = Decimal("0")
-        reference = ""
-
         # Persist term chosen on Step 6 for Finance structure matching
         et = str(wd.get("enrollment_term") or "").strip()
         ey = str(wd.get("enrollment_academic_year") or "").strip()
@@ -655,18 +650,6 @@ class Application(models.Model):
         if not self.admission_number:
             self.admission_number = generate_unique_admission_number(self.school)
             self.save(update_fields=['admission_number'])
-
-        # Fee structure: explicit wizard id, else match by grade + year + term
-        fee_structure_obj = None
-        fs_key = wd.get("fee_structure") or wd.get("fee_structure_id")
-        if fs_key:
-            try:
-                from apps.finance.models import FeeStructure
-                fee_structure_obj = FeeStructure.objects.filter(
-                    pk=fs_key, school_id=self.school_id
-                ).first()
-            except Exception:
-                fee_structure_obj = None
 
         # Resolve placement FKs (Application stores labels; Student uses model FKs)
         from apps.academics.models import Section, Pathway, Track, Stream
@@ -797,115 +780,9 @@ class Application(models.Model):
             dorm_room=wd.get('dorm_room', ''),
             vaccination_status=wd.get('vaccination_status', 'UNKNOWN'),
 
-            fee_structure=fee_structure_obj,
             status="PENDING_CLEARANCE",
             created_by=created_by_user,
         )
-
-        # Auto-attach structure from grade + enrollment year/term when not chosen in UI
-        if fee_structure_obj is None:
-            try:
-                from apps.finance.clearance import find_fee_structure
-                year = str(wd.get("enrollment_academic_year") or self.enrollment_academic_year or "").strip() or None
-                term = str(wd.get("enrollment_term") or self.enrollment_term or "").strip() or None
-                fee_structure_obj = find_fee_structure(student, academic_year=year, period_name=term)
-                if fee_structure_obj:
-                    student.fee_structure = fee_structure_obj
-                    student.save(update_fields=["fee_structure"])
-            except Exception:
-                pass
-
-        # === Fee Assignment ===
-        if fee_structure_obj:
-            from apps.finance.models import StudentFeeAssignment
-            custom_due_date = None
-            remaining = wd.get('remaining_payment_due_date') or wd.get('balance_due_date')
-            if remaining:
-                try:
-                    from datetime import date
-                    custom_due_date = date.fromisoformat(str(remaining))
-                except ValueError:
-                    pass
-
-            item_amounts = wd.get('item_amounts', {}) or {}
-            if isinstance(item_amounts, str):
-                import json
-                try:
-                    item_amounts = json.loads(item_amounts)
-                except Exception:
-                    item_amounts = {}
-            if not isinstance(item_amounts, dict):
-                item_amounts = {}
-
-            plan_raw = wd.get("payment_plan")
-            plan_id = None
-            if plan_raw not in (None, "", "undefined", "null", "false"):
-                plan_id = plan_raw
-
-            if isinstance(item_amounts, str):
-                import json
-                try:
-                    item_amounts = json.loads(item_amounts)
-                except Exception:
-                    item_amounts = {}
-            if not isinstance(item_amounts, dict):
-                item_amounts = {}
-
-            assignment = StudentFeeAssignment.objects.create(
-                student=student,
-                fee_structure=fee_structure_obj,
-                payment_plan_id=plan_id,
-                custom_due_date=custom_due_date,
-                waiver_amount=Decimal(str(wd.get("waiver_amount") or 0)),
-                waiver_reason=str(wd.get("waiver_reason") or ""),
-                is_waived=bool(wd.get("is_waived", False)),
-                item_amounts=item_amounts,
-                assigned_by=created_by_user,
-            )
-
-            selected_optional = wd.get('selected_optional_items', []) or []
-            if selected_optional:
-                assignment.selected_optional_items.set(selected_optional)
-
-            try:
-                from apps.finance.signals import regenerate_invoices_for_assignment
-                regenerate_invoices_for_assignment(assignment)
-            except Exception as e:
-                print(f"[ENROLL] Failed to regenerate invoices: {e}")
-
-            # Apply enrollment school-fee deposit onto the first invoice (Finance ledger)
-            if initial_amount > 0:
-                try:
-                    from apps.finance.models import Invoice, Payment
-                    invoice = (
-                        Invoice.objects.filter(
-                            student=student,
-                            fee_assignment=assignment,
-                        )
-                        .order_by("due_date", "id")
-                        .first()
-                    )
-                    if invoice:
-                        already = Payment.objects.filter(
-                            invoice=invoice,
-                            notes__icontains="Enrollment school fee deposit",
-                        ).exists()
-                        if not already:
-                            method = str(wd.get("initial_payment_method") or "CASH").upper()
-                            if method not in {"CASH", "M-PESA", "BANK", "CHEQUE", "WAIVER", "SCHOLARSHIP"}:
-                                method = "CASH"
-                            pay_amt = min(initial_amount, Decimal(str(invoice.current_total_due or invoice.amount_due or initial_amount)))
-                            if pay_amt > 0:
-                                Payment.objects.create(
-                                    school=self.school,
-                                    invoice=invoice,
-                                    amount=pay_amt,
-                                    payment_method=method,
-                                    reference_number=reference[:100] if reference else "",
-                                    notes="Enrollment school fee deposit",
-                                )
-                except Exception as e:
-                    print(f"[ENROLL] Failed to post school fee deposit to invoice: {e}")
 
         # Medical Record
         MedicalRecord.objects.update_or_create(
