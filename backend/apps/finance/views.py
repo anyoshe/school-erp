@@ -1377,6 +1377,54 @@ class IncomeReceiptListView(APIView):
         return Response(data)
 
 
+
+def _clearance_structure_label(grade=None, term=None, year=None, raw_name=None):
+    """One clean label: Grade · Term N · Year (no duplicated term/year)."""
+    import re
+    text_bits = [str(x).strip() for x in (grade, term, year, raw_name) if x and str(x).strip()]
+    blob = " ".join(text_bits)
+
+    g = (grade or "").strip() or None
+    if not g and raw_name:
+        # e.g. "PP2 – Term 3 – 2026" or "Grade 5 Term 2"
+        m = re.match(
+            r"^(PP\d|Grade\s*\d+|Nursery|Baby\s*Class|Playgroup)(?:\b|$)",
+            str(raw_name).strip(),
+            re.I,
+        )
+        if m:
+            g = m.group(1).strip()
+
+    term_s = None
+    for candidate in (term, raw_name, blob):
+        if not candidate:
+            continue
+        m = re.search(r"Term\s*([123])", str(candidate), re.I)
+        if m:
+            term_s = f"Term {m.group(1)}"
+            break
+        m = re.search(r"\b(T|Sem(?:ester)?)\s*([123])\b", str(candidate), re.I)
+        if m:
+            term_s = f"Term {m.group(2)}"
+            break
+
+    year_s = None
+    for candidate in (year, raw_name, blob):
+        if not candidate:
+            continue
+        m = re.search(r"(20\d{2})", str(candidate))
+        if m:
+            year_s = m.group(1)
+            break
+
+    parts = [p for p in (g, term_s, year_s) if p]
+    if parts:
+        return " · ".join(parts)
+    if raw_name and str(raw_name).strip():
+        return str(raw_name).strip()
+    return g or "—"
+
+
 class AwaitingClearanceView(APIView):
     """Students enrolled from admissions but not yet cleared by Finance."""
     permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
@@ -1472,21 +1520,30 @@ class AwaitingClearanceView(APIView):
                 gname = getattr(getattr(fs, "grade_level", None), "name", None) or gname
                 term = (fs.period_name or "").strip() or None
                 year = (str(fs.academic_year or "").strip() or None)
-            # Prefer invoice / enrollment period when structure fields blank or incomplete
+            # Prefer invoice / enrollment when structure fields blank
             term = term or meta.get("term") or ameta.get("term")
             year = year or meta.get("academic_year") or ameta.get("academic_year")
-            label_parts = [p for p in [gname, term, year] if p]
-            display_name = " · ".join(label_parts) if label_parts else None
+            raw_name = getattr(fs, "name", None) if fs is not None else None
+            display_name = _clearance_structure_label(
+                grade=gname, term=term, year=year, raw_name=raw_name
+            )
+            # Normalize term/year for clients (single Term N / year only)
+            import re as _re
+            _tm = _re.search(r"Term\s*([123])", display_name or "", _re.I)
+            term = f"Term {_tm.group(1)}" if _tm else term
+            _ym = _re.search(r"(20\d{2})", display_name or "")
+            year = _ym.group(1) if _ym else year
             if fs is not None or display_name:
                 structure = {
                     "id": str(fs.id) if fs is not None else None,
-                    "name": display_name or (getattr(fs, "name", None) if fs else gname) or "Fee structure",
-                    "raw_name": getattr(fs, "name", None) if fs else None,
+                    "name": display_name,
+                    "raw_name": raw_name,
                     "academic_year": year,
                     "period_name": term,
                     "grade": gname,
                     "total_amount": float(getattr(fs, "total_amount", 0) or 0) if fs else due,
                 }
+
             rows.append({
                 "id": str(s.id),
                 "admission_number": s.admission_number,

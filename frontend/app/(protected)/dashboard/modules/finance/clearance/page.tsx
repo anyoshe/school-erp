@@ -78,21 +78,28 @@ export default function FinanceClearancePage() {
   });
 
   const structureLabel = (r: any) => {
-    const grade = r?.structure?.grade || r?.grade || "";
-    const term =
-      r?.structure?.period_name || r?.matched_term || r?.structure?.term || "";
-    const year =
-      r?.structure?.academic_year || r?.matched_year || r?.structure?.year || "";
-    const parts = [grade, term, year].filter((x) => x && String(x).trim());
-    // Prefer full Grade · Term · Year whenever we have term or year
-    if (parts.length >= 2) return parts.join(" · ");
-    const named = String(r?.structure?.name || r?.structure?.raw_name || "").trim();
-    if (named && (named.includes("Term") || named.includes("·") || named.includes("–") || named.includes("-"))) {
+    const named = String(r?.structure?.name || "").trim();
+    // Backend already sends a single clean "Grade · Term N · Year"
+    if (named && (named.includes("·") || /Term\s*[123]/i.test(named))) {
       return named;
     }
-    // Last resort: still show whatever we have (avoid silent blank)
+    const grade = r?.structure?.grade || r?.grade || "";
+    let term = String(
+      r?.structure?.period_name || r?.matched_term || r?.structure?.term || ""
+    ).trim();
+    let year = String(
+      r?.structure?.academic_year || r?.matched_year || r?.structure?.year || ""
+    ).trim();
+    // Strip duplicated "Term" fragments inside term field
+    const tm = term.match(/Term\s*([123])/i);
+    if (tm) term = `Term ${tm[1]}`;
+    const ym = year.match(/(20\d{2})/);
+    if (ym) year = ym[1];
+    // If term already embeds year, don't add year again
+    if (term && year && term.includes(year)) year = "";
+    const parts = [grade, term, year].filter((x) => x && String(x).trim());
     if (parts.length) return parts.join(" · ");
-    return named || "";
+    return String(r?.structure?.raw_name || named || "").trim();
   };
 
   const mapLines = (lines: any[]) =>
