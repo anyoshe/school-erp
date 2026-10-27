@@ -910,8 +910,6 @@ export default function EnrollmentWizardModal({
           toast.error("Select the term the student is enrolling into.");
         } else if (!String(formData.enrollment_academic_year || "").trim()) {
           toast.error("Select the academic year.");
-        } else if (!String(formData.fee_structure_id || "").trim()) {
-          toast.error("Select the fee structure for this grade and term.");
         } else if (!formData.terms_accepted) {
           toast.error("Accept the terms to enroll.");
         } else {
@@ -956,7 +954,6 @@ export default function EnrollmentWizardModal({
       payload.set("initial_payment_amount", "0");
       payload.set("enrollment_term", String(formData.enrollment_term || ""));
       payload.set("enrollment_academic_year", String(formData.enrollment_academic_year || ""));
-      // Link student to the selected Finance fee structure at enroll time
       if (formData.fee_structure_id) {
         payload.set("fee_structure", String(formData.fee_structure_id));
         payload.set("fee_structure_id", String(formData.fee_structure_id));
@@ -1513,8 +1510,7 @@ export default function EnrollmentWizardModal({
             <div className="rounded-xl border p-4 space-y-2 bg-white">
               <label className="text-sm font-medium">Fee structure for this grade / term *</label>
               <p className="text-xs text-muted-foreground">
-                Loaded from Finance for the applicant&apos;s grade. This is attached to the student
-                so clearance can bill without guessing.
+                From Finance for this grade — attached on enroll for clearance billing.
               </p>
               {feeLoading ? (
                 <p className="text-sm text-muted-foreground">Loading fee structures…</p>
@@ -1523,9 +1519,7 @@ export default function EnrollmentWizardModal({
               ) : (
                 <Select
                   value={formData.fee_structure_id ? String(formData.fee_structure_id) : "none"}
-                  onValueChange={(v) =>
-                    updateForm("fee_structure_id", v === "none" ? "" : v)
-                  }
+                  onValueChange={(v) => updateForm("fee_structure_id", v === "none" ? "" : v)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select fee structure" />
@@ -1541,12 +1535,6 @@ export default function EnrollmentWizardModal({
                     ))}
                   </SelectContent>
                 </Select>
-              )}
-              {!feeLoading && feeStructures.length === 0 && (
-                <p className="text-xs text-amber-700">
-                  No active structures for this grade. Create one under Finance → Fee structures,
-                  then reopen enrollment.
-                </p>
               )}
             </div>
 
