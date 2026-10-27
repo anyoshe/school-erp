@@ -540,22 +540,14 @@ export default function FinanceClearancePage() {
                       <td className="py-3 px-4 font-mono text-xs">{r.admission_number}</td>
                       <td className="py-3 px-4 font-medium">{r.full_name}</td>
                       <td className="py-3 px-4">{r.grade || "—"}</td>
-                      <td className="py-3 px-4 text-xs text-muted-foreground max-w-[180px]">
+                      <td className="py-3 px-4 text-xs text-muted-foreground max-w-[220px]">
                         {structureLabel(r) || (
                           r.total_due > 0 || r.balance > 0 ? (
-                            <span className="text-slate-500">
-                              {[r.grade, r.matched_term, r.matched_year].filter(Boolean).join(" · ") ||
-                                "Billed"}
-                            </span>
+                            <span className="text-slate-500">Billed</span>
                           ) : (
                             <span className="text-rose-600">No structure for grade</span>
                           )
                         )}
-                        {r.matched_term ? (
-                          <span className="block">
-                            {r.matched_term} · {r.matched_year}
-                          </span>
-                        ) : null}
                       </td>
                       <td className="py-3 px-4 text-right tabular-nums">
                         {Number(r.total_due || 0).toLocaleString()}
