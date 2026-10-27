@@ -3,7 +3,8 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { Plus, Users, Filter, GraduationCap, UserPlus, AlertCircle, ArrowRightLeft } from "lucide-react";
+import { Plus, Users, Filter, GraduationCap, UserPlus, AlertCircle, ArrowRightLeft, Search, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 // promote link
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +24,19 @@ import { Student } from "./types/student";
 
 export default function StudentsPage() {
   const { currentSchool } = useCurrentSchool();
-  const { students, isLoading, isError, refetch } = useStudents();
+  const {
+    students,
+    isLoading,
+    isError,
+    isLoadingMore,
+    isRefreshing,
+    search,
+    setSearch,
+    totalCount,
+    hasMore,
+    loadMore,
+    refetch,
+  } = useStudents();
 
   const [openForm, setOpenForm] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
@@ -101,7 +114,7 @@ export default function StudentsPage() {
   }, [students, statusFilter, gradeFilter, sectionFilter, pathwayFilter, trackFilter, streamFilter]);
 
   // Summary Stats
-  const totalStudents = students.length;
+  const totalStudents = totalCount || students.length;
   const activeStudents = students.filter(s => s.status === "ACTIVE").length;
 
   const handleAddNew = () => {
@@ -366,14 +379,52 @@ export default function StudentsPage() {
           </p>
         </CardHeader>
         <CardContent>
+          <div className="flex flex-col sm:flex-row gap-3 mb-4 items-stretch sm:items-center">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="Search name or admission number…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground self-center">
+              Showing {students.length}
+              {totalCount ? ` of ${totalCount}` : ""}
+              {isRefreshing ? " · refreshing…" : ""}
+            </p>
+          </div>
           {isLoading ? (
             <StudentTableSkeleton />
           ) : (
-            <StudentTable
-              students={filteredStudents}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-            />
+            <>
+              <StudentTable
+                students={filteredStudents}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+              {hasMore ? (
+                <div className="flex justify-center mt-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isLoadingMore}
+                    onClick={() => loadMore()}
+                    className="min-w-[180px]"
+                  >
+                    {isLoadingMore ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading…
+                      </>
+                    ) : (
+                      "Load more students"
+                    )}
+                  </Button>
+                </div>
+              ) : null}
+            </>
           )}
         </CardContent>
       </Card>

@@ -1,5 +1,6 @@
 # admissions/views.py
 from rest_framework import viewsets, status
+from rest_framework.pagination import PageNumberPagination
 from decimal import Decimal
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -134,8 +135,14 @@ def _ensure_application_charges(application):
                 )
 
 
+class ApplicationPagination(PageNumberPagination):
+    page_size = 40
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
 class ApplicationViewSet(viewsets.ModelViewSet):
-    pagination_class = None  # school lists are typically small; avoid page overhead
+    pagination_class = ApplicationPagination
     """
     Main ViewSet for school staff/admins - full CRUD + enrollment
     """

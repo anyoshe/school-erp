@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useCurrentSchool } from '@/contexts/CurrentSchoolContext';
 import api from '@/utils/api';
@@ -48,27 +48,35 @@ const AdmissionsPage = () => {
     staleTime: 60_000,
   });
 
+  const [appPage, setAppPage] = useState(1);
+  const [appHasMore, setAppHasMore] = useState(false);
+  const [appTotal, setAppTotal] = useState(0);
+  const [appRows, setAppRows] = useState<any[]>([]);
+  const [loadingMoreApps, setLoadingMoreApps] = useState(false);
+
   const {
-    data: applications = [],
+    data: applicationsPage,
     isLoading,
     isError: applicationsError,
     error: applicationsErr,
     refetch: refetchApplications,
   } = useQuery({
-    queryKey: ['applications', currentSchool?.id],
+    queryKey: ['applications', currentSchool?.id, 1],
     queryFn: async () => {
       if (!currentSchool?.id) throw new Error("No school selected");
       const res = await api.get('/admissions/applications/', {
         headers: { 'X-School-ID': String(currentSchool.id) },
-        // Pipeline only (not enrolled). Backend excludes ENROLLED by default.
-        params: { include_enrolled: 0 },
+        params: { include_enrolled: 0, page_size: 40, page: 1 },
       });
       const data = res.data;
-      if (Array.isArray(data)) return data;
-      if (Array.isArray(data?.results)) return data.results;
-      if (Array.isArray(data?.data)) return data.data;
-      console.warn("[admissions] unexpected list payload", data);
-      return [];
+      if (Array.isArray(data)) {
+        return { results: data, count: data.length, next: null };
+      }
+      return {
+        results: Array.isArray(data?.results) ? data.results : [],
+        count: data?.count ?? 0,
+        next: data?.next ?? null,
+      };
     },
     enabled: !!currentSchool?.id && !schoolLoading,
     staleTime: 30_000,
@@ -76,7 +84,44 @@ const AdmissionsPage = () => {
     retry: 1,
   });
 
-  const applicationList = Array.isArray(applications) ? applications : [];
+  useEffect(() => {
+    if (!applicationsPage) return;
+    setAppRows(applicationsPage.results || []);
+    setAppTotal(applicationsPage.count || 0);
+    setAppHasMore(Boolean(applicationsPage.next));
+    setAppPage(1);
+  }, [applicationsPage]);
+
+  const loadMoreApplications = async () => {
+    if (!currentSchool?.id || loadingMoreApps || !appHasMore) return;
+    setLoadingMoreApps(true);
+    try {
+      const nextPage = appPage + 1;
+      const res = await api.get('/admissions/applications/', {
+        headers: { 'X-School-ID': String(currentSchool.id) },
+        params: { include_enrolled: 0, page_size: 40, page: nextPage },
+      });
+      const data = res.data;
+      const rows = Array.isArray(data) ? data : (data?.results || []);
+      setAppRows((prev) => {
+        const seen = new Set(prev.map((a: any) => a.id));
+        const merged = [...prev];
+        for (const r of rows) {
+          if (!seen.has(r.id)) merged.push(r);
+        }
+        return merged;
+      });
+      setAppPage(nextPage);
+      setAppHasMore(Boolean(data?.next));
+      if (typeof data?.count === "number") setAppTotal(data.count);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingMoreApps(false);
+    }
+  };
+
+  const applicationList = Array.isArray(appRows) ? appRows : [];
   const feeCollected = Number(pipelineStats?.admission_fees_collected || 0) + Number(pipelineStats?.interview_fees_collected || 0);
 
 
@@ -348,6 +393,22 @@ const AdmissionsPage = () => {
                 applications={applicationList}
                 statusFilter={activeTab === 'ALL' ? undefined : activeTab}
               />
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 mt-4">
+                <p className="text-xs text-muted-foreground">
+                  Showing {applicationList.length}
+                  {appTotal ? ` of ${appTotal}` : ""} open applications
+                </p>
+                {appHasMore ? (
+                  <button
+                    type="button"
+                    onClick={() => void loadMoreApplications()}
+                    disabled={loadingMoreApps}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    {loadingMoreApps ? "Loading…" : "Load more applications"}
+                  </button>
+                ) : null}
+              </div>
             </>
           )}
         </div>
