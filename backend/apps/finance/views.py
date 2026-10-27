@@ -1580,6 +1580,12 @@ class AwaitingClearanceView(APIView):
                     "total_amount": float(getattr(fs, "total_amount", 0) or 0) if fs else due,
                 }
 
+                # The queue is intentionally lightweight and does not create
+                # invoices. Until billing is prepared, show the matched
+                # structure amount as the expected balance instead of zero.
+                if due <= 0 and paid <= 0:
+                    due = structure["total_amount"]
+
             rows.append({
                 "id": str(s.id),
                 "admission_number": s.admission_number,

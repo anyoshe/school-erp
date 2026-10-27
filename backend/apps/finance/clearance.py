@@ -207,16 +207,16 @@ student, user=None, academic_year=None, period_name=None):
 
     assignment = StudentFeeAssignment.objects.filter(student=student).first()
     if assignment is None and structure is not None:
-        assignment, _ = StudentFeeAssignment.objects.get_or_create(
+        assignment = StudentFeeAssignment.objects.create(
             student=student,
-            defaults={
-                "fee_structure": structure,
-                "assigned_by": user if getattr(user, "is_authenticated", False) else None,
-            },
+            fee_structure=structure,
+            assigned_by=user if getattr(user, "is_authenticated", False) else None,
         )
-        if assignment.fee_structure_id != structure.id:
-            assignment.fee_structure = structure
-            assignment.save(update_fields=["fee_structure"])
+    elif assignment is not None and structure is not None and assignment.fee_structure_id != structure.id:
+        # Repoint the existing assignment so its invoices remain connected and
+        # payment history is preserved. The exact enrollment period is authoritative.
+        assignment.fee_structure = structure
+        assignment.save(update_fields=["fee_structure"])
 
     year = academic_year or (structure.academic_year if structure else None)
     term = period_name or (structure.period_name if structure else None)
@@ -236,9 +236,19 @@ student, user=None, academic_year=None, period_name=None):
         invoices = [
             invoice
             for invoice in Invoice.objects.filter(student=student).order_by("due_date", "generated_at")
+            if invoice.fee_assignment_id == getattr(assignment, "id", None)
             if _normalize_year_token(invoice.academic_year) == year_token
             and _normalize_term_token(invoice.term) == term_token
         ]
+    if assignment and structure and not invoices:
+        # A legacy assignment can have invoices for the wrong year/term. If it
+        # has no payments, retag and regenerate those invoices from the exact
+        # enrollment structure. Paid invoices retain their historical period.
+        stale_invoices = list(assignment.invoices.all().prefetch_related("payments"))
+        if stale_invoices and all(not invoice.payments.exists() for invoice in stale_invoices):
+            for stale in stale_invoices:
+                stale.delete()
+
     if not invoices and assignment and structure:
         total = structure.total_amount or Decimal("0")
         inv = Invoice.objects.create(
