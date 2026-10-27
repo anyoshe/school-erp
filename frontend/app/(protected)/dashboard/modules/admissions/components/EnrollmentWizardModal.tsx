@@ -251,10 +251,14 @@ export default function EnrollmentWizardModal({
 
   const { currentSchool } = useCurrentSchool();
 
-    // ────── SCHOOL HIERARCHY CONFIGURATION ──────
+  // ────── SCHOOL HIERARCHY CONFIGURATION ──────
   const schoolHierarchy = useMemo<"secondary" | "primary" | "simple">(() => {
     const hierarchy = (currentSchool as any)?.hierarchy_mode;
-
+    if (hierarchy === "primary" || hierarchy === "simple") {
+      return hierarchy;
+    }
+    return "secondary";
+  }, [currentSchool]);
 
   // Resolve grade name when API only sent an id (e.g. 212)
   useEffect(() => {
@@ -293,12 +297,6 @@ export default function EnrollmentWizardModal({
       cancelled = true;
     };
   }, [open, applicationData, currentSchool?.id]);
-
-    if (hierarchy === "primary" || hierarchy === "simple") {
-      return hierarchy;
-    }
-    return "secondary";
-  }, [currentSchool]);
   
   const [formData, setFormData] = useState<Record<string, any>>(() => ({
     first_name: applicationData.first_name || "",
