@@ -656,12 +656,15 @@ class Application(models.Model):
             self.admission_number = generate_unique_admission_number(self.school)
             self.save(update_fields=['admission_number'])
 
-        # Fee Structure
+        # Fee Structure (from enrollment wizard selection)
         fee_structure_obj = None
-        if wd.get('fee_structure'):
+        fs_key = wd.get("fee_structure") or wd.get("fee_structure_id")
+        if fs_key:
             try:
                 from apps.finance.models import FeeStructure
-                fee_structure_obj = FeeStructure.objects.get(pk=wd.get('fee_structure'))
+                fee_structure_obj = FeeStructure.objects.filter(
+                    pk=fs_key, school_id=self.school_id
+                ).first()
             except Exception:
                 fee_structure_obj = None
 
