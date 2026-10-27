@@ -44,6 +44,7 @@ interface ClassLogisticsStepProps {
   applicationData: Application;
   updateForm: (field: string, value: any) => void;
   schoolHierarchy: "secondary" | "primary" | "simple";
+  gradeLabel?: string;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ const ClassLogisticsStep = ({
   applicationData,
   updateForm,
   schoolHierarchy,
+  gradeLabel,
 }: ClassLogisticsStepProps) => (
   <div className="space-y-6">
     <h3 className="text-lg font-semibold">Class & Placement Logistics</h3>
@@ -63,7 +65,11 @@ const ClassLogisticsStep = ({
       <div>
         <Label>Class / Grade *</Label>
         <Input
-          value={classAppliedName(applicationData)}
+          value={
+            gradeLabel ||
+            classAppliedName(applicationData) ||
+            "—"
+          }
           disabled
         />
       </div>
@@ -235,6 +241,12 @@ export default function EnrollmentWizardModal({
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const totalSteps = 6;
+  const [gradeLabel, setGradeLabel] = useState(() => {
+    const n = classAppliedName(applicationData);
+    // Prefer real names; bare numeric ids are resolved below
+    return n && !/^\d+$/.test(n.trim()) ? n : "";
+  });
+
   const today = format(new Date(), "yyyy-MM-dd");
 
   const { currentSchool } = useCurrentSchool();
@@ -242,6 +254,46 @@ export default function EnrollmentWizardModal({
     // ────── SCHOOL HIERARCHY CONFIGURATION ──────
   const schoolHierarchy = useMemo<"secondary" | "primary" | "simple">(() => {
     const hierarchy = (currentSchool as any)?.hierarchy_mode;
+
+
+  // Resolve grade name when API only sent an id (e.g. 212)
+  useEffect(() => {
+    if (!open) return;
+    const id = classAppliedId(applicationData);
+    const existing = classAppliedName(applicationData);
+    if (existing && !/^\d+$/.test(String(existing).trim())) {
+      setGradeLabel(existing);
+      return;
+    }
+    if (!id) {
+      setGradeLabel(existing || "");
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get("/academics/grade-levels/", {
+          timeout: 15000,
+          headers: currentSchool?.id
+            ? { "X-School-ID": String(currentSchool.id) }
+            : undefined,
+        });
+        const list = Array.isArray(res.data)
+          ? res.data
+          : res.data?.results || res.data?.data || [];
+        const g = list.find((x: any) => String(x.id) === String(id));
+        if (!cancelled) {
+          setGradeLabel(g?.name ? String(g.name) : existing || String(id));
+        }
+      } catch {
+        if (!cancelled) setGradeLabel(existing || String(id));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, applicationData, currentSchool?.id]);
+
     if (hierarchy === "primary" || hierarchy === "simple") {
       return hierarchy;
     }
@@ -888,11 +940,9 @@ export default function EnrollmentWizardModal({
       case 6: {
         const termOk = Boolean(String(formData.enrollment_term || "").trim());
         const yearOk = Boolean(String(formData.enrollment_academic_year || "").trim());
-        const structureOk = Boolean(String(formData.fee_structure_id || "").trim());
         const isValid =
           termOk &&
           yearOk &&
-          structureOk &&
           formData.terms_accepted === true;
         return isValid;
       }
@@ -1504,37 +1554,6 @@ export default function EnrollmentWizardModal({
                   No interview/admission charge rows — treat as not applicable if your school
                   does not charge them.
                 </p>
-              )}
-            </div>
-
-            <div className="rounded-xl border p-4 space-y-2 bg-white">
-              <label className="text-sm font-medium">Fee structure for this grade / term *</label>
-              <p className="text-xs text-muted-foreground">
-                From Finance for this grade — attached on enroll for clearance billing.
-              </p>
-              {feeLoading ? (
-                <p className="text-sm text-muted-foreground">Loading fee structures…</p>
-              ) : feeError ? (
-                <p className="text-sm text-red-600">{feeError}</p>
-              ) : (
-                <Select
-                  value={formData.fee_structure_id ? String(formData.fee_structure_id) : "none"}
-                  onValueChange={(v) => updateForm("fee_structure_id", v === "none" ? "" : v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select fee structure" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Select structure…</SelectItem>
-                    {feeStructures.map((fs: any) => (
-                      <SelectItem key={String(fs.id)} value={String(fs.id)}>
-                        {fs.name || "Structure"}
-                        {fs.period_name ? ` · ${fs.period_name}` : ""}
-                        {fs.academic_year ? ` · ${fs.academic_year}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               )}
             </div>
 

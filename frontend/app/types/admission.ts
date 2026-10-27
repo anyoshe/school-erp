@@ -113,7 +113,13 @@ export function classAppliedName(
   if (app.class_applied_name) return String(app.class_applied_name);
   const c = app.class_applied;
   if (c && typeof c === "object" && c.name) return String(c.name);
-  if (typeof c === "string" || typeof c === "number") return String(c);
+  // Bare numeric/uuid ids are not display names — caller should resolve via grade-levels API
+  if (typeof c === "string") {
+    const s = c.trim();
+    if (s && !/^\d+$/.test(s) && s.length < 40) return s;
+    return "";
+  }
+  if (typeof c === "number") return "";
   return "";
 }
 

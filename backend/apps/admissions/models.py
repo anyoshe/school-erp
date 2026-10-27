@@ -656,7 +656,7 @@ class Application(models.Model):
             self.admission_number = generate_unique_admission_number(self.school)
             self.save(update_fields=['admission_number'])
 
-        # Fee Structure (from enrollment wizard selection)
+        # Fee structure: explicit wizard id, else match by grade + year + term
         fee_structure_obj = None
         fs_key = wd.get("fee_structure") or wd.get("fee_structure_id")
         if fs_key:
@@ -801,6 +801,19 @@ class Application(models.Model):
             status="PENDING_CLEARANCE",
             created_by=created_by_user,
         )
+
+        # Auto-attach structure from grade + enrollment year/term when not chosen in UI
+        if fee_structure_obj is None:
+            try:
+                from apps.finance.clearance import find_fee_structure
+                year = str(wd.get("enrollment_academic_year") or self.enrollment_academic_year or "").strip() or None
+                term = str(wd.get("enrollment_term") or self.enrollment_term or "").strip() or None
+                fee_structure_obj = find_fee_structure(student, academic_year=year, period_name=term)
+                if fee_structure_obj:
+                    student.fee_structure = fee_structure_obj
+                    student.save(update_fields=["fee_structure"])
+            except Exception:
+                pass
 
         # === Fee Assignment ===
         if fee_structure_obj:
