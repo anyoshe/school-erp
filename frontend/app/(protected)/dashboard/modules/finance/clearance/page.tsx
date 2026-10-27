@@ -77,6 +77,18 @@ export default function FinanceClearancePage() {
     },
   });
 
+  const structureLabel = (r: any) => {
+    if (r?.structure?.name) return String(r.structure.name);
+    const parts = [
+      r?.structure?.grade || r?.grade,
+      r?.structure?.period_name || r?.matched_term,
+      r?.structure?.academic_year || r?.matched_year,
+    ].filter(Boolean);
+    if (parts.length) return parts.join(" · ");
+    if (r?.structure?.raw_name) return String(r.structure.raw_name);
+    return "";
+  };
+
   const mapLines = (lines: any[]) =>
     (lines || []).map((ln: any) => ({
       id: String(ln.id),
@@ -248,14 +260,41 @@ export default function FinanceClearancePage() {
   const applyProportional = () => {
     const amt = Number(amount) || 0;
     if (amt <= 0 || invoiceLines.length === 0) return;
-    const billTotal = invoiceLines.reduce((s, l) => s + l.amount, 0) || 1;
+    // Weight by current billed amount; waived (0) lines get 0 share
+    const weights = invoiceLines.map((l) => {
+      if (l.is_waived) return 0;
+      const w = Number(l.amount) > 0 ? Number(l.amount) : Number(l.original_amount || 0);
+      return Math.max(0, w);
+    });
+    const billTotal = weights.reduce((s, w) => s + w, 0);
     const next: Record<string, string> = {};
+    if (billTotal <= 0) {
+      // Equal split across all lines as last resort
+      const n = invoiceLines.length;
+      let remaining = amt;
+      invoiceLines.forEach((ln, i) => {
+        if (i === n - 1) next[ln.id] = String(Math.round(remaining * 100) / 100);
+        else {
+          const share = Math.round((amt / n) * 100) / 100;
+          next[ln.id] = String(share);
+          remaining -= share;
+        }
+      });
+      setAllocations(next);
+      return;
+    }
     let remaining = amt;
+    const activeIdx = weights.map((w, i) => (w > 0 ? i : -1)).filter((i) => i >= 0);
     invoiceLines.forEach((ln, i) => {
-      if (i === invoiceLines.length - 1) {
+      if (weights[i] <= 0) {
+        next[ln.id] = "0";
+        return;
+      }
+      const isLast = i === activeIdx[activeIdx.length - 1];
+      if (isLast) {
         next[ln.id] = String(Math.round(remaining * 100) / 100);
       } else {
-        const share = Math.round((ln.amount / billTotal) * amt * 100) / 100;
+        const share = Math.round((weights[i] / billTotal) * amt * 100) / 100;
         next[ln.id] = String(share);
         remaining -= share;
       }
@@ -272,6 +311,15 @@ export default function FinanceClearancePage() {
     });
     setAllocations(next);
   };
+
+  // Auto-split when amount received or line amounts change
+  useEffect(() => {
+    if (!payOpen) return;
+    const amt = Number(amount) || 0;
+    if (amt <= 0 || invoiceLines.length === 0) return;
+    applyProportional();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amount, invoiceLines, payOpen]);
 
   const addExtra = async () => {
     if (!row?.id) return;
@@ -445,9 +493,12 @@ export default function FinanceClearancePage() {
                       <td className="py-3 px-4 font-medium">{r.full_name}</td>
                       <td className="py-3 px-4">{r.grade || "—"}</td>
                       <td className="py-3 px-4 text-xs text-muted-foreground max-w-[180px]">
-                        {r.structure?.name || (
+                        {structureLabel(r) || (
                           r.total_due > 0 || r.balance > 0 ? (
-                            <span className="text-slate-500">Billed (structure linked)</span>
+                            <span className="text-slate-500">
+                              {[r.grade, r.matched_term, r.matched_year].filter(Boolean).join(" · ") ||
+                                "Billed"}
+                            </span>
                           ) : (
                             <span className="text-rose-600">No structure for grade</span>
                           )
@@ -526,7 +577,7 @@ export default function FinanceClearancePage() {
             </p>
             <p>
               <span className="text-muted-foreground">Structure:</span>{" "}
-              {row?.structure?.name || "Not found — create fee structure for this grade"}
+              {structureLabel(row) || "Not found — create fee structure for this grade"}
             </p>
             <p>
               <span className="text-muted-foreground">Period:</span>{" "}
@@ -651,13 +702,30 @@ export default function FinanceClearancePage() {
                             min={0}
                             disabled={!!ln.is_waived || adjustingLine === ln.id}
                             defaultValue={ln.discount_amount || ""}
-                            key={`${ln.id}-${ln.discount_amount}-${ln.is_waived}`}
+                            key={`${ln.id}-disc-${ln.discount_amount}-${ln.is_waived}`}
+                            onChange={(e) => {
+                              // Live: amount due = original - discount
+                              const d = Number(e.target.value || 0);
+                              if (Number.isNaN(d)) return;
+                              const orig = Number(ln.original_amount ?? ln.amount ?? 0);
+                              const nextAmt = Math.max(0, orig - d);
+                              setInvoiceLines((prev) =>
+                                prev.map((x) =>
+                                  x.id === ln.id
+                                    ? {
+                                        ...x,
+                                        discount_amount: d,
+                                        amount: nextAmt,
+                                      }
+                                    : x
+                                )
+                              );
+                            }}
                             onBlur={(e) => {
                               const v = e.target.value;
                               if (v === "" || v == null) return;
                               const d = Number(v);
                               if (Number.isNaN(d)) return;
-                              if (d === Number(ln.discount_amount || 0) && !ln.is_waived) return;
                               void adjustLine(ln.id, {
                                 waived: false,
                                 discount: d,
