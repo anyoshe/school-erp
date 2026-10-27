@@ -78,41 +78,73 @@ export default function FinanceClearancePage() {
   });
 
   const structureLabel = (r: any) => {
-    if (r?.structure?.name) return String(r.structure.name);
-    const parts = [
-      r?.structure?.grade || r?.grade,
-      r?.structure?.period_name || r?.matched_term,
-      r?.structure?.academic_year || r?.matched_year,
-    ].filter(Boolean);
+    const grade = r?.structure?.grade || r?.grade || "";
+    const term =
+      r?.structure?.period_name || r?.matched_term || r?.structure?.term || "";
+    const year =
+      r?.structure?.academic_year || r?.matched_year || r?.structure?.year || "";
+    const parts = [grade, term, year].filter((x) => x && String(x).trim());
+    if (parts.length >= 2) return parts.join(" · ");
+    // Name may already be "PP2 · Term 3 · 2026"
+    const named = r?.structure?.name || r?.structure?.raw_name || "";
+    if (named && (String(named).includes("Term") || String(named).includes("·") || String(named).includes("–"))) {
+      return String(named);
+    }
     if (parts.length) return parts.join(" · ");
-    if (r?.structure?.raw_name) return String(r.structure.raw_name);
-    return "";
+    return named ? String(named) : "";
   };
 
   const mapLines = (lines: any[]) =>
     (lines || []).map((ln: any) => ({
-      id: String(ln.id),
+      id: String(ln.id || ln.line_id || ""),
       description: ln.description || ln.item_name || "Fee item",
       category: ln.category_name || ln.category || "",
       amount: Number(ln.amount || 0),
       original_amount: Number(ln.original_amount ?? ln.amount ?? 0),
       discount_amount: Number(ln.discount_amount || 0),
       is_waived: Boolean(ln.is_waived),
-    }));
+    })).filter((ln) => ln.id && ln.id !== "undefined");
 
   const applyBilling = (billing: any, r: any) => {
     const invs = billing?.invoices || [];
     const iid = invs[0] ? String(invs[0].id) : "";
     setInvoiceId(iid);
-    setInvoiceLines(mapLines(billing?.lines || []));
-    setAllocations({});
+    const mapped = mapLines(billing?.lines || []);
+    setInvoiceLines(mapped);
     const bal = Number(billing?.balance ?? r?.balance ?? 0);
     const due = Number(billing?.total_due ?? r?.total_due ?? 0);
-    setAmount(bal > 0 ? String(bal) : due > 0 ? String(due) : "");
+    const payAmt = bal > 0 ? bal : due > 0 ? due : 0;
+    setAmount(payAmt > 0 ? String(payAmt) : "");
     const err = billing?.error || null;
     setBillingError(err);
     setStructureCandidates(Array.isArray(billing?.candidates) ? billing.candidates : []);
     if (err) toast.message(String(err));
+    // Immediate proportional allocation (don't wait for effect)
+    if (payAmt > 0 && mapped.length > 0) {
+      const weights = mapped.map((l) =>
+        l.is_waived ? 0 : Math.max(0, Number(l.amount) || Number(l.original_amount) || 0)
+      );
+      const totalW = weights.reduce((s, w) => s + w, 0) || 1;
+      let remaining = payAmt;
+      const next: Record<string, string> = {};
+      const active = weights.map((w, i) => (w > 0 ? i : -1)).filter((i) => i >= 0);
+      mapped.forEach((ln, i) => {
+        if (weights[i] <= 0) {
+          next[ln.id] = "0";
+          return;
+        }
+        if (i === active[active.length - 1]) {
+          next[ln.id] = String(Math.round(remaining * 100) / 100);
+        } else {
+          const share = Math.round((weights[i] / totalW) * payAmt * 100) / 100;
+          next[ln.id] = String(share);
+          remaining -= share;
+        }
+      });
+      setAllocations(next);
+    } else {
+      setAllocations({});
+    }
     setRow({
       ...r,
       ...billing,
@@ -121,8 +153,8 @@ export default function FinanceClearancePage() {
       total_due: due,
       balance: bal,
       structure: billing?.structure || r?.structure,
-      matched_term: billing?.matched_term,
-      matched_year: billing?.matched_year,
+      matched_term: billing?.matched_term || billing?.structure?.period_name,
+      matched_year: billing?.matched_year || billing?.structure?.academic_year,
     });
   };
 
@@ -258,8 +290,12 @@ export default function FinanceClearancePage() {
   );
 
   const applyProportional = () => {
-    const amt = Number(amount) || 0;
+    const bal =
+      Number(row?.balance) ||
+      invoiceLines.reduce((s, l) => s + (l.is_waived ? 0 : Number(l.amount) || 0), 0);
+    const amt = Number(amount) > 0 ? Number(amount) : bal;
     if (amt <= 0 || invoiceLines.length === 0) return;
+    if (!(Number(amount) > 0)) setAmount(String(amt));
     // Weight by current billed amount; waived (0) lines get 0 share
     const weights = invoiceLines.map((l) => {
       if (l.is_waived) return 0;
@@ -303,8 +339,12 @@ export default function FinanceClearancePage() {
   };
 
   const applyToFirst = () => {
-    const amt = Number(amount) || 0;
+    const bal =
+      Number(row?.balance) ||
+      invoiceLines.reduce((s, l) => s + (l.is_waived ? 0 : Number(l.amount) || 0), 0);
+    const amt = Number(amount) > 0 ? Number(amount) : bal;
     if (amt <= 0 || invoiceLines.length === 0) return;
+    if (!(Number(amount) > 0)) setAmount(String(amt));
     const next: Record<string, string> = {};
     invoiceLines.forEach((ln, i) => {
       next[ln.id] = i === 0 ? String(amt) : "0";

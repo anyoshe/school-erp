@@ -1444,15 +1444,21 @@ class AwaitingClearanceView(APIView):
                 gname = getattr(getattr(fs, "grade_level", None), "name", None) or getattr(
                     getattr(s, "current_class", None), "name", None
                 )
-                # Prefer readable label: "PP2 · Term 2 · 2026"
-                label_parts = [p for p in [gname, fs.period_name, fs.academic_year] if p]
-                display_name = " · ".join(label_parts) if label_parts else (fs.name or "Fee structure")
+                # Always Grade · Term · Year (never grade-only)
+                term = (fs.period_name or "").strip() or None
+                year = (str(fs.academic_year or "").strip() or None)
+                label_parts = [p for p in [gname, term, year] if p]
+                display_name = (
+                    " · ".join(label_parts)
+                    if len(label_parts) >= 2
+                    else (fs.name or gname or "Fee structure")
+                )
                 structure = {
                     "id": str(fs.id),
                     "name": display_name,
                     "raw_name": fs.name,
-                    "academic_year": fs.academic_year,
-                    "period_name": fs.period_name,
+                    "academic_year": year,
+                    "period_name": term,
                     "grade": gname,
                     "total_amount": float(getattr(fs, "total_amount", 0) or 0),
                 }

@@ -291,9 +291,13 @@ student, user=None, academic_year=None, period_name=None):
             lines.append({
                 "invoice_id": str(inv.id),
                 "invoice_number": inv.invoice_number,
+                "id": str(ln.id),
                 "line_id": str(ln.id),
                 "description": ln.description,
                 "amount": float(ln.amount or 0),
+                "original_amount": float(getattr(ln, "original_amount", None) or ln.amount or 0),
+                "discount_amount": float(getattr(ln, "discount_amount", None) or 0),
+                "is_waived": bool(getattr(ln, "is_waived", False)),
                 "item_id": str(ln.item_id) if ln.item_id else None,
                 "term": inv.term,
                 "academic_year": inv.academic_year,
