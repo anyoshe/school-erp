@@ -39,7 +39,7 @@ export const studentService = {
   /* ---------- GET ALL ---------- */
   async getAll() {
     try {
-      const { data } = await api.get("/students/");
+      const { data } = await api.get("/students/", { params: { page_size: 100 } });
       const list = normalizeList(data);
       writeJSON(LOCAL_KEY, list);
       return list;

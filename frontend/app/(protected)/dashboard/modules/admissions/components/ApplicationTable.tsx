@@ -78,12 +78,20 @@ export default function ApplicationTable({
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const { data: fetched = [], isLoading } = useQuery<Application[]>({
-    queryKey: ["applications"],
+    queryKey: ["applications", "table-fallback"],
     queryFn: async () => {
-      const res = await api.get("/admissions/applications/");
-      return res.data;
+      const res = await api.get("/admissions/applications/", {
+        params: { include_enrolled: 0 },
+      });
+      const data = res.data;
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data?.results)) return data.results;
+      return [];
     },
-    enabled: !providedApplications,
+    enabled: providedApplications === undefined,
+    staleTime: 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const applications = providedApplications ?? fetched;

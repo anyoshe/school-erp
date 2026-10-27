@@ -1,5 +1,7 @@
 from decimal import Decimal
 from rest_framework import viewsets
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -17,6 +19,13 @@ from apps.school.support import accessible_school_ids, selected_school
 from rest_framework.exceptions import PermissionDenied
 
 
+class StudentPagination(PageNumberPagination):
+    """Keep list payloads bounded for large schools."""
+    page_size = 50
+    page_size_query_param = "page_size"
+    max_page_size = 200
+
+
 class StudentViewSet(viewsets.ModelViewSet):
     """
     API endpoint for students - full CRUD + reports
@@ -24,7 +33,8 @@ class StudentViewSet(viewsets.ModelViewSet):
     # Base queryset kept lean; list uses even lighter select_related
     queryset = Student.objects.select_related("current_class")
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend]
+    pagination_class = StudentPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = [
         'school', 'status', 'current_class', 'gender', 'nationality',
         'boarding_status', 'fee_structure'
