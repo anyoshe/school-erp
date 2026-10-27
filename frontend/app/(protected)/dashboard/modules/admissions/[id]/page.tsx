@@ -25,16 +25,26 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const [application, setApplication] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchApplication = async () => {
+  const fetchApplication = async (opts?: { silent?: boolean }) => {
+    // Silent = status-only updates; keep the page mounted (no full-screen spinner)
+    const silent = opts?.silent === true || application != null;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await api.get(`/admissions/applications/${id}/`);
       setApplication(res.data);
     } catch (err: any) {
-      toast.error("Failed to load details");
+      if (!silent) toast.error("Failed to load details");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
+  };
+
+  const applyApplicationPatch = (data?: any) => {
+    if (data && typeof data === "object") {
+      setApplication((prev: any) => (prev ? { ...prev, ...data } : data));
+      return;
+    }
+    void fetchApplication({ silent: true });
   };
 
   useEffect(() => {
@@ -174,7 +184,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                 applicationId={id}
                 currentStatus={application.status}
                 applicationData={application}
-                onUpdated={fetchApplication}
+                onUpdated={applyApplicationPatch}
                 onEnrolled={(student) => router.push(`/dashboard/modules/students/${student.id}`)}
               />
             </div>

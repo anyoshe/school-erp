@@ -49,7 +49,7 @@ interface Props {
   applicationId: string;
   currentStatus: string;
   applicationData: Application;
-  onUpdated?: () => void;
+  onUpdated?: (data?: any) => void;
   onEnrolled?: (student: { id: string; full_name?: string }) => void;
 }
 
@@ -166,6 +166,8 @@ export default function AdmissionActions({
         }
 
         setIsRejectOpen(false);
+        await onUpdated?.(res.data);
+        return;
       }
 
       await onUpdated?.();
