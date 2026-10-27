@@ -59,7 +59,7 @@ const formSchema = z.object({
       message: "Invalid email",
     }),
   primary_guardian_relationship: z.string().min(1, "Relationship is required"),
-  primary_guardian_id_number: z.string().optional(),
+  primary_guardian_id_number: z.string().min(1, "Guardian ID / national ID is required"),
   secondary_guardian_name: z.string().optional(),
   secondary_guardian_phone: z.string().optional(),
   secondary_guardian_email: z
@@ -120,6 +120,7 @@ const FIELD_LABELS: Record<string, string> = {
   primary_guardian_phone: "Guardian phone",
   primary_guardian_email: "Guardian email",
   primary_guardian_relationship: "Guardian relationship",
+  primary_guardian_id_number: "Guardian ID / National ID",
   gender: "Gender",
   date_of_birth: "Date of birth",
   birth_certificate_number: "Birth certificate number",
@@ -145,7 +146,7 @@ const FIELD_STEP: Record<string, number> = {
 /** Required fields enforced per tab before Next / Submit */
 const STEP_REQUIRED: Record<number, (keyof FormValues)[]> = {
   0: ["first_name", "last_name", "nationality", "class_applied", "gender", "date_of_birth"],
-  1: ["primary_guardian_name", "primary_guardian_phone", "primary_guardian_relationship"],
+  1: ["primary_guardian_name", "primary_guardian_phone", "primary_guardian_relationship", "primary_guardian_id_number"],
   2: [],
 };
 
@@ -393,6 +394,7 @@ function NewApplicationPageInner() {
           "primary_guardian_name",
           "primary_guardian_phone",
           "primary_guardian_relationship",
+          "primary_guardian_id_number",
         ];
         for (const key of order) {
           // trigger already set formState.errors; use DOM + labels
@@ -410,6 +412,7 @@ function NewApplicationPageInner() {
           "primary_guardian_name",
           "primary_guardian_phone",
           "primary_guardian_relationship",
+          "primary_guardian_id_number",
         ];
         for (const key of req) {
           const v = values[key];

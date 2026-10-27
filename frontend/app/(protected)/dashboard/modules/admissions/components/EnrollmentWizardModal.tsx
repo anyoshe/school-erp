@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { Label } from "@/components/ui/label";
@@ -297,6 +297,66 @@ export default function EnrollmentWizardModal({
       cancelled = true;
     };
   }, [open, applicationData, currentSchool?.id]);
+
+  // When wizard opens, re-sync grade label, key admission fields, and edit baseline
+  useEffect(() => {
+    if (!open || !applicationData) return;
+    const name =
+      classAppliedName(applicationData) ||
+      (applicationData as any).class_applied_name ||
+      "";
+    if (name && !/^\d+$/.test(String(name).trim())) {
+      setGradeLabel(String(name));
+    }
+    setFormData((prev) => {
+      const next = {
+        ...prev,
+        current_class: classAppliedId(applicationData) || prev.current_class,
+        guardian_name:
+          prev.guardian_name ||
+          applicationData.primary_guardian_name ||
+          "",
+        guardian_phone:
+          prev.guardian_phone ||
+          applicationData.primary_guardian_phone ||
+          "",
+        guardian_email:
+          prev.guardian_email ||
+          applicationData.primary_guardian_email ||
+          "",
+        guardian_relationship:
+          prev.guardian_relationship ||
+          applicationData.primary_guardian_relationship ||
+          "Parent",
+        guardian_national_id:
+          prev.guardian_national_id ||
+          (applicationData as any).primary_guardian_id_number ||
+          "",
+        secondary_guardian_name:
+          prev.secondary_guardian_name ||
+          (applicationData as any).secondary_guardian_name ||
+          "",
+        secondary_guardian_phone:
+          prev.secondary_guardian_phone ||
+          (applicationData as any).secondary_guardian_phone ||
+          "",
+        secondary_guardian_email:
+          prev.secondary_guardian_email ||
+          (applicationData as any).secondary_guardian_email ||
+          "",
+        secondary_guardian_national_id:
+          prev.secondary_guardian_national_id ||
+          (applicationData as any).secondary_guardian_id_number ||
+          "",
+      };
+      // baseline after sync
+      setTimeout(() => snapshotBaseline(next), 0);
+      return next;
+    });
+    setCurrentStep(1);
+  }, [open, applicationData?.id]);
+
+
   
   const [formData, setFormData] = useState<Record<string, any>>(() => ({
     first_name: applicationData.first_name || "",
@@ -343,12 +403,12 @@ export default function EnrollmentWizardModal({
     guardian_name: applicationData.primary_guardian_name || "",
     guardian_phone: applicationData.primary_guardian_phone || "",
     guardian_email: applicationData.primary_guardian_email || "",
-    guardian_national_id: applicationData.primary_guardian_id_number || "",
+    guardian_national_id: (applicationData as any).primary_guardian_id_number || (applicationData as any).guardian_national_id || "",
     guardian_relation: applicationData.primary_guardian_relationship || "Parent",
-    secondary_guardian_name: "",
-    secondary_guardian_phone: "",
-    secondary_guardian_email: "",
-    secondary_guardian_national_id: "",
+    secondary_guardian_name: (applicationData as any).secondary_guardian_name || "",
+    secondary_guardian_phone: (applicationData as any).secondary_guardian_phone || "",
+    secondary_guardian_email: (applicationData as any).secondary_guardian_email || "",
+    secondary_guardian_national_id: (applicationData as any).secondary_guardian_id_number || "",
     emergency_name:
       applicationData.emergency_contact_name || applicationData.primary_guardian_name || "",
     emergency_phone:
@@ -816,7 +876,7 @@ export default function EnrollmentWizardModal({
     return allocations;
   };
 
-  // Fields loaded from admission — edits need confirmation (esp. required identity data)
+  // Identity fields from admission — confirm once on Next if any were edited
   const PROTECTED_IDENTITY_FIELDS = new Set([
     "first_name",
     "middle_name",
@@ -849,31 +909,35 @@ export default function EnrollmentWizardModal({
     guardian_relationship: "Guardian relationship",
   };
 
-  const updateForm = (field: string, value: any, opts?: { skipConfirm?: boolean }) => {
-    setFormData((prev) => {
-      if (opts?.skipConfirm || !PROTECTED_IDENTITY_FIELDS.has(field)) {
-        return { ...prev, [field]: value };
-      }
-      const prevVal = prev[field];
-      const prevEmpty =
-        prevVal === undefined ||
-        prevVal === null ||
-        String(prevVal).trim() === "";
-      const nextEmpty =
-        value === undefined || value === null || String(value).trim() === "";
-      if (String(prevVal ?? "") === String(value ?? "")) {
-        return prev;
-      }
-      const label = FIELD_HUMAN[field] || field;
-      const action = prevEmpty ? "set" : "change";
-      const ok = window.confirm(
-        prevEmpty
-          ? `You are about to set required field "${label}" during enrollment. This was missing on the admission form. Continue?`
-          : `You are about to ${action} "${label}" which was loaded from the admission application.\n\nPrevious: ${prevVal || "(empty)"}\nNew: ${nextEmpty ? "(empty)" : value}\n\nAre you sure?`
-      );
-      if (!ok) return prev;
-      return { ...prev, [field]: value };
+  const baselineRef = useRef<Record<string, string>>({});
+
+  const snapshotBaseline = (data: Record<string, any>) => {
+    const snap: Record<string, string> = {};
+    PROTECTED_IDENTITY_FIELDS.forEach((k) => {
+      snap[k] = String(data[k] ?? "").trim();
     });
+    baselineRef.current = snap;
+  };
+
+  const updateForm = (field: string, value: any) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const confirmProtectedEditsIfNeeded = (): boolean => {
+    const changed: string[] = [];
+    PROTECTED_IDENTITY_FIELDS.forEach((k) => {
+      const base = baselineRef.current[k] ?? "";
+      const cur = String(formData[k] ?? "").trim();
+      if (base !== cur) {
+        changed.push(FIELD_HUMAN[k] || k);
+      }
+    });
+    if (!changed.length) return true;
+    return window.confirm(
+      `You changed these fields loaded from the admission application:\n\n• ${changed.join(
+        "\n• "
+      )}\n\nContinue to the next step?`
+    );
   };
 
   const updateApplicationCharge = async (
@@ -951,6 +1015,9 @@ export default function EnrollmentWizardModal({
 
   const handleNext = () => {
     if (validateStep(currentStep)) {
+      if (!confirmProtectedEditsIfNeeded()) return;
+      // Accept current values as new baseline after confirming
+      snapshotBaseline(formData);
       setCurrentStep((prev) => Math.min(prev + 1, totalSteps));
     } else {
       if (currentStep === 6) {
@@ -1105,7 +1172,7 @@ export default function EnrollmentWizardModal({
                   />
                   {PROTECTED_IDENTITY_FIELDS.has(key) && (
                     <p className="text-[10px] text-muted-foreground mt-0.5">
-                      From admission — changing asks for confirmation
+                      From admission — you can edit; confirmation is asked when you click Next
                     </p>
                   )}
                 </div>
