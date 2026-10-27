@@ -29,7 +29,6 @@ import { toast } from "sonner";
 import api from "@/utils/api";
 import { cn } from "@/lib/utils";
 import { Application, classAppliedId, classAppliedName } from "@/types/admission";
-import { fa } from "zod/v4/locales";
 
 interface Props {
   open: boolean;
@@ -234,8 +233,9 @@ export default function EnrollmentWizardModal({
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 6;
+  const totalSteps = 4;
   const today = format(new Date(), "yyyy-MM-dd");
+  const defaultYear = String(new Date().getFullYear());
 
   const { currentSchool } = useCurrentSchool();
 
@@ -271,7 +271,7 @@ export default function EnrollmentWizardModal({
     transfer_letter: null,
 
     current_class: classAppliedId(applicationData),
-    section: "",
+    section: "Main",
     pathway: "",
     track: "",
     stream: "",
@@ -322,8 +322,8 @@ export default function EnrollmentWizardModal({
 
     // ── New final fields ───────────────────────────────
     admission_date: today,
-    enrollment_term: "",
-    enrollment_academic_year: "",
+    enrollment_term: "Term 1",
+    enrollment_academic_year: String(new Date().getFullYear()),
     terms_accepted: false,
     summary_confirmed: false,
   }));
@@ -600,12 +600,15 @@ export default function EnrollmentWizardModal({
       }
     };
 
+    // Fee structures not required to enroll (finance clearance handles term fees).
+    // Skip heavy load unless staff is on Review step.
+    if (currentStep < 4) return;
     loadFinanceData();
-  }, [open, applicationData?.class_applied]);
+  }, [open, applicationData?.class_applied, currentStep]);
 
   // Ensure interview/admission charges exist (N/A by default if school amounts are 0)
   useEffect(() => {
-    if (!open || !applicationId) return;
+    if (!open || !applicationId || currentStep < 4) return;
     let cancelled = false;
     (async () => {
       setChargesLoading(true);
@@ -622,7 +625,7 @@ export default function EnrollmentWizardModal({
     return () => {
       cancelled = true;
     };
-  }, [open, applicationId]);
+  }, [open, applicationId, currentStep, currentSchool?.id]);
 
   // Load line items only for the selected structure (1 request, not N)
   useEffect(() => {
@@ -854,46 +857,36 @@ export default function EnrollmentWizardModal({
   const validateStep = (step: number) => {
     switch (step) {
       case 1: {
-        // identity step
-
-        const hasPhoto = !!formData.profile_photo || !!applicationData.photo;
-        return (
+        // Identity + placement (photo optional if already on application)
+        const hasIdDoc =
+          Boolean(String(formData.birth_certificate_number || "").trim()) ||
+          Boolean(String(formData.passport_number || "").trim());
+        const termOk = Boolean(String(formData.enrollment_term || "").trim());
+        const yearOk = Boolean(String(formData.enrollment_academic_year || "").trim());
+        return Boolean(
           formData.first_name &&
-          formData.last_name &&
-          formData.date_of_birth &&
-          formData.gender &&
-          formData.nationality &&
-          (formData.birth_certificate_number || formData.passport_number) &&
-          hasPhoto &&
-          formData.birth_certificate_file
+            formData.last_name &&
+            formData.date_of_birth &&
+            formData.gender &&
+            formData.nationality &&
+            hasIdDoc &&
+            formData.current_class &&
+            formData.section?.trim() &&
+            termOk &&
+            yearOk
         );
       }
       case 2:
-        return true;
-
-      case 3:
-        const isBoarding = formData.boarding_status === "BOARDING";
-        return (
-          formData.current_class &&
-          formData.section?.trim() &&
-          (!isBoarding || (formData.house?.trim() && formData.dorm_room?.trim()))
-          // Pathway/track/stream are optional for flexibility
+        return Boolean(
+          formData.guardian_name &&
+            formData.guardian_phone &&
+            formData.guardian_national_id
         );
-
+      case 3:
+        // Optional health / previous school / transport — always allow continue
+        return true;
       case 4:
-        return formData.vaccination_status;
-      case 5:
-        return formData.guardian_name && formData.guardian_phone && formData.guardian_national_id;
-
-      case 6: {
-        const termOk = Boolean(String(formData.enrollment_term || "").trim());
-        const yearOk = Boolean(String(formData.enrollment_academic_year || "").trim());
-        const isValid =
-          termOk &&
-          yearOk &&
-          formData.terms_accepted === true;
-        return isValid;
-      }
+        return formData.terms_accepted === true;
       default:
         return true;
     }
@@ -903,7 +896,7 @@ export default function EnrollmentWizardModal({
     if (validateStep(currentStep)) {
       setCurrentStep((prev) => Math.min(prev + 1, totalSteps));
     } else {
-      if (currentStep === 6) {
+      if (currentStep === 4) {
         if (!String(formData.enrollment_term || "").trim()) {
           toast.error("Select the term the student is enrolling into.");
         } else if (!String(formData.enrollment_academic_year || "").trim()) {
@@ -1018,512 +1011,283 @@ export default function EnrollmentWizardModal({
 
   // ClassLogisticsStep is defined outside the component to avoid remounts on every render.
 
+
   const renderStep = () => {
-    switch (currentStep) {
-      case 1:
-        return (
-          <div className="space-y-6">
-            <h3 className="text-lg font-semibold">Student Identification</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[
-                { label: "First Name *", key: "first_name" },
-                { label: "Middle Name", key: "middle_name" },
-                { label: "Last Name *", key: "last_name" },
-                { label: "Preferred Name", key: "preferred_name" },
-                { label: "Gender *", key: "gender" },
-                { label: "Date of Birth *", key: "date_of_birth", type: "date" },
-                { label: "Nationality *", key: "nationality" },
-                { label: "Learner ID / UPI", key: "learner_id" },
-                { label: "Birth Certificate Number *", key: "birth_certificate_number" },
-                { label: "Passport Number (non-Citizen)", key: "passport_number" },
-              ].map(({ label, key, type = "text" }) => (
-                <div key={key}>
-                  <Label>{label}</Label>
+    // 4 steps: Identity+placement → Guardians → Optional → Review
+    if (currentStep === 1) {
+      return (
+        <div className="space-y-6">
+          <h3 className="text-lg font-semibold">Identity & placement</h3>
+          <p className="text-sm text-muted-foreground -mt-2">
+            Pre-filled from the application. Only fix what is wrong.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              { label: "First Name *", key: "first_name" },
+              { label: "Middle Name", key: "middle_name" },
+              { label: "Last Name *", key: "last_name" },
+              { label: "Gender *", key: "gender" },
+              { label: "Date of Birth *", key: "date_of_birth", type: "date" },
+              { label: "Nationality *", key: "nationality" },
+              { label: "Birth Certificate Number *", key: "birth_certificate_number" },
+              { label: "Passport Number", key: "passport_number" },
+            ].map(({ label, key, type = "text" }) => (
+              <div key={key}>
+                <Label>{label}</Label>
+                {key === "gender" ? (
+                  <Select
+                    value={formData.gender ?? ""}
+                    onValueChange={(val) => updateForm("gender", val)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MALE">Male</SelectItem>
+                      <SelectItem value="FEMALE">Female</SelectItem>
+                      <SelectItem value="OTHER">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                ) : (
                   <Input
                     type={type}
-                    value={(formData[key] ?? "") as string}
+                    value={formData[key] ?? ""}
                     onChange={(e) => updateForm(key, e.target.value)}
-                    placeholder={`Enter ${label.toLowerCase().replace("*", "").trim()}`}
-                    className={
-                      PROTECTED_IDENTITY_FIELDS.has(key)
-                        ? "border-amber-200 bg-amber-50/30"
-                        : undefined
-                    }
                   />
-                  {PROTECTED_IDENTITY_FIELDS.has(key) && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
-                      From admission — changing asks for confirmation
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-            {/* ── New fields ── */}
-            <div className="md:col-span-2">
-              <Label>Admission Number</Label>
-              {(() => {
-                const fmt = (currentSchool as any)?.admission_number_format || "PREFIX_SEQ";
-                const prefix = ((currentSchool as any)?.admission_prefix || "PSS").trim();
-                const pad = Number((currentSchool as any)?.admission_seq_padding || 3);
-                const example =
-                  fmt === "PREFIX_SEQ"
-                    ? `${prefix}${"1".padStart(pad, "0")}`
-                    : fmt === "YEAR_SEQ"
-                      ? `${new Date().getFullYear()}-${"1".padStart(pad, "0")}`
-                      : fmt === "PREFIX_YEAR_SEQ"
-                        ? `${prefix}-${new Date().getFullYear()}-${"1".padStart(pad, "0")}`
-                        : "manual entry";
-                const isCustom = fmt === "CUSTOM";
-                return (
-                  <>
-                    <p className="text-xs text-muted-foreground mt-1 mb-2">
-                      School format:{" "}
-                      <span className="font-medium text-foreground">
-                        {fmt === "PREFIX_SEQ"
-                          ? "Prefix + sequence"
-                          : fmt === "YEAR_SEQ"
-                            ? "Year + sequence"
-                            : fmt === "PREFIX_YEAR_SEQ"
-                              ? "Prefix + year + sequence"
-                              : "Manual only"}
-                      </span>
-                      {prefix ? (
-                        <>
-                          {" "}
-                          · prefix <span className="font-mono font-semibold">{prefix}</span>
-                        </>
-                      ) : null}
-                      {" "}
-                      · e.g. <span className="font-mono">{example}</span>
-                      . Numbers are unique per school.
-                    </p>
-                    {!isCustom && (
-                      <div className="flex items-center gap-3 mt-1">
-                        <Checkbox
-                          id="auto-gen"
-                          checked={formData.auto_generate_admission !== false}
-                          onCheckedChange={(v) =>
-                            updateForm("auto_generate_admission", v === true)
-                          }
-                        />
-                        <Label htmlFor="auto-gen" className="text-sm">
-                          Auto-generate next number for this school (e.g. {example})
-                        </Label>
-                      </div>
-                    )}
-                    {(isCustom || formData.auto_generate_admission === false) && (
-                      <Input
-                        className="mt-2 font-mono"
-                        value={formData.admission_number}
-                        onChange={(e) =>
-                          updateForm("admission_number", e.target.value.toUpperCase())
-                        }
-                        placeholder={example}
-                      />
-                    )}
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Change prefix/format under Settings → Admission numbers.
-                    </p>
-                  </>
-                );
-              })()}
-            </div>
-
-            <div>
-              <Label>Student Photo * (for ID card & records)</Label>
-
-              {/* Show existing photo if available */}
-              {applicationData.photo && (
-                <div className="mt-2 mb-4">
-                  <p className="text-sm font-medium text-slate-700 mb-1">Previously uploaded during application:</p>
-                  <div className="relative inline-block">
-                    <img
-                      src={applicationData.photo}
-                      alt="Student photo preview"
-                      className="h-32 w-32 object-cover rounded-lg border border-slate-300 shadow-sm"
-                      onError={(e) => {
-                        // Fallback if image fails to load
-                        e.currentTarget.src = "/fallback-student-avatar.png"; // add a placeholder image in public/
-                        e.currentTarget.alt = "Photo failed to load";
-                      }}
-                    />
-                    <p className="text-xs text-slate-500 mt-1 text-center">
-                      Click "Choose File" below to replace
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* File input – always show, but change label if photo exists */}
-              <div className={cn(
-                "border-2 border-dashed rounded-lg p-4 text-center",
-                applicationData.photo ? "border-slate-300 bg-slate-50" : "border-primary-300 bg-primary-50/30"
-              )}>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      updateForm("profile_photo", file);
-                      // Optional: show local preview immediately
-                      const previewUrl = URL.createObjectURL(file);
-                      // You could store this in state if you want instant preview of new upload
-                    }
-                  }}
-                  className="hidden"
-                  id="profile-photo-upload"
-                />
-                <label
-                  htmlFor="profile-photo-upload"
-                  className="cursor-pointer flex flex-col items-center gap-2"
-                >
-                  <div className="p-3 bg-primary-100 rounded-full">
-                    <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                  </div>
-                  <span className="text-sm font-medium text-primary-700">
-                    {applicationData.photo ? "Replace Photo" : "Upload New Photo"}
-                  </span>
-                  <span className="text-xs text-slate-500">
-                    JPG, PNG • Max 5MB
-                  </span>
-                </label>
+                )}
               </div>
-
-              {/* Optional: show name of newly selected file */}
-              {formData.profile_photo && (
-                <p className="text-xs text-slate-600 mt-2">
-                  Selected: {formData.profile_photo.name}
-                </p>
-              )}
-            </div>
-
-            <div>
-              <Label>Birth Certificate Upload * (PDF/Image – required for NEMIS)</Label>
-              <Input
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={e => updateForm("birth_certificate_file", e.target.files?.[0] ?? null)}
-              />
-            </div>
+            ))}
           </div>
-        );
 
-      case 2:
-        return (
-          <div className="space-y-6">
-            <h3 className="text-lg font-semibold">Previous Academic Record</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <Label>Previous School Name & Address</Label>
-                <Textarea
-                  value={formData.previous_school ?? ""}
-                  onChange={(e) => updateForm("previous_school", e.target.value)}
-                  placeholder="Name, location, contact..."
-                />
-              </div>
-              <div>
-                <Label>Previous Grade / Class</Label>
-                <Input
-                  value={formData.previous_grade ?? ""}
-                  onChange={(e) => updateForm("previous_grade", e.target.value)}
-                  placeholder="e.g. Grade 4"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <Label>Transfer / Leaving Certificate Upload</Label>
-                <Input
-                  type="file"
-                  accept=".pdf,.jpg,.png"
-                  onChange={(e) => updateForm("transfer_letter", e.target.files?.[0] ?? null)}
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      case 3:
-        return (
           <ClassLogisticsStep
             formData={formData}
             applicationData={applicationData}
             updateForm={updateForm}
-            schoolHierarchy={schoolHierarchy}   // ← Add this
+            schoolHierarchy={schoolHierarchy}
           />
-        );
 
-      case 4:
-        return (
-          <div className="space-y-6">
-            <h3 className="text-lg font-semibold">Health & Special Needs</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <Label>Vaccination Status *</Label>
-                <Select
-                  value={formData.vaccination_status ?? "UNKNOWN"}
-                  onValueChange={(val) => updateForm("vaccination_status", val)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="UP_TO_DATE">Up to date</SelectItem>
-                    <SelectItem value="PARTIAL">Partial</SelectItem>
-                    <SelectItem value="NOT_IMMUNIZED">Not immunized</SelectItem>
-                    <SelectItem value="UNKNOWN">Unknown</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="md:col-span-2">
-                <Label>Immunization Card Upload</Label>
-                <Input
-                  type="file"
-                  accept=".pdf,.jpg,.png"
-                  onChange={(e) => updateForm("immunization_card", e.target.files?.[0] ?? null)}
-                />
-              </div>
-              <div>
-                <Label>Disability (if any)</Label>
-                <Input
-                  value={formData.disability ?? ""}
-                  onChange={(e) => updateForm("disability", e.target.value)}
-                  placeholder="e.g. Visual impairment"
-                />
-              </div>
-              <div>
-                <Label>Disability Type / Category</Label>
-                <Select
-                  value={formData.disability_type ?? ""}
-                  onValueChange={(val) => updateForm("disability_type", val)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="physical">Physical</SelectItem>
-                    <SelectItem value="visual">Visual</SelectItem>
-                    <SelectItem value="hearing">Hearing</SelectItem>
-                    <SelectItem value="learning">Learning</SelectItem>
-                    <SelectItem value="intellectual">Intellectual</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="md:col-span-2">
-                <Label>Special Needs Category</Label>
-                <Input
-                  value={formData.special_needs_category ?? ""}
-                  onChange={(e) => updateForm("special_needs_category", e.target.value)}
-                  placeholder="e.g. Gifted, Slow Learner, Autism Spectrum"
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      case 5:
-        return (
-          <div className="space-y-6">
-            <h3 className="text-lg font-semibold">Guardians & Emergency Contacts</h3>
-            <div className="space-y-8">
-              {/* Primary Guardian */}
-              <div>
-                <h4 className="font-medium mb-3">Primary Guardian</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Name *</Label>
-                    <Input
-                      value={formData.guardian_name ?? ""}
-                      onChange={(e) => updateForm("guardian_name", e.target.value)}
-                      className="border-amber-200 bg-amber-50/30"
-                    />
-                  </div>
-                  <div>
-                    <Label>National ID / Passport *</Label>
-                    <Input
-                      value={formData.guardian_national_id ?? ""}
-                      onChange={(e) => updateForm("guardian_national_id", e.target.value)}
-                      className="border-amber-200 bg-amber-50/30"
-                    />
-                  </div>
-                  <div>
-                    <Label>Phone *</Label>
-                    <Input
-                      value={formData.guardian_phone ?? ""}
-                      onChange={(e) => updateForm("guardian_phone", e.target.value)}
-                      className="border-amber-200 bg-amber-50/30"
-                    />
-                  </div>
-                  <div>
-                    <Label>Email</Label>
-                    <Input
-                      value={formData.guardian_email ?? ""}
-                      onChange={(e) => updateForm("guardian_email", e.target.value)}
-                      className="border-amber-200 bg-amber-50/30"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Secondary Guardian */}
-              <div>
-                <h4 className="font-medium mb-3">Secondary Guardian (optional)</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    { label: "Name", key: "secondary_guardian_name" },
-                    { label: "National ID / Passport", key: "secondary_guardian_national_id" },
-                    { label: "Phone", key: "secondary_guardian_phone" },
-                    { label: "Email", key: "secondary_guardian_email" },
-                  ].map(({ label, key }) => (
-                    <div key={key}>
-                      <Label>{label}</Label>
-                      <Input
-                        value={formData[key] ?? ""}
-                        onChange={(e) => updateForm(key, e.target.value)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Emergency Contact */}
-              <div>
-                <h4 className="font-medium mb-3">Emergency Contact</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {[
-                    { label: "Name", key: "emergency_name" },
-                    { label: "Phone", key: "emergency_phone" },
-                    { label: "Relation", key: "emergency_relation" },
-                  ].map(({ label, key }) => (
-                    <div key={key}>
-                      <Label>{label}</Label>
-                      <Input
-                        value={formData[key] ?? ""}
-                        onChange={(e) => updateForm(key, e.target.value)}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-
-      case 6: {
-        return (
-          <div className="space-y-5">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-950">
-              <p className="font-semibold">Enrollment only — school fees are collected in Finance</p>
-              <p className="mt-1 text-emerald-900/90">
-                Select the academic year and term. After enroll, the learner gets an admission
-                number and appears under <strong>Finance → Awaiting clearance</strong> for fee
-                structure and payments.
-              </p>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium">Academic year *</label>
-                <Input
-                  className="mt-1"
-                  placeholder="e.g. 2026"
-                  value={formData.enrollment_academic_year || ""}
-                  onChange={(e) => updateForm("enrollment_academic_year", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Enrolling into term *</label>
-                <Select
-                  value={formData.enrollment_term || "none"}
-                  onValueChange={(v) => updateForm("enrollment_term", v === "none" ? "" : v)}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select term" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Select term…</SelectItem>
-                    <SelectItem value="Term 1">Term 1</SelectItem>
-                    <SelectItem value="Term 2">Term 2</SelectItem>
-                    <SelectItem value="Term 3">Term 3</SelectItem>
-                    <SelectItem value="Semester 1">Semester 1</SelectItem>
-                    <SelectItem value="Semester 2">Semester 2</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="rounded-xl border bg-slate-50 p-4 text-sm space-y-2">
-              <p className="font-medium">Pre-enrollment fees (interview / admission)</p>
-              <p className="text-muted-foreground text-xs">
-                These must already be marked paid, waived, or not applicable earlier in the
-                pipeline. School term fees are <strong>not</strong> collected here.
-              </p>
-              {chargesLoading ? (
-                <p className="text-xs text-muted-foreground">Loading charge status…</p>
-              ) : applicationCharges?.length ? (
-                <ul className="divide-y rounded-lg border bg-white">
-                  {applicationCharges
-                    .filter((c: any) => {
-                      if (String(c.charge_type).toUpperCase() === "INTERVIEW") {
-                        if (c.policy === "NOT_APPLICABLE") return false;
-                        if (Number(c.amount_due || 0) <= 0 && Number(c.amount_paid || 0) <= 0)
-                          return false;
-                      }
-                      return true;
-                    })
-                    .map((c: any) => (
-                    <li key={c.id || c.charge_type} className="flex justify-between px-3 py-2 text-sm">
-                      <span>
-                        {c.charge_type === "INTERVIEW"
-                          ? "Interview fee"
-                          : c.charge_type === "ADMISSION"
-                            ? "Admission fee"
-                            : c.charge_type}
-                        {c.policy ? ` · ${c.policy}` : ""}
-                      </span>
-                      <span className="font-medium">
-                        {c.policy === "WAIVED" || c.policy === "NOT_APPLICABLE"
-                          ? c.policy
-                          : Number(c.amount_paid || 0) > 0
-                            ? `Paid ${Number(c.amount_paid).toLocaleString()}`
-                            : `Due ${Number(c.amount_due || 0).toLocaleString()}`}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  No interview/admission charge rows — treat as not applicable if your school
-                  does not charge them.
-                </p>
-              )}
-            </div>
-
-            <label className="flex items-start gap-3 rounded-xl border p-4 cursor-pointer hover:bg-slate-50">
-              <input
-                type="checkbox"
+          <div className="grid sm:grid-cols-2 gap-4 rounded-xl border bg-slate-50 p-4">
+            <div>
+              <Label>Academic year *</Label>
+              <Input
                 className="mt-1"
-                checked={!!formData.terms_accepted}
-                onChange={(e) => updateForm("terms_accepted", e.target.checked)}
+                placeholder="e.g. 2026"
+                value={formData.enrollment_academic_year || ""}
+                onChange={(e) => updateForm("enrollment_academic_year", e.target.value)}
               />
-              <span className="text-sm">
-                <span className="font-medium">I confirm this enrollment *</span>
-                <span className="block text-muted-foreground mt-0.5">
-                  Details are correct. School fees will be handled at the Finance clearance desk.
-                </span>
-              </span>
-            </label>
+            </div>
+            <div>
+              <Label>Enrollment term *</Label>
+              <Select
+                value={formData.enrollment_term || "none"}
+                onValueChange={(v) => updateForm("enrollment_term", v === "none" ? "" : v)}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select term" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Select term…</SelectItem>
+                  <SelectItem value="Term 1">Term 1</SelectItem>
+                  <SelectItem value="Term 2">Term 2</SelectItem>
+                  <SelectItem value="Term 3">Term 3</SelectItem>
+                  <SelectItem value="Semester 1">Semester 1</SelectItem>
+                  <SelectItem value="Semester 2">Semester 2</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        );
-      }
-
-      default:
-        return null;
+        </div>
+      );
     }
+
+    if (currentStep === 2) {
+      return (
+        <div className="space-y-6">
+          <h3 className="text-lg font-semibold">Primary guardian *</h3>
+          <p className="text-sm text-muted-foreground -mt-2">
+            Required contact for the student. Secondary guardian is optional.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              { label: "Full name *", key: "guardian_name" },
+              { label: "Phone *", key: "guardian_phone" },
+              { label: "National ID *", key: "guardian_national_id" },
+              { label: "Email", key: "guardian_email" },
+              { label: "Relationship", key: "guardian_relationship" },
+            ].map(({ label, key }) => (
+              <div key={key}>
+                <Label>{label}</Label>
+                <Input
+                  value={formData[key] ?? ""}
+                  onChange={(e) => updateForm(key, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+          <h4 className="font-medium">Secondary guardian (optional)</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              { label: "Name", key: "secondary_guardian_name" },
+              { label: "Phone", key: "secondary_guardian_phone" },
+              { label: "National ID", key: "secondary_guardian_national_id" },
+              { label: "Email", key: "secondary_guardian_email" },
+            ].map(({ label, key }) => (
+              <div key={key}>
+                <Label>{label}</Label>
+                <Input
+                  value={formData[key] ?? ""}
+                  onChange={(e) => updateForm(key, e.target.value)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (currentStep === 3) {
+      return (
+        <div className="space-y-6">
+          <h3 className="text-lg font-semibold">Optional details</h3>
+          <p className="text-sm text-muted-foreground -mt-2">
+            Skip anything not needed — you can complete these later on the student profile.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="md:col-span-2">
+              <Label>Previous school</Label>
+              <Textarea
+                value={formData.previous_school ?? ""}
+                onChange={(e) => updateForm("previous_school", e.target.value)}
+                placeholder="Name and location"
+              />
+            </div>
+            <div>
+              <Label>Vaccination status</Label>
+              <Select
+                value={formData.vaccination_status ?? "UNKNOWN"}
+                onValueChange={(val) => updateForm("vaccination_status", val)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="UNKNOWN">Not specified</SelectItem>
+                  <SelectItem value="COMPLETE">Complete</SelectItem>
+                  <SelectItem value="PARTIAL">Partial</SelectItem>
+                  <SelectItem value="NONE">None</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Allergies</Label>
+              <Input
+                value={formData.allergies ?? ""}
+                onChange={(e) => updateForm("allergies", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Boarding status</Label>
+              <Select
+                value={formData.boarding_status ?? "DAY"}
+                onValueChange={(val) => updateForm("boarding_status", val)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="DAY">Day</SelectItem>
+                  <SelectItem value="BOARDING">Boarding</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Transport route (if any)</Label>
+              <Input
+                value={formData.transport_route ?? ""}
+                onChange={(e) => updateForm("transport_route", e.target.value)}
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Step 4 — Review
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-950">
+          <p className="font-semibold">Ready to enroll</p>
+          <p className="mt-1 text-emerald-900/90">
+            {formData.first_name} {formData.last_name} · {formData.enrollment_term} ·{" "}
+            {formData.enrollment_academic_year}. School term fees are collected in{" "}
+            <strong>Finance → Clearance</strong> after enroll.
+          </p>
+        </div>
+
+        <div className="rounded-xl border bg-slate-50 p-4 text-sm space-y-2">
+          <p className="font-medium">Pre-enrollment fees (interview / admission)</p>
+          {chargesLoading ? (
+            <p className="text-xs text-muted-foreground">Loading charge status…</p>
+          ) : applicationCharges?.length ? (
+            <ul className="divide-y rounded-lg border bg-white">
+              {applicationCharges
+                .filter((c: any) => {
+                  if (String(c.charge_type).toUpperCase() === "INTERVIEW") {
+                    if (c.policy === "NOT_APPLICABLE") return false;
+                    if (Number(c.amount_due || 0) <= 0 && Number(c.amount_paid || 0) <= 0)
+                      return false;
+                  }
+                  return true;
+                })
+                .map((c: any) => (
+                  <li
+                    key={c.id || c.charge_type}
+                    className="flex justify-between px-3 py-2 text-sm"
+                  >
+                    <span>
+                      {c.charge_type === "INTERVIEW"
+                        ? "Interview fee"
+                        : c.charge_type === "ADMISSION"
+                          ? "Admission fee"
+                          : c.charge_type}
+                      {c.policy ? ` · ${c.policy}` : ""}
+                    </span>
+                    <span className="font-medium">
+                      {c.policy === "WAIVED" || c.policy === "NOT_APPLICABLE"
+                        ? c.policy
+                        : Number(c.amount_paid || 0) > 0
+                          ? `Paid ${Number(c.amount_paid).toLocaleString()}`
+                          : `Due ${Number(c.amount_due || 0).toLocaleString()}`}
+                    </span>
+                  </li>
+                ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No interview/admission charges due for this applicant.
+            </p>
+          )}
+        </div>
+
+        <label className="flex items-start gap-3 rounded-xl border p-4 cursor-pointer hover:bg-slate-50">
+          <input
+            type="checkbox"
+            className="mt-1"
+            checked={!!formData.terms_accepted}
+            onChange={(e) => updateForm("terms_accepted", e.target.checked)}
+          />
+          <span className="text-sm">
+            <span className="font-medium">I confirm this enrollment *</span>
+            <span className="block text-muted-foreground mt-0.5">
+              Details are correct. Term fees will be handled at Finance clearance.
+            </span>
+          </span>
+        </label>
+      </div>
+    );
   };
+
+
 
 
 
@@ -1541,7 +1305,7 @@ export default function EnrollmentWizardModal({
           <div className="flex justify-between text-sm font-medium mb-2">
             <span>Step {currentStep} of {totalSteps}</span>
             <span className="text-muted-foreground">
-              {["Identification", "Previous School", "Class & Transport", "Health & Special Needs", "Guardians", "Fees & Review"][currentStep - 1]}
+              {["Identity & placement", "Guardians", "Optional details", "Review & enroll"][currentStep - 1]}
             </span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2.5">
@@ -1555,7 +1319,7 @@ export default function EnrollmentWizardModal({
         {/* each step gets its own key so that React will unmount
             the previous step's inputs (avoids mixing controlled/uncontrolled)
             when switching pages */}
-        <div className="py-4 min-h-[400px]" key={currentStep}>
+        <div className="py-4 min-h-[280px]">
           {renderStep()}
         </div>
 

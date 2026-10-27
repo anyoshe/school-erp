@@ -144,10 +144,9 @@ const FIELD_STEP: Record<string, number> = {
 
 /** Required fields enforced per tab before Next / Submit */
 const STEP_REQUIRED: Record<number, (keyof FormValues)[]> = {
-  0: ["first_name", "last_name", "nationality", "class_applied"],
+  0: ["first_name", "last_name", "nationality", "class_applied", "gender", "date_of_birth"],
   1: ["primary_guardian_name", "primary_guardian_phone", "primary_guardian_relationship"],
   2: [],
-  3: [],
 };
 
 function fieldErrorClass(hasError: boolean) {
@@ -169,7 +168,7 @@ function NewApplicationPageInner() {
   const [savedAppId, setSavedAppId] = useState<string | null>(editId);
   const [loadingDraft, setLoadingDraft] = useState(!!editId);
 
-  const steps = ["Student", "Guardian", "Additional Info", "Documents"];
+  const steps = ["Student", "Guardian", "Documents"];
 
   const {
     control,
@@ -232,6 +231,8 @@ function NewApplicationPageInner() {
       return res.data || [];
     },
     enabled: !!currentSchool?.id && !schoolLoading,
+  staleTime: 300_000,
+  refetchOnMount: false,
   });
 
   // Load existing draft / application for continue-editing
@@ -746,7 +747,7 @@ function NewApplicationPageInner() {
               </TabsContent>
 
               {/* Additional Info */}
-              <TabsContent value="Additional Info" className="space-y-6">
+              <TabsContent value="__legacy_additional" className="space-y-6 hidden">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <Label>Previous School</Label>
