@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { Label } from "@/components/ui/label";
@@ -294,7 +294,7 @@ export default function EnrollmentWizardModal({
     guardian_phone: applicationData.primary_guardian_phone || "",
     guardian_email: applicationData.primary_guardian_email || "",
     guardian_national_id: applicationData.primary_guardian_id_number || "",
-    guardian_relation: applicationData.primary_guardian_relationship || "Parent",
+    guardian_relationship: applicationData.primary_guardian_relationship || "",
     secondary_guardian_name: "",
     secondary_guardian_phone: "",
     secondary_guardian_email: "",
@@ -802,31 +802,45 @@ export default function EnrollmentWizardModal({
     guardian_relationship: "Guardian relationship",
   };
 
-  const updateForm = (field: string, value: any, opts?: { skipConfirm?: boolean }) => {
-    setFormData((prev) => {
-      if (opts?.skipConfirm || !PROTECTED_IDENTITY_FIELDS.has(field)) {
-        return { ...prev, [field]: value };
+  // Snapshot of admission values — used to detect edits when leaving a step
+  const admissionBaselineRef = useRef<Record<string, any> | null>(null);
+  if (admissionBaselineRef.current === null) {
+    admissionBaselineRef.current = {
+      first_name: applicationData.first_name || "",
+      middle_name: applicationData.middle_name || "",
+      last_name: applicationData.last_name || "",
+      gender: applicationData.gender || "",
+      date_of_birth: applicationData.date_of_birth || "",
+      nationality: applicationData.nationality || "Kenyan",
+      birth_certificate_number: (applicationData as any).birth_certificate_number || "",
+      passport_number: (applicationData as any).passport_number || "",
+      guardian_name: applicationData.primary_guardian_name || "",
+      guardian_phone: applicationData.primary_guardian_phone || "",
+      guardian_email: applicationData.primary_guardian_email || "",
+      guardian_national_id: applicationData.primary_guardian_id_number || "",
+      guardian_relationship: applicationData.primary_guardian_relationship || "",
+    };
+  }
+
+  /** Always update freely — confirmation happens on Next, not per keystroke */
+  const updateForm = (field: string, value: any, _opts?: { skipConfirm?: boolean }) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const collectProtectedChanges = (data: Record<string, any>) => {
+    const baseline = admissionBaselineRef.current || {};
+    const changes: string[] = [];
+    for (const field of PROTECTED_IDENTITY_FIELDS) {
+      const before = String(baseline[field] ?? "").trim();
+      const after = String(data[field] ?? "").trim();
+      if (before !== after) {
+        const label = FIELD_HUMAN[field] || field;
+        changes.push(
+          `• ${label}: "${before || "(empty)"}" → "${after || "(empty)"}"`
+        );
       }
-      const prevVal = prev[field];
-      const prevEmpty =
-        prevVal === undefined ||
-        prevVal === null ||
-        String(prevVal).trim() === "";
-      const nextEmpty =
-        value === undefined || value === null || String(value).trim() === "";
-      if (String(prevVal ?? "") === String(value ?? "")) {
-        return prev;
-      }
-      const label = FIELD_HUMAN[field] || field;
-      const action = prevEmpty ? "set" : "change";
-      const ok = window.confirm(
-        prevEmpty
-          ? `You are about to set required field "${label}" during enrollment. This was missing on the admission form. Continue?`
-          : `You are about to ${action} "${label}" which was loaded from the admission application.\n\nPrevious: ${prevVal || "(empty)"}\nNew: ${nextEmpty ? "(empty)" : value}\n\nAre you sure?`
-      );
-      if (!ok) return prev;
-      return { ...prev, [field]: value };
-    });
+    }
+    return changes;
   };
 
   const updateApplicationCharge = async (
@@ -894,6 +908,22 @@ export default function EnrollmentWizardModal({
 
   const handleNext = () => {
     if (validateStep(currentStep)) {
+      const changes = collectProtectedChanges(formData);
+      // Only prompt for identity/guardian steps where protected fields appear
+      if (changes.length > 0 && (currentStep === 1 || currentStep === 2)) {
+        const ok = window.confirm(
+          "You changed the following fields that came from the admission application:\n\n" +
+            changes.join("\n") +
+            "\n\nContinue with these changes?"
+        );
+        if (!ok) return;
+        // Accept as new baseline so we don't re-prompt the same edits
+        if (admissionBaselineRef.current) {
+          for (const field of PROTECTED_IDENTITY_FIELDS) {
+            admissionBaselineRef.current[field] = formData[field];
+          }
+        }
+      }
       setCurrentStep((prev) => Math.min(prev + 1, totalSteps));
     } else {
       if (currentStep === 4) {
