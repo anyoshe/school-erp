@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,7 +16,7 @@ import { Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import api from "@/utils/api";
 import { Application } from "@/types/admission";
-import ApplicationChargePanel from "./ApplicationChargePanel";
+import ApplicationChargePanel, { Charge } from "./ApplicationChargePanel";
 
 interface Props {
   open: boolean;
@@ -26,6 +26,21 @@ interface Props {
   onAccepted?: (data?: any) => void;
 }
 
+function admissionAlreadyOk(app: Application) {
+  const charges = ((app as any)?.charges || []) as Charge[];
+  const c = charges.find(
+    (x) => String(x.charge_type).toUpperCase() === "ADMISSION"
+  );
+  if (!c) return false;
+  if (c.is_satisfied) return true;
+  const p = String(c.policy || "").toUpperCase();
+  if (p === "NOT_APPLICABLE" || p === "WAIVED") return true;
+  if (c.decision_made && Number(c.amount_due || 0) <= 0) return true;
+  if (Number(c.amount_paid || 0) > 0 && Number(c.amount_paid) >= Number(c.amount_due || 0))
+    return true;
+  return false;
+}
+
 export default function AcceptOfferModal({
   open,
   onOpenChange,
@@ -33,28 +48,36 @@ export default function AcceptOfferModal({
   applicationData,
   onAccepted,
 }: Props) {
+  const initialOk = useMemo(
+    () => admissionAlreadyOk(applicationData),
+    [applicationData]
+  );
   const [loading, setLoading] = useState(false);
-  const [chargeOk, setChargeOk] = useState(false);
+  const [chargeOk, setChargeOk] = useState(initialOk);
   const [acceptanceNotes, setAcceptanceNotes] = useState("");
+
+  useEffect(() => {
+    if (open) setChargeOk(admissionAlreadyOk(applicationData));
+  }, [open, applicationData]);
 
   const handleAccept = async () => {
     if (!chargeOk) {
       toast.error("Admission fee decision is required", {
-        description: "Choose Not applicable, Waived, Discounted, or Full (and mark paid if due).",
+        description:
+          "Choose Not applicable, Waived, Discounted, or Full (and mark paid if due).",
       });
       return;
     }
     setLoading(true);
-
     try {
       const res = await api.patch(`/admissions/applications/${applicationId}/`, {
         status: "ACCEPTED",
         acceptance_notes: acceptanceNotes,
         accepted_at: new Date().toISOString(),
       });
-
+      const payload = { ...(res.data || {}), status: "ACCEPTED" };
       toast.success("Offer marked as accepted!");
-      onAccepted?.(res.data);
+      onAccepted?.(payload);
       onOpenChange(false);
     } catch (err: any) {
       toast.error(err.response?.data?.detail || "Failed to accept offer");
@@ -69,7 +92,8 @@ export default function AcceptOfferModal({
         <DialogHeader>
           <DialogTitle>Mark Offer Accepted</DialogTitle>
           <DialogDescription>
-            Confirm that the guardian has accepted the admission offer for {applicationData.first_name} {applicationData.last_name}.
+            Confirm that the guardian has accepted the admission offer for{" "}
+            {applicationData.first_name} {applicationData.last_name}.
           </DialogDescription>
         </DialogHeader>
 
@@ -77,41 +101,49 @@ export default function AcceptOfferModal({
           <ApplicationChargePanel
             applicationId={applicationId}
             types={["ADMISSION"]}
+            initialCharges={(applicationData as any)?.charges || []}
             compact
             required
             title="Admission / registration fee"
-            description="Required before accepting the offer. Enrollment Step 6 only shows the result of this decision."
+            description={
+              initialOk
+                ? "Already decided earlier — no need to re-enter."
+                : "Required before accepting the offer."
+            }
             onSatisfiedChange={(ok) => setChargeOk(ok)}
           />
+
           <div>
-            <Label>Acceptance Notes (optional)</Label>
+            <Label>Acceptance notes (optional)</Label>
             <Textarea
+              className="mt-1"
               value={acceptanceNotes}
               onChange={(e) => setAcceptanceNotes(e.target.value)}
-              placeholder="e.g. Parent accepted in person, paid registration fee, etc."
-              className="min-h-[80px]"
+              placeholder="e.g. Accepted by phone / in person"
+              rows={2}
             />
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogFooter className="gap-2">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
-            onClick={handleAccept}
+            type="button"
             disabled={loading || !chargeOk}
-            className="bg-primary hover:bg-primary-700"
+            onClick={() => void handleAccept()}
+            className="bg-teal-600 hover:bg-teal-700 text-white"
           >
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Accepting...
+                Saving…
               </>
             ) : (
               <>
                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                Confirm Acceptance
+                Confirm acceptance
               </>
             )}
           </Button>

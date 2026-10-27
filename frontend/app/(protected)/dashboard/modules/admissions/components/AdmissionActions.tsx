@@ -599,10 +599,10 @@ Admissions Team
         onOpenChange={setIsOfferLetterOpen}
         applicationId={applicationId}
         applicationData={applicationData}
-        onIssued={() => {
+        onIssued={(data) => {
           setOptimisticStatus("OFFERED");
           setIsOfferLetterOpen(false);
-          void onUpdated?.({ status: "OFFERED" });
+          void onUpdated?.({ ...(data || {}), status: "OFFERED" });
           toast.success("Offer issued — mark as accepted when the family confirms.");
         }}
       />
@@ -612,10 +612,10 @@ Admissions Team
         onOpenChange={setIsAcceptOfferOpen}
         applicationId={applicationId}
         applicationData={applicationData}
-        onAccepted={() => {
+        onAccepted={(data) => {
           setOptimisticStatus("ACCEPTED");
           setIsAcceptOfferOpen(false);
-          void onUpdated?.({ status: "ACCEPTED" });
+          void onUpdated?.({ ...(data || {}), status: "ACCEPTED" });
           toast.success("Offer accepted — you can finalize enrollment.");
         }}
       />

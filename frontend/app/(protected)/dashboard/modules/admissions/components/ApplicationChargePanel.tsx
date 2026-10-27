@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle2 } from "lucide-react";
 
 export type ChargeType = "INTERVIEW" | "ADMISSION";
 
@@ -33,11 +33,12 @@ export type Charge = {
 type Props = {
   applicationId: string;
   types: ChargeType[];
+  /** Charges already on the application — skip ensure-charges when usable */
+  initialCharges?: Charge[] | null;
   currencySymbol?: string;
   compact?: boolean;
   title?: string;
   description?: string;
-  /** When true, parent should block submit until all listed charges are satisfied */
   required?: boolean;
   onSatisfiedChange?: (allSatisfied: boolean, charges: Charge[]) => void;
 };
@@ -47,9 +48,29 @@ const LABELS: Record<string, string> = {
   ADMISSION: "Admission / registration fee",
 };
 
+function filterTypes(all: Charge[], types: ChargeType[]) {
+  return (all || []).filter((c) =>
+    types.includes(String(c.charge_type).toUpperCase() as ChargeType)
+  );
+}
+
+function isChargeSatisfied(c: Charge | undefined) {
+  if (!c) return false;
+  if (c.is_satisfied) return true;
+  const policy = String(c.policy || "").toUpperCase();
+  if (policy === "NOT_APPLICABLE" || policy === "WAIVED") return true;
+  if (c.decision_made && Number(c.amount_due || 0) <= 0) return true;
+  if (Number(c.amount_paid || 0) >= Number(c.amount_due || 0) && Number(c.amount_due || 0) >= 0) {
+    if (policy === "FULL" || policy === "DISCOUNTED") return Number(c.amount_paid || 0) > 0 || Number(c.amount_due || 0) === 0;
+  }
+  if (c.decision_made && (policy === "WAIVED" || policy === "NOT_APPLICABLE")) return true;
+  return Boolean(c.decision_made && (policy === "WAIVED" || policy === "NOT_APPLICABLE"));
+}
+
 export default function ApplicationChargePanel({
   applicationId,
   types,
+  initialCharges,
   currencySymbol = "KSh",
   compact = false,
   title = "Pre-enrollment charges",
@@ -57,33 +78,49 @@ export default function ApplicationChargePanel({
   required = true,
   onSatisfiedChange,
 }: Props) {
-  const [loading, setLoading] = useState(true);
+  const seeded = useMemo(
+    () => filterTypes(initialCharges || [], types),
+    [initialCharges, types]
+  );
+
+  const [loading, setLoading] = useState(seeded.length === 0);
   const [saving, setSaving] = useState<string | null>(null);
-  const [charges, setCharges] = useState<Charge[]>([]);
+  const [charges, setCharges] = useState<Charge[]>(seeded);
 
   const load = useCallback(async () => {
     if (!applicationId) return;
+    // If parent already passed decisions, do not hit ensure-charges
+    if (seeded.length > 0) {
+      setCharges(seeded);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await api.post(
         `/admissions/applications/${applicationId}/ensure-charges/`
       );
       const all: Charge[] = res.data?.charges || [];
-      const filtered = all.filter((c) =>
-        types.includes(String(c.charge_type).toUpperCase() as ChargeType)
-      );
-      setCharges(filtered);
+      setCharges(filterTypes(all, types));
     } catch (e) {
       console.warn("ensure-charges", e);
       setCharges([]);
     } finally {
       setLoading(false);
     }
-  }, [applicationId, types]);
+  }, [applicationId, types, seeded]);
 
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
+
+  // Keep in sync when parent application refetches with updated charges
+  useEffect(() => {
+    if (seeded.length > 0) {
+      setCharges(seeded);
+      setLoading(false);
+    }
+  }, [seeded]);
 
   const allSatisfied = useMemo(() => {
     if (types.length === 0) return true;
@@ -91,7 +128,7 @@ export default function ApplicationChargePanel({
       const c = charges.find(
         (x) => String(x.charge_type).toUpperCase() === t
       );
-      return !!c?.is_satisfied;
+      return isChargeSatisfied(c);
     });
   }, [charges, types]);
 
@@ -99,18 +136,27 @@ export default function ApplicationChargePanel({
     onSatisfiedChange?.(allSatisfied, charges);
   }, [allSatisfied, charges, onSatisfiedChange]);
 
-  const updateCharge = async (
-    chargeType: string,
-    payload: Record<string, unknown>
-  ) => {
-    setSaving(chargeType);
+  const updateCharge = async (ctype: string, payload: Record<string, any>) => {
+    setSaving(ctype);
     try {
-      await api.patch(
-        `/admissions/applications/${applicationId}/charges/${chargeType}/`,
-        { ...payload, decision_made: true }
+      const res = await api.patch(
+        `/admissions/applications/${applicationId}/charges/${ctype}/`,
+        payload
       );
-      toast.success(`${LABELS[chargeType] || chargeType} updated`);
-      await load();
+      const updated = res.data;
+      setCharges((prev) => {
+        const next = prev.map((c) =>
+          String(c.charge_type).toUpperCase() === ctype
+            ? { ...c, ...updated }
+            : c
+        );
+        // If type missing, append
+        if (!next.some((c) => String(c.charge_type).toUpperCase() === ctype)) {
+          next.push(updated);
+        }
+        return next;
+      });
+      toast.success("Charge updated");
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || "Could not update charge");
     } finally {
@@ -122,89 +168,100 @@ export default function ApplicationChargePanel({
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
         <Loader2 className="h-4 w-4 animate-spin" />
-        Loading fee options…
+        Loading fee decisions…
+      </div>
+    );
+  }
+
+  // All already decided — show compact confirmation, no re-entry form
+  if (allSatisfied && charges.length > 0) {
+    return (
+      <div
+        className={
+          compact
+            ? "rounded-lg border border-emerald-200 bg-emerald-50/80 p-3 space-y-1"
+            : "rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 space-y-2"
+        }
+      >
+        <p className="text-sm font-medium text-emerald-900 flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4" />
+          {title} — already recorded
+        </p>
+        <ul className="text-xs text-emerald-900/90 space-y-1">
+          {charges.map((c) => (
+            <li key={String(c.charge_type)} className="flex justify-between gap-2">
+              <span>{LABELS[String(c.charge_type).toUpperCase()] || c.charge_type}</span>
+              <span className="font-medium">
+                {String(c.policy || "").replace(/_/g, " ")}
+                {Number(c.amount_paid || 0) > 0
+                  ? ` · paid ${currencySymbol} ${Number(c.amount_paid).toLocaleString()}`
+                  : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {description ? (
+          <p className="text-[11px] text-emerald-800/80">{description}</p>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div className={compact ? "space-y-3" : "space-y-4"}>
-      {(title || description) && (
-        <div>
-          {title ? (
-            <h4 className="font-semibold text-sm text-slate-900">
-              {title}
-              {required ? (
-                <span className="text-red-600 font-bold"> *</span>
-              ) : null}
-            </h4>
-          ) : null}
-          {description ? (
-            <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
-          ) : null}
-          {required && !allSatisfied && (
-            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 mt-2">
-              Required: choose Not applicable, Waived, Discounted, or Full — and mark paid if money is due — before you can continue.
-            </p>
-          )}
-        </div>
-      )}
+    <div
+      className={
+        compact
+          ? "rounded-lg border bg-slate-50 p-3 space-y-3"
+          : "rounded-xl border bg-slate-50 p-4 space-y-3"
+      }
+    >
+      <div>
+        <p className="text-sm font-medium">{title}</p>
+        {description ? (
+          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+        ) : null}
+        {required && !allSatisfied ? (
+          <p className="text-xs text-amber-700 mt-1">
+            Choose Not applicable, Waived, Discounted, or Full (mark paid if due).
+          </p>
+        ) : null}
+      </div>
 
       <div className="space-y-3">
         {types.map((ctype) => {
-          const c = charges.find(
+          let c = charges.find(
             (x) => String(x.charge_type).toUpperCase() === ctype
           );
           if (!c) {
-            return (
-              <p key={ctype} className="text-sm text-muted-foreground">
-                {LABELS[ctype]} not created yet — reopen this step.
-              </p>
-            );
+            c = {
+              charge_type: ctype,
+              policy: "",
+              amount_due: 0,
+              amount_paid: 0,
+              decision_made: false,
+            };
           }
-          const satisfied = !!c.is_satisfied;
+          const satisfied = isChargeSatisfied(c);
           return (
-            <div
-              key={ctype}
-              className={`rounded-lg border p-3 space-y-2 ${
-                satisfied
-                  ? "bg-emerald-50/80 border-emerald-200"
-                  : "bg-amber-50/40 border-amber-200"
-              }`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-medium text-sm">
-                  {LABELS[ctype]}
-                  {required ? <span className="text-red-600"> *</span> : null}
+            <div key={ctype} className="space-y-2 rounded-lg border bg-white p-3">
+              <div className="flex flex-wrap items-center gap-2 justify-between">
+                <span className="text-sm font-medium">
+                  {LABELS[ctype] || ctype}
+                  {satisfied ? (
+                    <span className="ml-2 text-xs text-emerald-700">✓ Done</span>
+                  ) : null}
                 </span>
-                <span
-                  className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                    satisfied
-                      ? "bg-emerald-100 text-emerald-800"
-                      : "bg-amber-100 text-amber-900"
-                  }`}
-                >
-                  {satisfied
-                    ? "Decided ✓"
-                    : c.decision_made
-                      ? "Outstanding payment"
-                      : "Not decided yet"}
-                </span>
-              </div>
-
-              <div className="flex flex-wrap gap-2 items-center">
                 <Select
-                  value={c.decision_made ? c.policy : undefined}
-                  disabled={saving === ctype}
-                  onValueChange={(v) =>
-                    updateCharge(ctype, {
-                      policy: v,
-                      waiver_reason:
-                        v === "WAIVED" || v === "DISCOUNTED"
-                          ? c.waiver_reason || "Staff decision"
-                          : "",
-                    })
-                  }
+                  value={c.policy || undefined}
+                  onValueChange={(policy) => {
+                    void updateCharge(ctype, {
+                      policy,
+                      decision_made: true,
+                      ...(policy === "WAIVED" || policy === "NOT_APPLICABLE"
+                        ? { amount_due: 0, amount_paid: 0 }
+                        : {}),
+                    });
+                  }}
                 >
                   <SelectTrigger className="h-9 w-[200px] bg-white">
                     <SelectValue placeholder="Select decision…" />
@@ -216,16 +273,14 @@ export default function ApplicationChargePanel({
                     <SelectItem value="WAIVED">Waived</SelectItem>
                   </SelectContent>
                 </Select>
-                <span className="text-sm font-mono">
-                  List {currencySymbol}{" "}
-                  {Number(c.list_amount || 0).toLocaleString()}
-                  {" · "}
-                  Due {currencySymbol}{" "}
-                  {Number(c.amount_due || 0).toLocaleString()}
-                  {Number(c.amount_paid) > 0
-                    ? ` · Paid ${Number(c.amount_paid).toLocaleString()}`
-                    : ""}
-                </span>
+              </div>
+              <div className="text-xs text-muted-foreground font-mono">
+                List {currencySymbol} {Number(c.list_amount || 0).toLocaleString()}
+                {" · "}
+                Due {currencySymbol} {Number(c.amount_due || 0).toLocaleString()}
+                {Number(c.amount_paid) > 0
+                  ? ` · Paid ${Number(c.amount_paid).toLocaleString()}`
+                  : ""}
               </div>
 
               {(c.policy === "FULL" || c.policy === "DISCOUNTED") &&
@@ -251,9 +306,10 @@ export default function ApplicationChargePanel({
                           `stage-pay-${applicationId}-${ctype}`
                         ) as HTMLInputElement | null;
                         const amt = Number(el?.value || c.amount_due || 0);
-                        updateCharge(ctype, {
+                        void updateCharge(ctype, {
                           amount_paid: amt,
                           policy: c.policy,
+                          decision_made: true,
                         });
                       }}
                     >
