@@ -1483,6 +1483,21 @@ class ClearancePrepareView(APIView):
             return Response({"detail": "Student not found"}, status=404)
         year = request.query_params.get("academic_year")
         term = request.query_params.get("term")
+        structure_id = request.query_params.get("structure_id") or request.data.get("structure_id")
+        if structure_id:
+            from apps.finance.models import FeeStructure
+            fs = FeeStructure.objects.filter(id=structure_id, school_id=student.school_id).first()
+            if fs:
+                student.fee_structure = fs
+                student.save(update_fields=["fee_structure"])
+                # force re-link assignment on next ensure
+                try:
+                    fa = getattr(student, "fee_assignment", None)
+                    if fa and fa.fee_structure_id != fs.id:
+                        fa.fee_structure = fs
+                        fa.save(update_fields=["fee_structure"])
+                except Exception:
+                    pass
         try:
             billing = ensure_student_billing(
                 student, user=request.user, academic_year=year, period_name=term

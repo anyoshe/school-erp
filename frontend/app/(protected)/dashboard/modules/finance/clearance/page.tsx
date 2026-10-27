@@ -64,6 +64,9 @@ export default function FinanceClearancePage() {
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [loadingLines, setLoadingLines] = useState(false);
   const [adjustingLine, setAdjustingLine] = useState<string | null>(null);
+  const [structureCandidates, setStructureCandidates] = useState<any[]>([]);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [pickingStructure, setPickingStructure] = useState(false);
 
   const listQ = useQuery({
     queryKey: ["awaiting-clearance", schoolId],
@@ -94,6 +97,10 @@ export default function FinanceClearancePage() {
     const bal = Number(billing?.balance ?? r?.balance ?? 0);
     const due = Number(billing?.total_due ?? r?.total_due ?? 0);
     setAmount(bal > 0 ? String(bal) : due > 0 ? String(due) : "");
+    const err = billing?.error || null;
+    setBillingError(err);
+    setStructureCandidates(Array.isArray(billing?.candidates) ? billing.candidates : []);
+    if (err) toast.message(String(err));
     setRow({
       ...r,
       ...billing,
@@ -125,7 +132,7 @@ export default function FinanceClearancePage() {
     }
   };
 
-  const openPay = async (r: any) => {
+  const openPay = async (r: any, structureId?: string) => {
     setRow(r);
     setPaymentDate(new Date().toISOString().slice(0, 10));
     setMethod("CASH");
@@ -135,13 +142,42 @@ export default function FinanceClearancePage() {
     setInvoiceId("");
     setInvoiceLines([]);
     setAllocations({});
+    setBillingError(null);
+    setStructureCandidates([]);
     setPayOpen(true);
     setLoadingLines(true);
     try {
       const res = await api.get(`/finance/awaiting-clearance/${r.id}/prepare/`, {
         headers,
+        params: structureId ? { structure_id: structureId } : undefined,
       });
       applyBilling(res.data, r);
+      if (!res.data?.structure && !(res.data?.lines || []).length) {
+        // Fallback: load all school structures for manual pick
+        try {
+          const sres = await api.get("/finance/structures/", {
+            headers,
+            params: r.grade_id ? { grade_level: r.grade_id } : undefined,
+          });
+          const list = Array.isArray(sres.data)
+            ? sres.data
+            : sres.data?.results || [];
+          if (list.length) {
+            setStructureCandidates(
+              list.map((s: any) => ({
+                id: String(s.id),
+                name: s.name,
+                academic_year: s.academic_year,
+                period_name: s.period_name,
+                grade: s.grade_level?.name || s.grade_level_name || r.grade,
+                is_active: s.is_active !== false,
+              }))
+            );
+          }
+        } catch {
+          /* ignore */
+        }
+      }
     } catch (e: any) {
       toast.error(
         e?.response?.data?.detail || "Could not prepare billing for this student"
@@ -149,6 +185,17 @@ export default function FinanceClearancePage() {
       setAmount(r.balance > 0 ? String(r.balance) : "");
     } finally {
       setLoadingLines(false);
+    }
+  };
+
+  const assignStructure = async (structureId: string) => {
+    if (!row?.id) return;
+    setPickingStructure(true);
+    try {
+      await openPay(row, structureId);
+      toast.success("Fee structure applied");
+    } finally {
+      setPickingStructure(false);
     }
   };
 
@@ -429,6 +476,40 @@ export default function FinanceClearancePage() {
 
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        {(billingError || (!row?.structure && structureCandidates.length > 0)) && (
+          <div className="mx-4 mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm space-y-2">
+            <p className="font-medium text-amber-900">
+              {billingError || "Select the fee structure for this learner"}
+            </p>
+            <p className="text-xs text-amber-800">
+              Grade: {row?.grade || "—"} · Term/year from enrollment will be used when available.
+            </p>
+            <div className="max-h-40 overflow-y-auto space-y-1">
+              {structureCandidates.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  disabled={pickingStructure}
+                  onClick={() => void assignStructure(String(s.id))}
+                  className="w-full text-left rounded-md border bg-white px-3 py-2 text-xs hover:border-primary hover:bg-primary/5"
+                >
+                  <span className="font-semibold">{s.name}</span>
+                  <span className="text-muted-foreground">
+                    {" · "}
+                    {s.grade || "?"} · {s.period_name} · {s.academic_year}
+                    {s.is_active === false ? " (inactive)" : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {!structureCandidates.length && (
+              <p className="text-xs text-amber-900">
+                No structures found. Create one under Finance → Fee structures for this grade.
+              </p>
+            )}
+          </div>
+        )}
+
           <DialogHeader>
             <DialogTitle>
               Clearance — {row?.admission_number} {row?.full_name}
