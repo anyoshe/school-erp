@@ -430,9 +430,23 @@ class InvoiceLine(models.Model):
     description = models.CharField(max_length=200)
 
     amount = models.DecimalField(max_digits=12, decimal_places=2)
+    # Clearance adjustments (scholarship / parent status)
+    original_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, null=True, blank=True,
+        help_text="Billed amount before waive/discount",
+    )
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    is_waived = models.BooleanField(default=False)
+    adjustment_reason = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return f"{self.invoice.invoice_number} - {self.description}"
+
+    def billed_base(self):
+        from decimal import Decimal
+        if self.original_amount is not None:
+            return Decimal(str(self.original_amount))
+        return Decimal(str(self.amount or 0))
 
 class Payment(models.Model):
     """

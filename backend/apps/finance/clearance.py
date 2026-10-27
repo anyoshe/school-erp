@@ -245,3 +245,58 @@ def add_extra_fee_line(student, description, amount, user=None, fee_item_id=None
     inv.save()  # refreshes balance
 
     return line, inv, ensure_student_billing(student, user=user)
+
+
+
+def recalculate_invoice_totals(invoice):
+    """Set amount_due from sum of line amounts; preserve amount_paid."""
+    from decimal import Decimal
+    from django.db.models import Sum
+    from .models import InvoiceLine
+
+    total = (
+        InvoiceLine.objects.filter(invoice=invoice).aggregate(s=Sum("amount"))["s"]
+        or Decimal("0")
+    )
+    invoice.amount_due = Decimal(str(total))
+    paid = Decimal(str(invoice.amount_paid or 0))
+    invoice.is_paid = paid >= Decimal(str(total)) and Decimal(str(total)) > 0
+    invoice.save(update_fields=["amount_due", "is_paid"])
+    return invoice
+
+
+def adjust_invoice_line(line, *, waived=None, discount=None, reason=""):
+    """
+    Waive (amount→0) or discount a single invoice line for clearance/scholarships.
+    """
+    from decimal import Decimal
+
+    base = line.billed_base()
+    if line.original_amount is None:
+        line.original_amount = base
+
+    reason = (reason or "").strip()[:255]
+    if waived is True:
+        line.is_waived = True
+        line.discount_amount = Decimal("0")
+        line.amount = Decimal("0")
+    elif waived is False and discount is None:
+        # restore full
+        line.is_waived = False
+        line.discount_amount = Decimal("0")
+        line.amount = Decimal(str(line.original_amount))
+    elif discount is not None:
+        d = Decimal(str(discount))
+        if d < 0:
+            d = Decimal("0")
+        if d > base:
+            d = base
+        line.is_waived = False
+        line.discount_amount = d
+        line.amount = max(Decimal("0"), base - d)
+
+    if reason:
+        line.adjustment_reason = reason
+    line.save()
+    recalculate_invoice_totals(line.invoice)
+    return line

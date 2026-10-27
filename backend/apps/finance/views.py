@@ -1382,55 +1382,59 @@ class AwaitingClearanceView(APIView):
     permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
 
     def get(self, request):
+        """Light list — prepare billing only when cashier opens a student."""
         from apps.students.models import Student
-        from apps.finance.clearance import ensure_student_billing
+        from apps.finance.models import Invoice
+        from django.db.models import Sum, DecimalField, Value
+        from django.db.models.functions import Coalesce
 
         school_ids = _resolve_school_ids(request)
-        qs = Student.objects.filter(
-            school_id__in=school_ids,
-            status="PENDING_CLEARANCE",
-        ).select_related("school", "current_class", "fee_structure").order_by("-admission_date")
-
-        year = request.query_params.get("academic_year")
-        term = request.query_params.get("term")
+        qs = list(
+            Student.objects.filter(
+                school_id__in=school_ids,
+                status="PENDING_CLEARANCE",
+            )
+            .select_related("current_class")
+            .order_by("-admission_date")[:200]
+        )
+        ids = [s.id for s in qs]
+        inv_map = {}
+        if ids:
+            for row in (
+                Invoice.objects.filter(student_id__in=ids)
+                .values("student_id")
+                .annotate(
+                    total_due=Coalesce(Sum("amount_due"), Value(0), output_field=DecimalField()),
+                    total_paid=Coalesce(Sum("amount_paid"), Value(0), output_field=DecimalField()),
+                )
+            ):
+                inv_map[str(row["student_id"])] = row
 
         rows = []
         for s in qs:
-            try:
-                billing = ensure_student_billing(
-                    s, user=request.user, academic_year=year, period_name=term
-                )
-            except Exception as e:
-                billing = {
-                    "structure": None,
-                    "lines": [],
-                    "invoices": [],
-                    "total_due": 0,
-                    "total_paid": 0,
-                    "balance": 0,
-                    "error": str(e),
-                }
+            agg = inv_map.get(str(s.id)) or {}
+            due = float(agg.get("total_due") or 0)
+            paid = float(agg.get("total_paid") or 0)
             rows.append({
                 "id": str(s.id),
                 "admission_number": s.admission_number,
-                "full_name": s.full_name if hasattr(s, "full_name") else f"{s.first_name} {s.last_name}",
+                "full_name": getattr(s, "full_name", None) or f"{s.first_name} {s.last_name}",
                 "first_name": s.first_name,
                 "last_name": s.last_name,
                 "grade": getattr(getattr(s, "current_class", None), "name", None),
                 "grade_id": str(s.current_class_id) if s.current_class_id else None,
                 "admission_date": s.admission_date.isoformat() if s.admission_date else None,
-                "fee_structure_id": (
-                    billing.get("structure") or {}
-                ).get("id") or (str(s.fee_structure_id) if s.fee_structure_id else None),
-                "structure": billing.get("structure"),
-                "lines": billing.get("lines") or [],
-                "invoices": billing.get("invoices") or [],
-                "total_due": billing.get("total_due") or 0,
-                "total_paid": billing.get("total_paid") or 0,
-                "balance": billing.get("balance") or 0,
-                "matched_year": billing.get("matched_year"),
-                "matched_term": billing.get("matched_term"),
-                "billing_error": billing.get("error"),
+                "fee_structure_id": str(s.fee_structure_id) if getattr(s, "fee_structure_id", None) else None,
+                "structure": None,
+                "lines": [],
+                "invoices": [],
+                "total_due": due,
+                "total_paid": paid,
+                "balance": max(0.0, due - paid),
+                "matched_year": None,
+                "matched_term": None,
+                "billing_error": None,
+                "billing_ready": bool(due or paid),
             })
         return Response({"count": len(rows), "results": rows})
 
@@ -1460,5 +1464,91 @@ class ClearanceAddItemView(APIView):
         return Response({
             "line_id": str(line.id),
             "invoice_id": str(inv.id),
+            "billing": billing,
+        })
+
+
+
+class ClearancePrepareView(APIView):
+    """Run ensure_student_billing for one student when cashier opens the pay dialog."""
+    permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
+
+    def get(self, request, student_id):
+        from apps.students.models import Student
+        from apps.finance.clearance import ensure_student_billing
+
+        school_ids = _resolve_school_ids(request)
+        student = Student.objects.filter(id=student_id, school_id__in=school_ids).first()
+        if not student:
+            return Response({"detail": "Student not found"}, status=404)
+        year = request.query_params.get("academic_year")
+        term = request.query_params.get("term")
+        try:
+            billing = ensure_student_billing(
+                student, user=request.user, academic_year=year, period_name=term
+            )
+        except Exception as e:
+            return Response({"detail": str(e)}, status=400)
+        return Response(billing)
+
+
+class ClearanceAdjustLineView(APIView):
+    """Waive or discount a single invoice line during clearance."""
+    permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
+
+    def patch(self, request, line_id):
+        from apps.finance.models import InvoiceLine
+        from apps.finance.clearance import adjust_invoice_line, ensure_student_billing
+
+        school_ids = _resolve_school_ids(request)
+        line = (
+            InvoiceLine.objects.select_related("invoice__student", "invoice__school")
+            .filter(id=line_id)
+            .first()
+        )
+        if not line:
+            return Response({"detail": "Line not found"}, status=404)
+        inv = line.invoice
+        sid = getattr(inv, "school_id", None) or getattr(getattr(inv, "student", None), "school_id", None)
+        if sid and sid not in school_ids:
+            return Response({"detail": "Forbidden"}, status=403)
+
+        waived = request.data.get("waived")
+        discount = request.data.get("discount")
+        reason = request.data.get("reason") or request.data.get("adjustment_reason") or ""
+
+        if waived is not None and isinstance(waived, str):
+            waived = waived.lower() in ("1", "true", "yes")
+
+        try:
+            adjust_invoice_line(
+                line,
+                waived=waived,
+                discount=discount,
+                reason=reason,
+            )
+        except Exception as e:
+            return Response({"detail": str(e)}, status=400)
+
+        line.refresh_from_db()
+        inv.refresh_from_db()
+        student = inv.student
+        billing = ensure_student_billing(student, user=request.user) if student else {}
+        return Response({
+            "line": {
+                "id": str(line.id),
+                "description": line.description,
+                "amount": float(line.amount or 0),
+                "original_amount": float(line.original_amount or line.amount or 0),
+                "discount_amount": float(line.discount_amount or 0),
+                "is_waived": bool(line.is_waived),
+                "adjustment_reason": line.adjustment_reason or "",
+            },
+            "invoice": {
+                "id": str(inv.id),
+                "amount_due": float(inv.amount_due or 0),
+                "amount_paid": float(inv.amount_paid or 0),
+                "balance": float(getattr(inv, "balance", 0) or max(0, float(inv.amount_due or 0) - float(inv.amount_paid or 0))),
+            },
             "billing": billing,
         })

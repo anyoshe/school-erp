@@ -51,10 +51,19 @@ export default function FinanceClearancePage() {
   const [extraAmount, setExtraAmount] = useState("");
   const [addingExtra, setAddingExtra] = useState(false);
   const [invoiceLines, setInvoiceLines] = useState<
-    Array<{ id: string; description: string; category?: string; amount: number }>
+    Array<{
+      id: string;
+      description: string;
+      category?: string;
+      amount: number;
+      original_amount?: number;
+      discount_amount?: number;
+      is_waived?: boolean;
+    }>
   >([]);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [loadingLines, setLoadingLines] = useState(false);
+  const [adjustingLine, setAdjustingLine] = useState<string | null>(null);
 
   const listQ = useQuery({
     queryKey: ["awaiting-clearance", schoolId],
@@ -65,6 +74,39 @@ export default function FinanceClearancePage() {
     },
   });
 
+  const mapLines = (lines: any[]) =>
+    (lines || []).map((ln: any) => ({
+      id: String(ln.id),
+      description: ln.description || ln.item_name || "Fee item",
+      category: ln.category_name || ln.category || "",
+      amount: Number(ln.amount || 0),
+      original_amount: Number(ln.original_amount ?? ln.amount ?? 0),
+      discount_amount: Number(ln.discount_amount || 0),
+      is_waived: Boolean(ln.is_waived),
+    }));
+
+  const applyBilling = (billing: any, r: any) => {
+    const invs = billing?.invoices || [];
+    const iid = invs[0] ? String(invs[0].id) : "";
+    setInvoiceId(iid);
+    setInvoiceLines(mapLines(billing?.lines || []));
+    setAllocations({});
+    const bal = Number(billing?.balance ?? r?.balance ?? 0);
+    const due = Number(billing?.total_due ?? r?.total_due ?? 0);
+    setAmount(bal > 0 ? String(bal) : due > 0 ? String(due) : "");
+    setRow({
+      ...r,
+      ...billing,
+      invoices: invs,
+      lines: billing?.lines || [],
+      total_due: due,
+      balance: bal,
+      structure: billing?.structure || r?.structure,
+      matched_term: billing?.matched_term,
+      matched_year: billing?.matched_year,
+    });
+  };
+
   const loadInvoiceLines = async (id: string) => {
     if (!id) {
       setInvoiceLines([]);
@@ -74,15 +116,7 @@ export default function FinanceClearancePage() {
     setLoadingLines(true);
     try {
       const res = await api.get(`/finance/invoices/${id}/`, { headers });
-      const lines = Array.isArray(res.data?.lines) ? res.data.lines : [];
-      setInvoiceLines(
-        lines.map((ln: any) => ({
-          id: String(ln.id),
-          description: ln.description || "Fee item",
-          category: ln.category_name || ln.category || "",
-          amount: Number(ln.amount || 0),
-        }))
-      );
+      setInvoiceLines(mapLines(Array.isArray(res.data?.lines) ? res.data.lines : []));
       setAllocations({});
     } catch {
       setInvoiceLines([]);
@@ -91,19 +125,72 @@ export default function FinanceClearancePage() {
     }
   };
 
-  const openPay = (r: any) => {
+  const openPay = async (r: any) => {
     setRow(r);
-    setAmount(r.balance > 0 ? String(r.balance) : r.total_due > 0 ? String(r.total_due) : "");
     setPaymentDate(new Date().toISOString().slice(0, 10));
     setMethod("CASH");
     setReference("");
-    const invs = r.invoices || [];
-    const iid = invs[0] ? String(invs[0].id) : "";
-    setInvoiceId(iid);
     setExtraName("");
     setExtraAmount("");
+    setInvoiceId("");
+    setInvoiceLines([]);
+    setAllocations({});
     setPayOpen(true);
-    void loadInvoiceLines(iid);
+    setLoadingLines(true);
+    try {
+      const res = await api.get(`/finance/awaiting-clearance/${r.id}/prepare/`, {
+        headers,
+      });
+      applyBilling(res.data, r);
+    } catch (e: any) {
+      toast.error(
+        e?.response?.data?.detail || "Could not prepare billing for this student"
+      );
+      setAmount(r.balance > 0 ? String(r.balance) : "");
+    } finally {
+      setLoadingLines(false);
+    }
+  };
+
+  const adjustLine = async (
+    lineId: string,
+    payload: { waived?: boolean; discount?: number; reason?: string }
+  ) => {
+    setAdjustingLine(lineId);
+    try {
+      const res = await api.patch(
+        `/finance/clearance/lines/${lineId}/`,
+        payload,
+        { headers }
+      );
+      if (res.data?.billing) {
+        applyBilling(res.data.billing, row || {});
+      } else if (res.data?.line) {
+        setInvoiceLines((prev) =>
+          prev.map((ln) =>
+            ln.id === lineId
+              ? {
+                  ...ln,
+                  amount: Number(res.data.line.amount),
+                  original_amount: Number(res.data.line.original_amount),
+                  discount_amount: Number(res.data.line.discount_amount),
+                  is_waived: Boolean(res.data.line.is_waived),
+                }
+              : ln
+          )
+        );
+        if (res.data?.invoice) {
+          const bal = Number(res.data.invoice.balance || 0);
+          setAmount(bal > 0 ? String(bal) : "0");
+        }
+      }
+      toast.success(payload.waived ? "Line waived" : "Line updated");
+      qc.invalidateQueries({ queryKey: ["awaiting-clearance"] });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Adjustment failed");
+    } finally {
+      setAdjustingLine(null);
+    }
   };
 
   const allocTotal = Object.values(allocations).reduce(
@@ -287,7 +374,7 @@ export default function FinanceClearancePage() {
         </CardHeader>
         <CardContent className="p-0">
           {listQ.isLoading ? (
-            <p className="p-6 text-sm text-muted-foreground">Loading structures & balances…</p>
+            <p className="p-6 text-sm text-muted-foreground">Loading clearance queue…</p>
           ) : rows.length === 0 ? (
             <p className="p-8 text-center text-sm text-muted-foreground">No one awaiting clearance.</p>
           ) : (
@@ -439,24 +526,74 @@ export default function FinanceClearancePage() {
                 </div>
               </div>
               {loadingLines ? (
-                <p className="text-xs text-muted-foreground">Loading items…</p>
+                <p className="text-xs text-muted-foreground">Preparing fee lines…</p>
               ) : invoiceLines.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No line items.</p>
               ) : (
-                <ul className="space-y-1">
+                <ul className="space-y-3">
                   {invoiceLines.map((ln) => (
-                    <li key={ln.id} className="grid grid-cols-[1fr_90px] gap-2 items-center text-sm">
-                      <span className="truncate">{ln.description}</span>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        className="h-8"
-                        value={allocations[ln.id] ?? ""}
-                        onChange={(e) =>
-                          setAllocations((prev) => ({ ...prev, [ln.id]: e.target.value }))
-                        }
-                      />
+                    <li key={ln.id} className="rounded-lg border bg-white p-2 space-y-1.5">
+                      <div className="flex justify-between gap-2 text-sm">
+                        <span className="font-medium truncate">{ln.description}</span>
+                        <span className="tabular-nums shrink-0 text-right">
+                          {ln.is_waived ? (
+                            <span className="text-emerald-700">Waived</span>
+                          ) : (
+                            Number(ln.amount).toLocaleString()
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2 items-center">
+                        <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!ln.is_waived}
+                            disabled={adjustingLine === ln.id}
+                            onChange={(e) =>
+                              void adjustLine(ln.id, {
+                                waived: e.target.checked,
+                                reason: e.target.checked ? "Waived at clearance" : "",
+                              })
+                            }
+                          />
+                          Waive
+                        </label>
+                        <div className="flex items-center gap-1 text-xs">
+                          <span className="text-muted-foreground">Discount</span>
+                          <Input
+                            className="h-7 w-24"
+                            type="number"
+                            min={0}
+                            disabled={!!ln.is_waived || adjustingLine === ln.id}
+                            defaultValue={ln.discount_amount || ""}
+                            key={`${ln.id}-${ln.discount_amount}-${ln.is_waived}`}
+                            onBlur={(e) => {
+                              const v = e.target.value;
+                              if (v === "" || v == null) return;
+                              const d = Number(v);
+                              if (Number.isNaN(d)) return;
+                              if (d === Number(ln.discount_amount || 0) && !ln.is_waived) return;
+                              void adjustLine(ln.id, {
+                                waived: false,
+                                discount: d,
+                                reason: d > 0 ? "Discount at clearance" : "",
+                              });
+                            }}
+                          />
+                        </div>
+                        <Input
+                          className="h-7 w-24 ml-auto"
+                          type="number"
+                          placeholder="Pay"
+                          value={allocations[ln.id] ?? ""}
+                          onChange={(e) =>
+                            setAllocations((prev) => ({
+                              ...prev,
+                              [ln.id]: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
                     </li>
                   ))}
                 </ul>
