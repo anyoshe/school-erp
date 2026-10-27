@@ -268,21 +268,7 @@
 #         cleaned_stream = str(wd.get('stream', '')).strip()[:100]
 
 #         
-        # Prefer class selected on enrollment form when it differs / is set
-        enroll_class = self.class_applied
-        try:
-            cid = wd.get("current_class") or wd.get("class_applied")
-            if cid:
-                from apps.academics.models import GradeLevel
-                gl = GradeLevel.objects.filter(pk=cid).first()
-                if gl is None:
-                    gl = GradeLevel.objects.filter(name__iexact=str(cid)).first()
-                if gl is not None:
-                    enroll_class = gl
-        except Exception:
-            pass
-
-student = Student.objects.create(
+#         student = Student.objects.create(
 #             school=self.school,
 #             admission_number=self.admission_number,
 #             learner_id=wd.get('learner_id') or self.learner_id,                    # ← direct copy, no rename
@@ -741,6 +727,20 @@ class Application(models.Model):
             except Exception:
                 dob = self.date_of_birth
 
+        # Prefer class selected on enrollment form when provided
+        enroll_class = self.class_applied
+        try:
+            cid = wd.get("current_class") or wd.get("class_applied")
+            if cid:
+                from apps.academics.models import GradeLevel
+                gl = GradeLevel.objects.filter(pk=cid).first()
+                if gl is None:
+                    gl = GradeLevel.objects.filter(name__iexact=str(cid)).first()
+                if gl is not None:
+                    enroll_class = gl
+        except Exception:
+            pass
+
         student = Student.objects.create(
             school=self.school,
             admission_number=self.admission_number,
@@ -770,7 +770,7 @@ class Application(models.Model):
             emergency_phone=self.emergency_contact_phone or wd.get('emergency_phone'),
             emergency_relation=self.emergency_relationship or wd.get('emergency_relation'),
 
-            current_class=self.class_applied,
+            current_class=enroll_class,
             boarding_status=wd.get('boarding_status', 'DAY'),
 
             # Fields mainly from wizard (with fallback)
