@@ -1,5 +1,6 @@
-import { resolveMediaUrl } from "@/utils/media";
 "use client";
+
+import { resolveMediaUrl } from "@/utils/media";
 
 import { useState, useEffect, ChangeEvent } from "react";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
