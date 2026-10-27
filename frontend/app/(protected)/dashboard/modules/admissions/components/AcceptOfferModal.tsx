@@ -23,7 +23,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   applicationId: string;
   applicationData: Application;
-  onAccepted?: () => void;
+  onAccepted?: (data?: any) => void;
 }
 
 export default function AcceptOfferModal({
@@ -47,14 +47,14 @@ export default function AcceptOfferModal({
     setLoading(true);
 
     try {
-      await api.patch(`/admissions/applications/${applicationId}/`, {
+      const res = await api.patch(`/admissions/applications/${applicationId}/`, {
         status: "ACCEPTED",
         acceptance_notes: acceptanceNotes,
         accepted_at: new Date().toISOString(),
       });
 
       toast.success("Offer marked as accepted!");
-      onAccepted?.();
+      onAccepted?.(res.data);
       onOpenChange(false);
     } catch (err: any) {
       toast.error(err.response?.data?.detail || "Failed to accept offer");

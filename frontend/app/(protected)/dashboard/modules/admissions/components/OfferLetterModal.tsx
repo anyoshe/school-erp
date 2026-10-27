@@ -26,7 +26,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   applicationId: string;
   applicationData: Application;
-  onIssued?: () => void;
+  onIssued?: (data?: any) => void;
 }
 
 export default function OfferLetterModal({
@@ -471,9 +471,11 @@ export default function OfferLetterModal({
   const handleFinalize = async () => {
     setIsUpdating(true);
     try {
-      await api.patch(`/admissions/applications/${applicationId}/`, { status: "OFFERED" });
-      onIssued?.();
-      toast.success("Application officially marked as Offered.");
+      const res = await api.patch(`/admissions/applications/${applicationId}/`, {
+        status: "OFFERED",
+      });
+      toast.success("Application marked as Offered.");
+      onIssued?.(res.data);
       onOpenChange(false);
     } catch (err) {
       toast.error("Failed to update status");

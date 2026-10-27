@@ -803,10 +803,16 @@ export default function EnrollmentWizardModal({
   const validateStep = (step: number) => {
     switch (step) {
       case 1: {
-        // Identity + placement (photo optional if already on application)
+        // Identity + placement + mandatory photo / birth document
         const hasIdDoc =
           Boolean(String(formData.birth_certificate_number || "").trim()) ||
           Boolean(String(formData.passport_number || "").trim());
+        const hasPhoto =
+          Boolean(formData.profile_photo) || Boolean(applicationData.photo);
+        const hasBirthFile =
+          Boolean(formData.birth_certificate_file) ||
+          Boolean((applicationData as any).birth_certificate) ||
+          Boolean(String(formData.birth_certificate_number || "").trim());
         const termOk = Boolean(String(formData.enrollment_term || "").trim());
         const yearOk = Boolean(String(formData.enrollment_academic_year || "").trim());
         return Boolean(
@@ -816,6 +822,8 @@ export default function EnrollmentWizardModal({
             formData.gender &&
             formData.nationality &&
             hasIdDoc &&
+            hasPhoto &&
+            hasBirthFile &&
             formData.current_class &&
             formData.section?.trim() &&
             termOk &&
@@ -1021,6 +1029,51 @@ export default function EnrollmentWizardModal({
                 )}
               </div>
             ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4">
+            <div>
+              <Label>Student photo *</Label>
+              <p className="text-xs text-muted-foreground mb-1">
+                {applicationData.photo
+                  ? "Photo on file — upload only to replace"
+                  : "Required: passport-style photo"}
+              </p>
+              {applicationData.photo && !formData.profile_photo ? (
+                <p className="text-xs text-emerald-700 mb-1">✓ Existing photo will be kept</p>
+              ) : null}
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={(e) =>
+                  updateForm("profile_photo", e.target.files?.[0] ?? null)
+                }
+              />
+              {formData.profile_photo ? (
+                <p className="text-xs mt-1 text-slate-600">
+                  Selected: {(formData.profile_photo as File).name}
+                </p>
+              ) : null}
+            </div>
+            <div>
+              <Label>Birth certificate scan *</Label>
+              <p className="text-xs text-muted-foreground mb-1">
+                Upload PDF/image if not already on the application (number alone is accepted if
+                already provided above)
+              </p>
+              <Input
+                type="file"
+                accept=".pdf,image/*"
+                onChange={(e) =>
+                  updateForm("birth_certificate_file", e.target.files?.[0] ?? null)
+                }
+              />
+              {formData.birth_certificate_file ? (
+                <p className="text-xs mt-1 text-slate-600">
+                  Selected: {(formData.birth_certificate_file as File).name}
+                </p>
+              ) : null}
+            </div>
           </div>
 
           <ClassLogisticsStep
@@ -1323,17 +1376,9 @@ export default function EnrollmentWizardModal({
               </Button>
             ) : (
               <>
-              {!validateStep(6) && (
+              {!validateStep(currentStep) && (
                 <p className="text-xs text-amber-700 max-w-xs text-right">
-                  To enable Confirm & Enroll: select a fee structure
-                  {paymentPlans.length > 0 && !formData.payment_plan ? ", choose a payment plan" : ""}
-                  {!formData.terms_accepted ? ", accept terms" : ""}
-                  {!formData.summary_confirmed ? ", confirm summary" : ""}
-                  {Number(formData.initial_payment_amount || 0) > 0 &&
-                  !(String(formData.initial_payment_reference || "").trim().length > 2 || formData.initial_payment_proof)
-                    ? ", add payment reference or proof (or set initial payment to 0)"
-                    : ""}
-                  .
+                  Accept the enrollment confirmation to enable Confirm &amp; Enroll.
                 </p>
               )}
               <Button

@@ -588,7 +588,8 @@ Admissions Team
         applicationId={applicationId}
         applicationData={applicationData}
         onCompleted={() => {
-          onUpdated?.();
+          setOptimisticStatus("INTERVIEW_COMPLETED");
+          void onUpdated?.({ status: "INTERVIEW_COMPLETED" });
           toast.success("Interview marked as completed!");
         }}
       />
@@ -599,10 +600,10 @@ Admissions Team
         applicationId={applicationId}
         applicationData={applicationData}
         onIssued={() => {
-          setTimeout(() => {
-            onUpdated?.();
-            toast.success("Admission offer letter issued! Status updated to Offered.");
-          }, 800);
+          setOptimisticStatus("OFFERED");
+          setIsOfferLetterOpen(false);
+          void onUpdated?.({ status: "OFFERED" });
+          toast.success("Offer issued — mark as accepted when the family confirms.");
         }}
       />
 
@@ -612,8 +613,10 @@ Admissions Team
         applicationId={applicationId}
         applicationData={applicationData}
         onAccepted={() => {
-          onUpdated?.();
-          toast.success("Offer accepted successfully!");
+          setOptimisticStatus("ACCEPTED");
+          setIsAcceptOfferOpen(false);
+          void onUpdated?.({ status: "ACCEPTED" });
+          toast.success("Offer accepted — you can finalize enrollment.");
         }}
       />
 
