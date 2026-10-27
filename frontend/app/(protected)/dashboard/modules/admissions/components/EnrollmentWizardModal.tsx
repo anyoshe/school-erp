@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import api from "@/utils/api";
 import { cn } from "@/lib/utils";
 import { Application, classAppliedId, classAppliedName } from "@/types/admission";
+import { fa } from "zod/v4/locales";
 
 interface Props {
   open: boolean;
@@ -233,9 +234,8 @@ export default function EnrollmentWizardModal({
 }: Props) {
   const [loading, setLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
-  const totalSteps = 4;
+  const totalSteps = 6;
   const today = format(new Date(), "yyyy-MM-dd");
-  const defaultYear = String(new Date().getFullYear());
 
   const { currentSchool } = useCurrentSchool();
 
@@ -248,113 +248,85 @@ export default function EnrollmentWizardModal({
     return "secondary";
   }, [currentSchool]);
   
-  const buildFormFromApplication = (app: Application): Record<string, any> => {
-    const a = app as any;
-    return {
-      first_name: app.first_name || "",
-      middle_name: app.middle_name || "",
-      last_name: app.last_name || "",
-      preferred_name: app.preferred_name || "",
-      gender: app.gender || "",
-      date_of_birth: app.date_of_birth || "",
-      nationality: app.nationality || "Kenyan",
-      religion: app.religion || "",
-      learner_id: app.learner_id || "",
-      address: a.address || "",
-      region: a.region || "",
-      district: a.district || "",
+  const [formData, setFormData] = useState<Record<string, any>>(() => ({
+    first_name: applicationData.first_name || "",
+    middle_name: applicationData.middle_name || "",
+    last_name: applicationData.last_name || "",
+    preferred_name: applicationData.preferred_name || "",
+    gender: applicationData.gender || "",
+    date_of_birth: applicationData.date_of_birth || "",
+    nationality: applicationData.nationality || "Kenyan",
+    religion: applicationData.religion || "",
+    learner_id: applicationData.learner_id || "",
 
-      birth_certificate_number: a.birth_certificate_number || "",
-      admission_number: "",
-      auto_generate_admission: true,
-      profile_photo: null as File | null,
-      birth_certificate_file: null as File | null,
-      passport_number: a.passport_number || "",
+    birth_certificate_number: (applicationData as any).birth_certificate_number || "",
+    admission_number: "",
+    auto_generate_admission: true,
+    profile_photo: null as File | null,
+    birth_certificate_file: null as File | null,
+    passport_number: "",
 
-      previous_school: app.previous_school || "",
-      previous_grade: a.previous_grade || "",
-      transfer_letter: null,
+    previous_school: applicationData.previous_school || "",
+    previous_grade: "",
+    transfer_letter: null,
 
-      current_class: classAppliedId(app),
-      section: a.section || "Main",
-      pathway: a.pathway || "",
-      track: a.track || "",
-      stream: a.stream || "",
-      house: a.house || "",
-      boarding_status: a.boarding_status || "DAY",
-      dorm_room: a.dorm_room || "",
-      transport_mode: a.transport_mode || "walking",
-      transport_route: a.transport_route || "",
+    current_class: classAppliedId(applicationData),
+    section: "",
+    pathway: "",
+    track: "",
+    stream: "",
+    house: "",
+    boarding_status: "DAY",
+    dorm_room: "",
+    transport_mode: "walking",
+    transport_route: "",
 
-      blood_group: app.blood_group || "",
-      allergies: app.allergies || "",
-      chronic_conditions: app.chronic_conditions || "",
-      disability: app.disability || "",
-      disability_type: a.disability_type || "",
-      special_needs_category: a.special_needs_category || "",
-      vaccination_status: a.vaccination_status || "UNKNOWN",
-      immunization_card: null,
+    blood_group: applicationData.blood_group || "",
+    allergies: applicationData.allergies || "",
+    chronic_conditions: applicationData.chronic_conditions || "",
+    disability: applicationData.disability || "",
+    disability_type: "",
+    special_needs_category: "",
+    vaccination_status: "UNKNOWN",
+    immunization_card: null,
 
-      guardian_name: app.primary_guardian_name || "",
-      guardian_phone: app.primary_guardian_phone || "",
-      guardian_email: app.primary_guardian_email || "",
-      guardian_national_id: app.primary_guardian_id_number || "",
-      guardian_relationship: app.primary_guardian_relationship || "",
-      secondary_guardian_name: a.secondary_guardian_name || "",
-      secondary_guardian_phone: a.secondary_guardian_phone || "",
-      secondary_guardian_email: a.secondary_guardian_email || "",
-      secondary_guardian_national_id: a.secondary_guardian_id_number || "",
-      secondary_guardian_relationship: a.secondary_guardian_relationship || "",
-      emergency_name:
-        app.emergency_contact_name || app.primary_guardian_name || "",
-      emergency_phone:
-        app.emergency_contact_phone || app.primary_guardian_phone || "",
-      emergency_relation:
-        app.emergency_relationship || app.primary_guardian_relationship || "",
+    guardian_name: applicationData.primary_guardian_name || "",
+    guardian_phone: applicationData.primary_guardian_phone || "",
+    guardian_email: applicationData.primary_guardian_email || "",
+    guardian_national_id: applicationData.primary_guardian_id_number || "",
+    guardian_relation: applicationData.primary_guardian_relationship || "Parent",
+    secondary_guardian_name: "",
+    secondary_guardian_phone: "",
+    secondary_guardian_email: "",
+    secondary_guardian_national_id: "",
+    emergency_name:
+      applicationData.emergency_contact_name || applicationData.primary_guardian_name || "",
+    emergency_phone:
+      applicationData.emergency_contact_phone || applicationData.primary_guardian_phone || "",
+    emergency_relation:
+      applicationData.emergency_relationship || applicationData.primary_guardian_relationship || "",
 
-      // Term fees are handled in Finance clearance — not collected here
-      fee_structure_id: "",
-      initial_payment_amount: 0,
-      is_waived: false,
-      waiver_amount: 0,
-      waiver_reason: "",
-      selected_optional_items: [],
-      item_amounts: {} as Record<string, number>,
-      sponsor_name: "",
-      initial_payment_proof: null as File | null,
-      initial_payment_reference: "",
-      payment_plan: "",
-      remaining_payment_due_date: today,
-      enrollment_term: a.enrollment_term || "Term 1",
-      enrollment_academic_year:
-        a.enrollment_academic_year || String(new Date().getFullYear()),
-      terms_accepted: false,
-      summary_confirmed: false,
-    };
-  };
+    fee_structure_id: "",
+    initial_payment_amount: 0,
+    is_waived: false,
+    waiver_amount: 0,
+    waiver_reason: "",
+    selected_optional_items: [],
+    item_amounts: {} as Record<string, number>,
+    sponsor_name: "",
+    initial_payment_proof: null as File | null,
+    initial_payment_reference: "",
+    payment_plan: "",
+    remaining_payment_due_date: today,
+    notes: "",
 
-  const [formData, setFormData] = useState<Record<string, any>>(() =>
-    buildFormFromApplication(applicationData)
-  );
-
-  // Reset wizard when opened for an application (avoids stale step / empty fields)
-  useEffect(() => {
-    if (!open) return;
-    setCurrentStep(1);
-    setFormData(buildFormFromApplication(applicationData));
-    setFeeStructures([]);
-    setPaymentPlans([]);
-    setOptionalItems([]);
-    setFeeError(null);
-    setFeeLoading(false);
-    setChargesLoading(false);
-    setApplicationCharges(
-      Array.isArray((applicationData as any)?.charges)
-        ? (applicationData as any).charges
-        : []
-    );
-  }, [open, applicationId]);
-
+    // ── New final fields ───────────────────────────────
+    admission_date: today,
+    enrollment_term: "",
+    enrollment_academic_year: "",
+    terms_accepted: false,
+    summary_confirmed: false,
+  }));
 
   const [feeStructures, setFeeStructures] = useState<any[]>([]);
   const [feeLoading, setFeeLoading] = useState(false);
@@ -501,10 +473,9 @@ export default function EnrollmentWizardModal({
   };
 
   useEffect(() => {
-    if (!formData.fee_structure_id) return;
-    // No-op while enrollment does not collect term fees
-    return;
-    calculatePayments();
+    if (formData.fee_structure_id) {
+      calculatePayments();
+    }
   }, [
     formData.fee_structure_id,
     formData.payment_plan,
@@ -547,31 +518,99 @@ export default function EnrollmentWizardModal({
   ]);
 
 
-  // Fee structure loading removed — term fees collected in Finance clearance only.
+  useEffect(() => {
+    const classId = classAppliedId(applicationData) || undefined;
 
+    if (!open || !classId) return;
+
+    const asList = (data: any): any[] => {
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data?.results)) return data.results;
+      if (Array.isArray(data?.data)) return data.data;
+      return [];
+    };
+
+    const rank = (s: any) => {
+      const p = String(s.period_name || "").toLowerCase();
+      const m = p.match(/(\d+)/);
+      if (m) return Number(m[1]);
+      if (p.includes("term 1") || p.includes("semester 1")) return 1;
+      return 99;
+    };
+
+    const loadFinanceData = async () => {
+      setFeeLoading(true);
+      setFeeError(null);
+      try {
+        // Fast path: lite list (no nested line items) + payment plans only.
+        // Detail for one structure is loaded by the fee_structure_id effect below.
+        const [structuresRes, plansRes] = await Promise.all([
+          api.get("/finance/structures/", {
+            params: {
+              grade_level: classId,
+              is_active: true,
+            },
+            timeout: 20000,
+          }),
+          api.get("/finance/payment-plans/", { timeout: 15000 }).catch(() => ({ data: [] })),
+        ]);
+
+        let list = asList(structuresRes.data).filter(
+          (s: any) =>
+            !s.grade_level ||
+            String(s.grade_level) === String(classId) ||
+            String(s.grade_level?.id) === String(classId)
+        );
+
+        list = [...list].sort(
+          (a, b) => rank(a) - rank(b) || String(a.name || "").localeCompare(String(b.name || ""))
+        );
+
+        setFeeStructures(list);
+        setOptionalItems([]); // come from structure detail available_optional_items
+        const plans = asList(plansRes.data);
+        setPaymentPlans(plans);
+
+        if (list.length > 0) {
+          setFormData((prev) => {
+            if (prev.fee_structure_id && list.some((s) => String(s.id) === String(prev.fee_structure_id))) {
+              return prev;
+            }
+            return { ...prev, fee_structure_id: String(list[0].id) };
+          });
+        } else {
+          setFeeError(
+            "No active fee structure for this grade in Finance. Create one under Finance → Fee structures (same as used on the offer letter)."
+          );
+        }
+
+        if (plans.length > 0) {
+          setFormData((prev) => {
+            if (prev.payment_plan) return prev;
+            const rec = plans.find((p: any) => p.is_recommended) || plans[0];
+            return { ...prev, payment_plan: String(rec.id) };
+          });
+        }
+      } catch (err) {
+        console.error(err);
+        setFeeError("Failed to load fee structures from Finance");
+        toast.error("Failed to load financial data from Finance");
+      } finally {
+        setFeeLoading(false);
+      }
+    };
+
+    loadFinanceData();
+  }, [open, applicationData?.class_applied]);
 
   // Ensure interview/admission charges exist (N/A by default if school amounts are 0)
   useEffect(() => {
-    if (!open || !applicationId || currentStep < 4) return;
-    // Prefer charges already on the application — avoid extra round-trip
-    const existing = (applicationData as any)?.charges;
-    if (Array.isArray(existing) && existing.length > 0) {
-      setApplicationCharges(existing);
-      return;
-    }
+    if (!open || !applicationId) return;
     let cancelled = false;
     (async () => {
       setChargesLoading(true);
       try {
-        const res = await api.post(
-          `/admissions/applications/${applicationId}/ensure-charges/`,
-          {},
-          {
-            headers: currentSchool?.id
-              ? { "X-School-ID": String(currentSchool.id) }
-              : undefined,
-          }
-        );
+        const res = await api.post(`/admissions/applications/${applicationId}/ensure-charges/`, {}, { headers: currentSchool?.id ? { 'X-School-ID': String(currentSchool.id) } : undefined });
         if (!cancelled) setApplicationCharges(res.data?.charges || []);
       } catch (e) {
         console.warn("ensure-charges failed", e);
@@ -583,10 +622,36 @@ export default function EnrollmentWizardModal({
     return () => {
       cancelled = true;
     };
-  }, [open, applicationId, currentStep, currentSchool?.id, applicationData]);
+  }, [open, applicationId]);
 
-  // Structure line-item fetch removed (not used during enroll).
-
+  // Load line items only for the selected structure (1 request, not N)
+  useEffect(() => {
+    const id = formData.fee_structure_id;
+    if (!open || !id) return;
+    const existing = feeStructures.find((s) => String(s.id) === String(id));
+    if (existing && Array.isArray(existing.structure_items) && existing.structure_items.length > 0) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get(`/finance/structures/${id}/`, { timeout: 20000 });
+        if (cancelled || !res.data) return;
+        setFeeStructures((prev) => {
+          const idx = prev.findIndex((s) => String(s.id) === String(id));
+          if (idx === -1) return [...prev, res.data];
+          const next = [...prev];
+          next[idx] = { ...prev[idx], ...res.data };
+          return next;
+        });
+      } catch (e) {
+        console.warn("structure detail failed", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, formData.fee_structure_id]);
 
 
   const getAdmissionCategoryName = () => "Admission & Registration";
@@ -734,45 +799,31 @@ export default function EnrollmentWizardModal({
     guardian_relationship: "Guardian relationship",
   };
 
-  // Snapshot of admission values — used to detect edits when leaving a step
-  const admissionBaselineRef = useRef<Record<string, any> | null>(null);
-  if (admissionBaselineRef.current === null) {
-    admissionBaselineRef.current = {
-      first_name: applicationData.first_name || "",
-      middle_name: applicationData.middle_name || "",
-      last_name: applicationData.last_name || "",
-      gender: applicationData.gender || "",
-      date_of_birth: applicationData.date_of_birth || "",
-      nationality: applicationData.nationality || "Kenyan",
-      birth_certificate_number: (applicationData as any).birth_certificate_number || "",
-      passport_number: (applicationData as any).passport_number || "",
-      guardian_name: applicationData.primary_guardian_name || "",
-      guardian_phone: applicationData.primary_guardian_phone || "",
-      guardian_email: applicationData.primary_guardian_email || "",
-      guardian_national_id: applicationData.primary_guardian_id_number || "",
-      guardian_relationship: applicationData.primary_guardian_relationship || "",
-    };
-  }
-
-  /** Always update freely — confirmation happens on Next, not per keystroke */
-  const updateForm = (field: string, value: any, _opts?: { skipConfirm?: boolean }) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const collectProtectedChanges = (data: Record<string, any>) => {
-    const baseline = admissionBaselineRef.current || {};
-    const changes: string[] = [];
-    for (const field of PROTECTED_IDENTITY_FIELDS) {
-      const before = String(baseline[field] ?? "").trim();
-      const after = String(data[field] ?? "").trim();
-      if (before !== after) {
-        const label = FIELD_HUMAN[field] || field;
-        changes.push(
-          `• ${label}: "${before || "(empty)"}" → "${after || "(empty)"}"`
-        );
+  const updateForm = (field: string, value: any, opts?: { skipConfirm?: boolean }) => {
+    setFormData((prev) => {
+      if (opts?.skipConfirm || !PROTECTED_IDENTITY_FIELDS.has(field)) {
+        return { ...prev, [field]: value };
       }
-    }
-    return changes;
+      const prevVal = prev[field];
+      const prevEmpty =
+        prevVal === undefined ||
+        prevVal === null ||
+        String(prevVal).trim() === "";
+      const nextEmpty =
+        value === undefined || value === null || String(value).trim() === "";
+      if (String(prevVal ?? "") === String(value ?? "")) {
+        return prev;
+      }
+      const label = FIELD_HUMAN[field] || field;
+      const action = prevEmpty ? "set" : "change";
+      const ok = window.confirm(
+        prevEmpty
+          ? `You are about to set required field "${label}" during enrollment. This was missing on the admission form. Continue?`
+          : `You are about to ${action} "${label}" which was loaded from the admission application.\n\nPrevious: ${prevVal || "(empty)"}\nNew: ${nextEmpty ? "(empty)" : value}\n\nAre you sure?`
+      );
+      if (!ok) return prev;
+      return { ...prev, [field]: value };
+    });
   };
 
   const updateApplicationCharge = async (
@@ -803,40 +854,48 @@ export default function EnrollmentWizardModal({
   const validateStep = (step: number) => {
     switch (step) {
       case 1: {
-        // Identity + placement + mandatory photo / birth document
-        const hasIdDoc =
-          Boolean(String(formData.birth_certificate_number || "").trim()) ||
-          Boolean(String(formData.passport_number || "").trim());
-        const hasPhoto =
-          Boolean(formData.profile_photo) || Boolean(applicationData.photo);
-        const hasBirthFile =
-          Boolean(formData.birth_certificate_file) ||
-          Boolean((applicationData as any).birth_certificate) ||
-          Boolean(String(formData.birth_certificate_number || "").trim());
-        const termOk = Boolean(String(formData.enrollment_term || "").trim());
-        const yearOk = Boolean(String(formData.enrollment_academic_year || "").trim());
-        return Boolean(
+        // identity step
+
+        const hasPhoto = !!formData.profile_photo || !!applicationData.photo;
+        return (
           formData.first_name &&
-            formData.last_name &&
-            formData.date_of_birth &&
-            formData.gender &&
-            formData.nationality &&
-            hasIdDoc &&
-            hasPhoto &&
-            hasBirthFile &&
-            formData.current_class &&
-            formData.section?.trim() &&
-            termOk &&
-            yearOk
+          formData.last_name &&
+          formData.date_of_birth &&
+          formData.gender &&
+          formData.nationality &&
+          (formData.birth_certificate_number || formData.passport_number) &&
+          hasPhoto &&
+          formData.birth_certificate_file
         );
       }
       case 2:
-        return Boolean(formData.guardian_name && formData.guardian_phone);
-      case 3:
-        // Optional health / previous school / transport — always allow continue
         return true;
+
+      case 3:
+        const isBoarding = formData.boarding_status === "BOARDING";
+        return (
+          formData.current_class &&
+          formData.section?.trim() &&
+          (!isBoarding || (formData.house?.trim() && formData.dorm_room?.trim()))
+          // Pathway/track/stream are optional for flexibility
+        );
+
       case 4:
-        return formData.terms_accepted === true;
+        return formData.vaccination_status;
+      case 5:
+        return formData.guardian_name && formData.guardian_phone && formData.guardian_national_id;
+
+      case 6: {
+        const termOk = Boolean(String(formData.enrollment_term || "").trim());
+        const yearOk = Boolean(String(formData.enrollment_academic_year || "").trim());
+        const structureOk = Boolean(String(formData.fee_structure_id || "").trim());
+        const isValid =
+          termOk &&
+          yearOk &&
+          structureOk &&
+          formData.terms_accepted === true;
+        return isValid;
+      }
       default:
         return true;
     }
@@ -844,29 +903,15 @@ export default function EnrollmentWizardModal({
 
   const handleNext = () => {
     if (validateStep(currentStep)) {
-      const changes = collectProtectedChanges(formData);
-      // Only prompt for identity/guardian steps where protected fields appear
-      if (changes.length > 0 && (currentStep === 1 || currentStep === 2)) {
-        const ok = window.confirm(
-          "You changed the following fields that came from the admission application:\n\n" +
-            changes.join("\n") +
-            "\n\nContinue with these changes?"
-        );
-        if (!ok) return;
-        // Accept as new baseline so we don't re-prompt the same edits
-        if (admissionBaselineRef.current) {
-          for (const field of PROTECTED_IDENTITY_FIELDS) {
-            admissionBaselineRef.current[field] = formData[field];
-          }
-        }
-      }
       setCurrentStep((prev) => Math.min(prev + 1, totalSteps));
     } else {
-      if (currentStep === 4) {
+      if (currentStep === 6) {
         if (!String(formData.enrollment_term || "").trim()) {
           toast.error("Select the term the student is enrolling into.");
         } else if (!String(formData.enrollment_academic_year || "").trim()) {
           toast.error("Select the academic year.");
+        } else if (!String(formData.fee_structure_id || "").trim()) {
+          toast.error("Select the fee structure for this grade and term.");
         } else if (!formData.terms_accepted) {
           toast.error("Accept the terms to enroll.");
         } else {
@@ -911,7 +956,11 @@ export default function EnrollmentWizardModal({
       payload.set("initial_payment_amount", "0");
       payload.set("enrollment_term", String(formData.enrollment_term || ""));
       payload.set("enrollment_academic_year", String(formData.enrollment_academic_year || ""));
-      // Do not send fee_structure from admissions — Finance assigns by grade + term
+      // Link student to the selected Finance fee structure at enroll time
+      if (formData.fee_structure_id) {
+        payload.set("fee_structure", String(formData.fee_structure_id));
+        payload.set("fee_structure_id", String(formData.fee_structure_id));
+      }
 
       if (formData.payment_plan) {
         payload.set("payment_plan", String(formData.payment_plan));   // This is important
@@ -977,335 +1026,552 @@ export default function EnrollmentWizardModal({
 
   // ClassLogisticsStep is defined outside the component to avoid remounts on every render.
 
-
   const renderStep = () => {
-    // 4 steps: Identity+placement → Guardians → Optional → Review
-    if (currentStep === 1) {
-      return (
-        <div className="space-y-6">
-          <h3 className="text-lg font-semibold">Identity & placement</h3>
-          <p className="text-sm text-muted-foreground -mt-2">
-            Pre-filled from the application. Only fix what is wrong.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[
-              { label: "First Name *", key: "first_name" },
-              { label: "Middle Name", key: "middle_name" },
-              { label: "Last Name *", key: "last_name" },
-              { label: "Preferred name", key: "preferred_name" },
-              { label: "Gender *", key: "gender" },
-              { label: "Date of Birth *", key: "date_of_birth", type: "date" },
-              { label: "Nationality *", key: "nationality" },
-              { label: "Religion", key: "religion" },
-              { label: "Birth Certificate Number *", key: "birth_certificate_number" },
-              { label: "Passport Number", key: "passport_number" },
-              { label: "Learner ID / UPI", key: "learner_id" },
-              { label: "Address", key: "address" },
-              { label: "Region / County", key: "region" },
-              { label: "District / Sub-county", key: "district" },
-            ].map(({ label, key, type = "text" }: { label: string; key: string; type?: string }) => (
-              <div key={key}>
-                <Label>{label}</Label>
-                {key === "gender" ? (
-                  <Select
-                    value={formData.gender ?? ""}
-                    onValueChange={(val) => updateForm("gender", val)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="MALE">Male</SelectItem>
-                      <SelectItem value="FEMALE">Female</SelectItem>
-                      <SelectItem value="OTHER">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
+    switch (currentStep) {
+      case 1:
+        return (
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold">Student Identification</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                { label: "First Name *", key: "first_name" },
+                { label: "Middle Name", key: "middle_name" },
+                { label: "Last Name *", key: "last_name" },
+                { label: "Preferred Name", key: "preferred_name" },
+                { label: "Gender *", key: "gender" },
+                { label: "Date of Birth *", key: "date_of_birth", type: "date" },
+                { label: "Nationality *", key: "nationality" },
+                { label: "Learner ID / UPI", key: "learner_id" },
+                { label: "Birth Certificate Number *", key: "birth_certificate_number" },
+                { label: "Passport Number (non-Citizen)", key: "passport_number" },
+              ].map(({ label, key, type = "text" }) => (
+                <div key={key}>
+                  <Label>{label}</Label>
                   <Input
                     type={type}
-                    value={formData[key] ?? ""}
+                    value={(formData[key] ?? "") as string}
                     onChange={(e) => updateForm(key, e.target.value)}
+                    placeholder={`Enter ${label.toLowerCase().replace("*", "").trim()}`}
+                    className={
+                      PROTECTED_IDENTITY_FIELDS.has(key)
+                        ? "border-amber-200 bg-amber-50/30"
+                        : undefined
+                    }
                   />
-                )}
+                  {PROTECTED_IDENTITY_FIELDS.has(key) && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      From admission — changing asks for confirmation
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+            {/* ── New fields ── */}
+            <div className="md:col-span-2">
+              <Label>Admission Number</Label>
+              {(() => {
+                const fmt = (currentSchool as any)?.admission_number_format || "PREFIX_SEQ";
+                const prefix = ((currentSchool as any)?.admission_prefix || "PSS").trim();
+                const pad = Number((currentSchool as any)?.admission_seq_padding || 3);
+                const example =
+                  fmt === "PREFIX_SEQ"
+                    ? `${prefix}${"1".padStart(pad, "0")}`
+                    : fmt === "YEAR_SEQ"
+                      ? `${new Date().getFullYear()}-${"1".padStart(pad, "0")}`
+                      : fmt === "PREFIX_YEAR_SEQ"
+                        ? `${prefix}-${new Date().getFullYear()}-${"1".padStart(pad, "0")}`
+                        : "manual entry";
+                const isCustom = fmt === "CUSTOM";
+                return (
+                  <>
+                    <p className="text-xs text-muted-foreground mt-1 mb-2">
+                      School format:{" "}
+                      <span className="font-medium text-foreground">
+                        {fmt === "PREFIX_SEQ"
+                          ? "Prefix + sequence"
+                          : fmt === "YEAR_SEQ"
+                            ? "Year + sequence"
+                            : fmt === "PREFIX_YEAR_SEQ"
+                              ? "Prefix + year + sequence"
+                              : "Manual only"}
+                      </span>
+                      {prefix ? (
+                        <>
+                          {" "}
+                          · prefix <span className="font-mono font-semibold">{prefix}</span>
+                        </>
+                      ) : null}
+                      {" "}
+                      · e.g. <span className="font-mono">{example}</span>
+                      . Numbers are unique per school.
+                    </p>
+                    {!isCustom && (
+                      <div className="flex items-center gap-3 mt-1">
+                        <Checkbox
+                          id="auto-gen"
+                          checked={formData.auto_generate_admission !== false}
+                          onCheckedChange={(v) =>
+                            updateForm("auto_generate_admission", v === true)
+                          }
+                        />
+                        <Label htmlFor="auto-gen" className="text-sm">
+                          Auto-generate next number for this school (e.g. {example})
+                        </Label>
+                      </div>
+                    )}
+                    {(isCustom || formData.auto_generate_admission === false) && (
+                      <Input
+                        className="mt-2 font-mono"
+                        value={formData.admission_number}
+                        onChange={(e) =>
+                          updateForm("admission_number", e.target.value.toUpperCase())
+                        }
+                        placeholder={example}
+                      />
+                    )}
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Change prefix/format under Settings → Admission numbers.
+                    </p>
+                  </>
+                );
+              })()}
+            </div>
+
+            <div>
+              <Label>Student Photo * (for ID card & records)</Label>
+
+              {/* Show existing photo if available */}
+              {applicationData.photo && (
+                <div className="mt-2 mb-4">
+                  <p className="text-sm font-medium text-slate-700 mb-1">Previously uploaded during application:</p>
+                  <div className="relative inline-block">
+                    <img
+                      src={applicationData.photo}
+                      alt="Student photo preview"
+                      className="h-32 w-32 object-cover rounded-lg border border-slate-300 shadow-sm"
+                      onError={(e) => {
+                        // Fallback if image fails to load
+                        e.currentTarget.src = "/fallback-student-avatar.png"; // add a placeholder image in public/
+                        e.currentTarget.alt = "Photo failed to load";
+                      }}
+                    />
+                    <p className="text-xs text-slate-500 mt-1 text-center">
+                      Click "Choose File" below to replace
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* File input – always show, but change label if photo exists */}
+              <div className={cn(
+                "border-2 border-dashed rounded-lg p-4 text-center",
+                applicationData.photo ? "border-slate-300 bg-slate-50" : "border-primary-300 bg-primary-50/30"
+              )}>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      updateForm("profile_photo", file);
+                      // Optional: show local preview immediately
+                      const previewUrl = URL.createObjectURL(file);
+                      // You could store this in state if you want instant preview of new upload
+                    }
+                  }}
+                  className="hidden"
+                  id="profile-photo-upload"
+                />
+                <label
+                  htmlFor="profile-photo-upload"
+                  className="cursor-pointer flex flex-col items-center gap-2"
+                >
+                  <div className="p-3 bg-primary-100 rounded-full">
+                    <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                  </div>
+                  <span className="text-sm font-medium text-primary-700">
+                    {applicationData.photo ? "Replace Photo" : "Upload New Photo"}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    JPG, PNG • Max 5MB
+                  </span>
+                </label>
               </div>
-            ))}
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4">
+              {/* Optional: show name of newly selected file */}
+              {formData.profile_photo && (
+                <p className="text-xs text-slate-600 mt-2">
+                  Selected: {formData.profile_photo.name}
+                </p>
+              )}
+            </div>
+
             <div>
-              <Label>Student photo *</Label>
-              <p className="text-xs text-muted-foreground mb-1">
-                {applicationData.photo
-                  ? "Photo on file — upload only to replace"
-                  : "Required: passport-style photo"}
-              </p>
-              {applicationData.photo && !formData.profile_photo ? (
-                <p className="text-xs text-emerald-700 mb-1">✓ Existing photo will be kept</p>
-              ) : null}
+              <Label>Birth Certificate Upload * (PDF/Image – required for NEMIS)</Label>
               <Input
                 type="file"
-                accept="image/*"
-                onChange={(e) =>
-                  updateForm("profile_photo", e.target.files?.[0] ?? null)
-                }
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={e => updateForm("birth_certificate_file", e.target.files?.[0] ?? null)}
               />
-              {formData.profile_photo ? (
-                <p className="text-xs mt-1 text-slate-600">
-                  Selected: {(formData.profile_photo as File).name}
-                </p>
-              ) : null}
-            </div>
-            <div>
-              <Label>Birth certificate scan *</Label>
-              <p className="text-xs text-muted-foreground mb-1">
-                Upload PDF/image if not already on the application (number alone is accepted if
-                already provided above)
-              </p>
-              <Input
-                type="file"
-                accept=".pdf,image/*"
-                onChange={(e) =>
-                  updateForm("birth_certificate_file", e.target.files?.[0] ?? null)
-                }
-              />
-              {formData.birth_certificate_file ? (
-                <p className="text-xs mt-1 text-slate-600">
-                  Selected: {(formData.birth_certificate_file as File).name}
-                </p>
-              ) : null}
             </div>
           </div>
+        );
 
+      case 2:
+        return (
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold">Previous Academic Record</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <Label>Previous School Name & Address</Label>
+                <Textarea
+                  value={formData.previous_school ?? ""}
+                  onChange={(e) => updateForm("previous_school", e.target.value)}
+                  placeholder="Name, location, contact..."
+                />
+              </div>
+              <div>
+                <Label>Previous Grade / Class</Label>
+                <Input
+                  value={formData.previous_grade ?? ""}
+                  onChange={(e) => updateForm("previous_grade", e.target.value)}
+                  placeholder="e.g. Grade 4"
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Label>Transfer / Leaving Certificate Upload</Label>
+                <Input
+                  type="file"
+                  accept=".pdf,.jpg,.png"
+                  onChange={(e) => updateForm("transfer_letter", e.target.files?.[0] ?? null)}
+                />
+              </div>
+            </div>
+          </div>
+        );
+
+      case 3:
+        return (
           <ClassLogisticsStep
             formData={formData}
             applicationData={applicationData}
             updateForm={updateForm}
-            schoolHierarchy={schoolHierarchy}
+            schoolHierarchy={schoolHierarchy}   // ← Add this
           />
+        );
 
-          <div className="grid sm:grid-cols-2 gap-4 rounded-xl border bg-slate-50 p-4">
-            <div>
-              <Label>Academic year *</Label>
-              <Input
-                className="mt-1"
-                placeholder="e.g. 2026"
-                value={formData.enrollment_academic_year || ""}
-                onChange={(e) => updateForm("enrollment_academic_year", e.target.value)}
-              />
-            </div>
-            <div>
-              <Label>Enrollment term *</Label>
-              <Select
-                value={formData.enrollment_term || "none"}
-                onValueChange={(v) => updateForm("enrollment_term", v === "none" ? "" : v)}
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select term" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Select term…</SelectItem>
-                  <SelectItem value="Term 1">Term 1</SelectItem>
-                  <SelectItem value="Term 2">Term 2</SelectItem>
-                  <SelectItem value="Term 3">Term 3</SelectItem>
-                  <SelectItem value="Semester 1">Semester 1</SelectItem>
-                  <SelectItem value="Semester 2">Semester 2</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (currentStep === 2) {
-      return (
-        <div className="space-y-6">
-          <h3 className="text-lg font-semibold">Primary guardian *</h3>
-          <p className="text-sm text-muted-foreground -mt-2">
-            Required contact for the student. Secondary guardian is optional.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[
-              { label: "Full name *", key: "guardian_name" },
-              { label: "Phone *", key: "guardian_phone" },
-              { label: "National ID", key: "guardian_national_id" },
-              { label: "Email", key: "guardian_email" },
-              { label: "Relationship", key: "guardian_relationship" },
-            ].map(({ label, key }) => (
-              <div key={key}>
-                <Label>{label}</Label>
+      case 4:
+        return (
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold">Health & Special Needs</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <Label>Vaccination Status *</Label>
+                <Select
+                  value={formData.vaccination_status ?? "UNKNOWN"}
+                  onValueChange={(val) => updateForm("vaccination_status", val)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UP_TO_DATE">Up to date</SelectItem>
+                    <SelectItem value="PARTIAL">Partial</SelectItem>
+                    <SelectItem value="NOT_IMMUNIZED">Not immunized</SelectItem>
+                    <SelectItem value="UNKNOWN">Unknown</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="md:col-span-2">
+                <Label>Immunization Card Upload</Label>
                 <Input
-                  value={formData[key] ?? ""}
-                  onChange={(e) => updateForm(key, e.target.value)}
+                  type="file"
+                  accept=".pdf,.jpg,.png"
+                  onChange={(e) => updateForm("immunization_card", e.target.files?.[0] ?? null)}
                 />
               </div>
-            ))}
-          </div>
-          <h4 className="font-medium">Secondary guardian (optional)</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[
-              { label: "Name", key: "secondary_guardian_name" },
-              { label: "Phone", key: "secondary_guardian_phone" },
-              { label: "National ID", key: "secondary_guardian_national_id" },
-              { label: "Email", key: "secondary_guardian_email" },
-              { label: "Relationship", key: "secondary_guardian_relationship" },
-            ].map(({ label, key }) => (
-              <div key={key}>
-                <Label>{label}</Label>
+              <div>
+                <Label>Disability (if any)</Label>
                 <Input
-                  value={formData[key] ?? ""}
-                  onChange={(e) => updateForm(key, e.target.value)}
+                  value={formData.disability ?? ""}
+                  onChange={(e) => updateForm("disability", e.target.value)}
+                  placeholder="e.g. Visual impairment"
                 />
               </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    if (currentStep === 3) {
-      return (
-        <div className="space-y-6">
-          <h3 className="text-lg font-semibold">Optional details</h3>
-          <p className="text-sm text-muted-foreground -mt-2">
-            Skip anything not needed — you can complete these later on the student profile.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2">
-              <Label>Previous school</Label>
-              <Textarea
-                value={formData.previous_school ?? ""}
-                onChange={(e) => updateForm("previous_school", e.target.value)}
-                placeholder="Name and location"
-              />
-            </div>
-            <div>
-              <Label>Vaccination status</Label>
-              <Select
-                value={formData.vaccination_status ?? "UNKNOWN"}
-                onValueChange={(val) => updateForm("vaccination_status", val)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="UNKNOWN">Not specified</SelectItem>
-                  <SelectItem value="COMPLETE">Complete</SelectItem>
-                  <SelectItem value="PARTIAL">Partial</SelectItem>
-                  <SelectItem value="NONE">None</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Allergies</Label>
-              <Input
-                value={formData.allergies ?? ""}
-                onChange={(e) => updateForm("allergies", e.target.value)}
-              />
-            </div>
-            <div>
-              <Label>Boarding status</Label>
-              <Select
-                value={formData.boarding_status ?? "DAY"}
-                onValueChange={(val) => updateForm("boarding_status", val)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="DAY">Day</SelectItem>
-                  <SelectItem value="BOARDING">Boarding</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Transport route (if any)</Label>
-              <Input
-                value={formData.transport_route ?? ""}
-                onChange={(e) => updateForm("transport_route", e.target.value)}
-              />
+              <div>
+                <Label>Disability Type / Category</Label>
+                <Select
+                  value={formData.disability_type ?? ""}
+                  onValueChange={(val) => updateForm("disability_type", val)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    <SelectItem value="physical">Physical</SelectItem>
+                    <SelectItem value="visual">Visual</SelectItem>
+                    <SelectItem value="hearing">Hearing</SelectItem>
+                    <SelectItem value="learning">Learning</SelectItem>
+                    <SelectItem value="intellectual">Intellectual</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="md:col-span-2">
+                <Label>Special Needs Category</Label>
+                <Input
+                  value={formData.special_needs_category ?? ""}
+                  onChange={(e) => updateForm("special_needs_category", e.target.value)}
+                  placeholder="e.g. Gifted, Slow Learner, Autism Spectrum"
+                />
+              </div>
             </div>
           </div>
-        </div>
-      );
-    }
+        );
 
-    // Step 4 — Review
-    return (
-      <div className="space-y-5">
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-950">
-          <p className="font-semibold">Ready to enroll</p>
-          <p className="mt-1 text-emerald-900/90">
-            {formData.first_name} {formData.last_name} · {formData.enrollment_term} ·{" "}
-            {formData.enrollment_academic_year}. School term fees are collected in{" "}
-            <strong>Finance → Clearance</strong> after enroll.
-          </p>
-        </div>
+      case 5:
+        return (
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold">Guardians & Emergency Contacts</h3>
+            <div className="space-y-8">
+              {/* Primary Guardian */}
+              <div>
+                <h4 className="font-medium mb-3">Primary Guardian</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Name *</Label>
+                    <Input
+                      value={formData.guardian_name ?? ""}
+                      onChange={(e) => updateForm("guardian_name", e.target.value)}
+                      className="border-amber-200 bg-amber-50/30"
+                    />
+                  </div>
+                  <div>
+                    <Label>National ID / Passport *</Label>
+                    <Input
+                      value={formData.guardian_national_id ?? ""}
+                      onChange={(e) => updateForm("guardian_national_id", e.target.value)}
+                      className="border-amber-200 bg-amber-50/30"
+                    />
+                  </div>
+                  <div>
+                    <Label>Phone *</Label>
+                    <Input
+                      value={formData.guardian_phone ?? ""}
+                      onChange={(e) => updateForm("guardian_phone", e.target.value)}
+                      className="border-amber-200 bg-amber-50/30"
+                    />
+                  </div>
+                  <div>
+                    <Label>Email</Label>
+                    <Input
+                      value={formData.guardian_email ?? ""}
+                      onChange={(e) => updateForm("guardian_email", e.target.value)}
+                      className="border-amber-200 bg-amber-50/30"
+                    />
+                  </div>
+                </div>
+              </div>
 
-        <div className="rounded-xl border bg-slate-50 p-4 text-sm space-y-2">
-          <p className="font-medium">Pre-enrollment fees (interview / admission)</p>
-          {chargesLoading ? (
-            <p className="text-xs text-muted-foreground">Loading charge status…</p>
-          ) : applicationCharges?.length ? (
-            <ul className="divide-y rounded-lg border bg-white">
-              {applicationCharges
-                .filter((c: any) => {
-                  if (String(c.charge_type).toUpperCase() === "INTERVIEW") {
-                    if (c.policy === "NOT_APPLICABLE") return false;
-                    if (Number(c.amount_due || 0) <= 0 && Number(c.amount_paid || 0) <= 0)
-                      return false;
+              {/* Secondary Guardian */}
+              <div>
+                <h4 className="font-medium mb-3">Secondary Guardian (optional)</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    { label: "Name", key: "secondary_guardian_name" },
+                    { label: "National ID / Passport", key: "secondary_guardian_national_id" },
+                    { label: "Phone", key: "secondary_guardian_phone" },
+                    { label: "Email", key: "secondary_guardian_email" },
+                  ].map(({ label, key }) => (
+                    <div key={key}>
+                      <Label>{label}</Label>
+                      <Input
+                        value={formData[key] ?? ""}
+                        onChange={(e) => updateForm(key, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Emergency Contact */}
+              <div>
+                <h4 className="font-medium mb-3">Emergency Contact</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {[
+                    { label: "Name", key: "emergency_name" },
+                    { label: "Phone", key: "emergency_phone" },
+                    { label: "Relation", key: "emergency_relation" },
+                  ].map(({ label, key }) => (
+                    <div key={key}>
+                      <Label>{label}</Label>
+                      <Input
+                        value={formData[key] ?? ""}
+                        onChange={(e) => updateForm(key, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+
+      case 6: {
+        return (
+          <div className="space-y-5">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 text-sm text-emerald-950">
+              <p className="font-semibold">Enrollment only — school fees are collected in Finance</p>
+              <p className="mt-1 text-emerald-900/90">
+                Select the academic year and term. After enroll, the learner gets an admission
+                number and appears under <strong>Finance → Awaiting clearance</strong> for fee
+                structure and payments.
+              </p>
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Academic year *</label>
+                <Input
+                  className="mt-1"
+                  placeholder="e.g. 2026"
+                  value={formData.enrollment_academic_year || ""}
+                  onChange={(e) => updateForm("enrollment_academic_year", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Enrolling into term *</label>
+                <Select
+                  value={formData.enrollment_term || "none"}
+                  onValueChange={(v) => updateForm("enrollment_term", v === "none" ? "" : v)}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select term" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select term…</SelectItem>
+                    <SelectItem value="Term 1">Term 1</SelectItem>
+                    <SelectItem value="Term 2">Term 2</SelectItem>
+                    <SelectItem value="Term 3">Term 3</SelectItem>
+                    <SelectItem value="Semester 1">Semester 1</SelectItem>
+                    <SelectItem value="Semester 2">Semester 2</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="rounded-xl border bg-slate-50 p-4 text-sm space-y-2">
+              <p className="font-medium">Pre-enrollment fees (interview / admission)</p>
+              <p className="text-muted-foreground text-xs">
+                These must already be marked paid, waived, or not applicable earlier in the
+                pipeline. School term fees are <strong>not</strong> collected here.
+              </p>
+              {chargesLoading ? (
+                <p className="text-xs text-muted-foreground">Loading charge status…</p>
+              ) : applicationCharges?.length ? (
+                <ul className="divide-y rounded-lg border bg-white">
+                  {applicationCharges
+                    .filter((c: any) => {
+                      if (String(c.charge_type).toUpperCase() === "INTERVIEW") {
+                        if (c.policy === "NOT_APPLICABLE") return false;
+                        if (Number(c.amount_due || 0) <= 0 && Number(c.amount_paid || 0) <= 0)
+                          return false;
+                      }
+                      return true;
+                    })
+                    .map((c: any) => (
+                    <li key={c.id || c.charge_type} className="flex justify-between px-3 py-2 text-sm">
+                      <span>
+                        {c.charge_type === "INTERVIEW"
+                          ? "Interview fee"
+                          : c.charge_type === "ADMISSION"
+                            ? "Admission fee"
+                            : c.charge_type}
+                        {c.policy ? ` · ${c.policy}` : ""}
+                      </span>
+                      <span className="font-medium">
+                        {c.policy === "WAIVED" || c.policy === "NOT_APPLICABLE"
+                          ? c.policy
+                          : Number(c.amount_paid || 0) > 0
+                            ? `Paid ${Number(c.amount_paid).toLocaleString()}`
+                            : `Due ${Number(c.amount_due || 0).toLocaleString()}`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No interview/admission charge rows — treat as not applicable if your school
+                  does not charge them.
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-xl border p-4 space-y-2 bg-white">
+              <label className="text-sm font-medium">Fee structure for this grade / term *</label>
+              <p className="text-xs text-muted-foreground">
+                Loaded from Finance for the applicant&apos;s grade. This is attached to the student
+                so clearance can bill without guessing.
+              </p>
+              {feeLoading ? (
+                <p className="text-sm text-muted-foreground">Loading fee structures…</p>
+              ) : feeError ? (
+                <p className="text-sm text-red-600">{feeError}</p>
+              ) : (
+                <Select
+                  value={formData.fee_structure_id ? String(formData.fee_structure_id) : "none"}
+                  onValueChange={(v) =>
+                    updateForm("fee_structure_id", v === "none" ? "" : v)
                   }
-                  return true;
-                })
-                .map((c: any) => (
-                  <li
-                    key={c.id || c.charge_type}
-                    className="flex justify-between px-3 py-2 text-sm"
-                  >
-                    <span>
-                      {c.charge_type === "INTERVIEW"
-                        ? "Interview fee"
-                        : c.charge_type === "ADMISSION"
-                          ? "Admission fee"
-                          : c.charge_type}
-                      {c.policy ? ` · ${c.policy}` : ""}
-                    </span>
-                    <span className="font-medium">
-                      {c.policy === "WAIVED" || c.policy === "NOT_APPLICABLE"
-                        ? c.policy
-                        : Number(c.amount_paid || 0) > 0
-                          ? `Paid ${Number(c.amount_paid).toLocaleString()}`
-                          : `Due ${Number(c.amount_due || 0).toLocaleString()}`}
-                    </span>
-                  </li>
-                ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              No interview/admission charges due for this applicant.
-            </p>
-          )}
-        </div>
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select fee structure" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select structure…</SelectItem>
+                    {feeStructures.map((fs: any) => (
+                      <SelectItem key={String(fs.id)} value={String(fs.id)}>
+                        {fs.name || "Structure"}
+                        {fs.period_name ? ` · ${fs.period_name}` : ""}
+                        {fs.academic_year ? ` · ${fs.academic_year}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {!feeLoading && feeStructures.length === 0 && (
+                <p className="text-xs text-amber-700">
+                  No active structures for this grade. Create one under Finance → Fee structures,
+                  then reopen enrollment.
+                </p>
+              )}
+            </div>
 
-        <label className="flex items-start gap-3 rounded-xl border p-4 cursor-pointer hover:bg-slate-50">
-          <input
-            type="checkbox"
-            className="mt-1"
-            checked={!!formData.terms_accepted}
-            onChange={(e) => updateForm("terms_accepted", e.target.checked)}
-          />
-          <span className="text-sm">
-            <span className="font-medium">I confirm this enrollment *</span>
-            <span className="block text-muted-foreground mt-0.5">
-              Details are correct. Term fees will be handled at Finance clearance.
-            </span>
-          </span>
-        </label>
-      </div>
-    );
+            <label className="flex items-start gap-3 rounded-xl border p-4 cursor-pointer hover:bg-slate-50">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={!!formData.terms_accepted}
+                onChange={(e) => updateForm("terms_accepted", e.target.checked)}
+              />
+              <span className="text-sm">
+                <span className="font-medium">I confirm this enrollment *</span>
+                <span className="block text-muted-foreground mt-0.5">
+                  Details are correct. School fees will be handled at the Finance clearance desk.
+                </span>
+              </span>
+            </label>
+          </div>
+        );
+      }
+
+      default:
+        return null;
+    }
   };
-
-
 
 
 
@@ -1323,7 +1589,7 @@ export default function EnrollmentWizardModal({
           <div className="flex justify-between text-sm font-medium mb-2">
             <span>Step {currentStep} of {totalSteps}</span>
             <span className="text-muted-foreground">
-              {["Identity & placement", "Guardians", "Optional details", "Review & enroll"][currentStep - 1]}
+              {["Identification", "Previous School", "Class & Transport", "Health & Special Needs", "Guardians", "Fees & Review"][currentStep - 1]}
             </span>
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2.5">
@@ -1337,7 +1603,7 @@ export default function EnrollmentWizardModal({
         {/* each step gets its own key so that React will unmount
             the previous step's inputs (avoids mixing controlled/uncontrolled)
             when switching pages */}
-        <div className="py-4 min-h-[280px]">
+        <div className="py-4 min-h-[400px]" key={currentStep}>
           {renderStep()}
         </div>
 
@@ -1376,9 +1642,17 @@ export default function EnrollmentWizardModal({
               </Button>
             ) : (
               <>
-              {!validateStep(currentStep) && (
+              {!validateStep(6) && (
                 <p className="text-xs text-amber-700 max-w-xs text-right">
-                  Accept the enrollment confirmation to enable Confirm &amp; Enroll.
+                  To enable Confirm & Enroll: select a fee structure
+                  {paymentPlans.length > 0 && !formData.payment_plan ? ", choose a payment plan" : ""}
+                  {!formData.terms_accepted ? ", accept terms" : ""}
+                  {!formData.summary_confirmed ? ", confirm summary" : ""}
+                  {Number(formData.initial_payment_amount || 0) > 0 &&
+                  !(String(formData.initial_payment_reference || "").trim().length > 2 || formData.initial_payment_proof)
+                    ? ", add payment reference or proof (or set initial payment to 0)"
+                    : ""}
+                  .
                 </p>
               )}
               <Button
