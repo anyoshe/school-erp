@@ -215,46 +215,49 @@ export default function OfferLetterModal({
       else requiredRows.push(line);
     }
 
-    // Totals per term (required only for "must pay"; grand includes optional listed)
+    // Totals = mandatory (required) only — optional lines are listed but not summed
     const termRequiredTotals = periodKeys.map((p) => {
       let t = 0;
+      let hasAnyLine = false;
       for (const row of rowMap.values()) {
+        if (row.cells[p.id] != null) hasAnyLine = true;
         if (!row.optional) t += row.cells[p.id]?.amount || 0;
       }
-      // fallback to structure total if no lines
-      if (t === 0) t = Number(p.structure.total_amount || 0);
+      // Only fall back to structure.total_amount when there are no line rows at all
+      if (!hasAnyLine && t === 0) t = Number(p.structure.total_amount || 0);
       return t;
     });
-    const termAllTotals = periodKeys.map((p, i) => {
+    const termOptionalTotals = periodKeys.map((p) => {
       let t = 0;
       for (const row of rowMap.values()) {
-        t += row.cells[p.id]?.amount || 0;
+        if (row.optional) t += row.cells[p.id]?.amount || 0;
       }
-      if (t === 0) t = termRequiredTotals[i];
       return t;
     });
 
     body.push(...requiredRows);
     if (optionalRows.length) {
-      body.push(["— Optional fees —", ...periodKeys.map(() => "")]);
+      body.push(["— Optional fees (not included in totals) —", ...periodKeys.map(() => "")]);
       body.push(...optionalRows);
     }
     body.push([
-      "TOTAL PER TERM",
-      ...termAllTotals.map((n) => Number(n).toLocaleString()),
+      "TOTAL PER TERM (mandatory)",
+      ...termRequiredTotals.map((n) => Number(n).toLocaleString()),
     ]);
 
     const annualRequired = termRequiredTotals.reduce((a, b) => a + b, 0);
-    const annualAll = termAllTotals.reduce((a, b) => a + b, 0);
+    const annualOptional = termOptionalTotals.reduce((a, b) => a + b, 0);
+    const annualAll = annualRequired; // letter total ignores optional
 
     return {
       head,
       body,
       periodKeys,
       termRequiredTotals,
-      termAllTotals,
+      termAllTotals: termRequiredTotals,
       annualRequired,
-      annualAll,
+      annualAll: annualRequired,
+      annualOptional,
       requiredRows,
       optionalRows,
     };
@@ -321,7 +324,7 @@ export default function OfferLetterModal({
 
     const matrix = buildAnnualFeeMatrix(feeStructures);
     let currentY = 36;
-    let annualTotal = matrix.annualAll;
+    let annualTotal = matrix.annualRequired;
 
     doc.setFontSize(9).setTextColor(80).setFont("helvetica", "normal");
     doc.text(
@@ -370,11 +373,11 @@ export default function OfferLetterModal({
     doc.text(`TOTAL ANNUAL (all terms): KES ${annualTotal.toLocaleString()}`, 190, currentY, {
       align: "right",
     });
-    if (matrix.annualRequired > 0 && matrix.annualRequired !== matrix.annualAll) {
+    if ((matrix as any).annualOptional > 0) {
       currentY += 6;
       doc.setFontSize(9).setFont("helvetica", "normal").setTextColor(80);
       doc.text(
-        `Required only: KES ${matrix.annualRequired.toLocaleString()}  ·  Optional listed: KES ${(matrix.annualAll - matrix.annualRequired).toLocaleString()}`,
+        `Optional items above are not included in the total. Optional listed: KES ${Number((matrix as any).annualOptional || 0).toLocaleString()}`,
         190,
         currentY,
         { align: "right" }
@@ -560,9 +563,9 @@ export default function OfferLetterModal({
                           </tbody>
                         </table>
                         <p className="text-[10px] text-slate-500 px-2 py-2">
-                          Annual total: KES {matrix.annualAll.toLocaleString()}
-                          {matrix.annualRequired !== matrix.annualAll
-                            ? ` (required ${matrix.annualRequired.toLocaleString()})`
+                          Annual total (mandatory): KES {matrix.annualRequired.toLocaleString()}
+                          {(matrix as any).annualOptional > 0
+                            ? ` · optional not included ${Number((matrix as any).annualOptional).toLocaleString()}`
                             : ""}
                         </p>
                       </div>
