@@ -248,85 +248,113 @@ export default function EnrollmentWizardModal({
     return "secondary";
   }, [currentSchool]);
   
-  const [formData, setFormData] = useState<Record<string, any>>(() => ({
-    first_name: applicationData.first_name || "",
-    middle_name: applicationData.middle_name || "",
-    last_name: applicationData.last_name || "",
-    preferred_name: applicationData.preferred_name || "",
-    gender: applicationData.gender || "",
-    date_of_birth: applicationData.date_of_birth || "",
-    nationality: applicationData.nationality || "Kenyan",
-    religion: applicationData.religion || "",
-    learner_id: applicationData.learner_id || "",
+  const buildFormFromApplication = (app: Application): Record<string, any> => {
+    const a = app as any;
+    return {
+      first_name: app.first_name || "",
+      middle_name: app.middle_name || "",
+      last_name: app.last_name || "",
+      preferred_name: app.preferred_name || "",
+      gender: app.gender || "",
+      date_of_birth: app.date_of_birth || "",
+      nationality: app.nationality || "Kenyan",
+      religion: app.religion || "",
+      learner_id: app.learner_id || "",
+      address: a.address || "",
+      region: a.region || "",
+      district: a.district || "",
 
-    birth_certificate_number: (applicationData as any).birth_certificate_number || "",
-    admission_number: "",
-    auto_generate_admission: true,
-    profile_photo: null as File | null,
-    birth_certificate_file: null as File | null,
-    passport_number: "",
+      birth_certificate_number: a.birth_certificate_number || "",
+      admission_number: "",
+      auto_generate_admission: true,
+      profile_photo: null as File | null,
+      birth_certificate_file: null as File | null,
+      passport_number: a.passport_number || "",
 
-    previous_school: applicationData.previous_school || "",
-    previous_grade: "",
-    transfer_letter: null,
+      previous_school: app.previous_school || "",
+      previous_grade: a.previous_grade || "",
+      transfer_letter: null,
 
-    current_class: classAppliedId(applicationData),
-    section: "Main",
-    pathway: "",
-    track: "",
-    stream: "",
-    house: "",
-    boarding_status: "DAY",
-    dorm_room: "",
-    transport_mode: "walking",
-    transport_route: "",
+      current_class: classAppliedId(app),
+      section: a.section || "Main",
+      pathway: a.pathway || "",
+      track: a.track || "",
+      stream: a.stream || "",
+      house: a.house || "",
+      boarding_status: a.boarding_status || "DAY",
+      dorm_room: a.dorm_room || "",
+      transport_mode: a.transport_mode || "walking",
+      transport_route: a.transport_route || "",
 
-    blood_group: applicationData.blood_group || "",
-    allergies: applicationData.allergies || "",
-    chronic_conditions: applicationData.chronic_conditions || "",
-    disability: applicationData.disability || "",
-    disability_type: "",
-    special_needs_category: "",
-    vaccination_status: "UNKNOWN",
-    immunization_card: null,
+      blood_group: app.blood_group || "",
+      allergies: app.allergies || "",
+      chronic_conditions: app.chronic_conditions || "",
+      disability: app.disability || "",
+      disability_type: a.disability_type || "",
+      special_needs_category: a.special_needs_category || "",
+      vaccination_status: a.vaccination_status || "UNKNOWN",
+      immunization_card: null,
 
-    guardian_name: applicationData.primary_guardian_name || "",
-    guardian_phone: applicationData.primary_guardian_phone || "",
-    guardian_email: applicationData.primary_guardian_email || "",
-    guardian_national_id: applicationData.primary_guardian_id_number || "",
-    guardian_relationship: applicationData.primary_guardian_relationship || "",
-    secondary_guardian_name: "",
-    secondary_guardian_phone: "",
-    secondary_guardian_email: "",
-    secondary_guardian_national_id: "",
-    emergency_name:
-      applicationData.emergency_contact_name || applicationData.primary_guardian_name || "",
-    emergency_phone:
-      applicationData.emergency_contact_phone || applicationData.primary_guardian_phone || "",
-    emergency_relation:
-      applicationData.emergency_relationship || applicationData.primary_guardian_relationship || "",
+      guardian_name: app.primary_guardian_name || "",
+      guardian_phone: app.primary_guardian_phone || "",
+      guardian_email: app.primary_guardian_email || "",
+      guardian_national_id: app.primary_guardian_id_number || "",
+      guardian_relationship: app.primary_guardian_relationship || "",
+      secondary_guardian_name: a.secondary_guardian_name || "",
+      secondary_guardian_phone: a.secondary_guardian_phone || "",
+      secondary_guardian_email: a.secondary_guardian_email || "",
+      secondary_guardian_national_id: a.secondary_guardian_id_number || "",
+      secondary_guardian_relationship: a.secondary_guardian_relationship || "",
+      emergency_name:
+        app.emergency_contact_name || app.primary_guardian_name || "",
+      emergency_phone:
+        app.emergency_contact_phone || app.primary_guardian_phone || "",
+      emergency_relation:
+        app.emergency_relationship || app.primary_guardian_relationship || "",
 
-    fee_structure_id: "",
-    initial_payment_amount: 0,
-    is_waived: false,
-    waiver_amount: 0,
-    waiver_reason: "",
-    selected_optional_items: [],
-    item_amounts: {} as Record<string, number>,
-    sponsor_name: "",
-    initial_payment_proof: null as File | null,
-    initial_payment_reference: "",
-    payment_plan: "",
-    remaining_payment_due_date: today,
-    notes: "",
+      // Term fees are handled in Finance clearance — not collected here
+      fee_structure_id: "",
+      initial_payment_amount: 0,
+      is_waived: false,
+      waiver_amount: 0,
+      waiver_reason: "",
+      selected_optional_items: [],
+      item_amounts: {} as Record<string, number>,
+      sponsor_name: "",
+      initial_payment_proof: null as File | null,
+      initial_payment_reference: "",
+      payment_plan: "",
+      remaining_payment_due_date: today,
+      enrollment_term: a.enrollment_term || "Term 1",
+      enrollment_academic_year:
+        a.enrollment_academic_year || String(new Date().getFullYear()),
+      terms_accepted: false,
+      summary_confirmed: false,
+    };
+  };
 
-    // ── New final fields ───────────────────────────────
-    admission_date: today,
-    enrollment_term: "Term 1",
-    enrollment_academic_year: String(new Date().getFullYear()),
-    terms_accepted: false,
-    summary_confirmed: false,
-  }));
+  const [formData, setFormData] = useState<Record<string, any>>(() =>
+    buildFormFromApplication(applicationData)
+  );
+
+  // Reset wizard when opened for an application (avoids stale step / empty fields)
+  useEffect(() => {
+    if (!open) return;
+    setCurrentStep(1);
+    setFormData(buildFormFromApplication(applicationData));
+    setFeeStructures([]);
+    setPaymentPlans([]);
+    setOptionalItems([]);
+    setFeeError(null);
+    setFeeLoading(false);
+    setChargesLoading(false);
+    setApplicationCharges(
+      Array.isArray((applicationData as any)?.charges)
+        ? (applicationData as any).charges
+        : []
+    );
+  }, [open, applicationId]);
+
 
   const [feeStructures, setFeeStructures] = useState<any[]>([]);
   const [feeLoading, setFeeLoading] = useState(false);
@@ -473,9 +501,10 @@ export default function EnrollmentWizardModal({
   };
 
   useEffect(() => {
-    if (formData.fee_structure_id) {
-      calculatePayments();
-    }
+    if (!formData.fee_structure_id) return;
+    // No-op while enrollment does not collect term fees
+    return;
+    calculatePayments();
   }, [
     formData.fee_structure_id,
     formData.payment_plan,
@@ -518,102 +547,31 @@ export default function EnrollmentWizardModal({
   ]);
 
 
-  useEffect(() => {
-    const classId = classAppliedId(applicationData) || undefined;
+  // Fee structure loading removed — term fees collected in Finance clearance only.
 
-    if (!open || !classId) return;
-
-    const asList = (data: any): any[] => {
-      if (Array.isArray(data)) return data;
-      if (Array.isArray(data?.results)) return data.results;
-      if (Array.isArray(data?.data)) return data.data;
-      return [];
-    };
-
-    const rank = (s: any) => {
-      const p = String(s.period_name || "").toLowerCase();
-      const m = p.match(/(\d+)/);
-      if (m) return Number(m[1]);
-      if (p.includes("term 1") || p.includes("semester 1")) return 1;
-      return 99;
-    };
-
-    const loadFinanceData = async () => {
-      setFeeLoading(true);
-      setFeeError(null);
-      try {
-        // Fast path: lite list (no nested line items) + payment plans only.
-        // Detail for one structure is loaded by the fee_structure_id effect below.
-        const [structuresRes, plansRes] = await Promise.all([
-          api.get("/finance/structures/", {
-            params: {
-              grade_level: classId,
-              is_active: true,
-            },
-            timeout: 20000,
-          }),
-          api.get("/finance/payment-plans/", { timeout: 15000 }).catch(() => ({ data: [] })),
-        ]);
-
-        let list = asList(structuresRes.data).filter(
-          (s: any) =>
-            !s.grade_level ||
-            String(s.grade_level) === String(classId) ||
-            String(s.grade_level?.id) === String(classId)
-        );
-
-        list = [...list].sort(
-          (a, b) => rank(a) - rank(b) || String(a.name || "").localeCompare(String(b.name || ""))
-        );
-
-        setFeeStructures(list);
-        setOptionalItems([]); // come from structure detail available_optional_items
-        const plans = asList(plansRes.data);
-        setPaymentPlans(plans);
-
-        if (list.length > 0) {
-          setFormData((prev) => {
-            if (prev.fee_structure_id && list.some((s) => String(s.id) === String(prev.fee_structure_id))) {
-              return prev;
-            }
-            return { ...prev, fee_structure_id: String(list[0].id) };
-          });
-        } else {
-          setFeeError(
-            "No active fee structure for this grade in Finance. Create one under Finance → Fee structures (same as used on the offer letter)."
-          );
-        }
-
-        if (plans.length > 0) {
-          setFormData((prev) => {
-            if (prev.payment_plan) return prev;
-            const rec = plans.find((p: any) => p.is_recommended) || plans[0];
-            return { ...prev, payment_plan: String(rec.id) };
-          });
-        }
-      } catch (err) {
-        console.error(err);
-        setFeeError("Failed to load fee structures from Finance");
-        toast.error("Failed to load financial data from Finance");
-      } finally {
-        setFeeLoading(false);
-      }
-    };
-
-    // Fee structures not required to enroll (finance clearance handles term fees).
-    // Skip heavy load unless staff is on Review step.
-    if (currentStep < 4) return;
-    loadFinanceData();
-  }, [open, applicationData?.class_applied, currentStep]);
 
   // Ensure interview/admission charges exist (N/A by default if school amounts are 0)
   useEffect(() => {
     if (!open || !applicationId || currentStep < 4) return;
+    // Prefer charges already on the application — avoid extra round-trip
+    const existing = (applicationData as any)?.charges;
+    if (Array.isArray(existing) && existing.length > 0) {
+      setApplicationCharges(existing);
+      return;
+    }
     let cancelled = false;
     (async () => {
       setChargesLoading(true);
       try {
-        const res = await api.post(`/admissions/applications/${applicationId}/ensure-charges/`, {}, { headers: currentSchool?.id ? { 'X-School-ID': String(currentSchool.id) } : undefined });
+        const res = await api.post(
+          `/admissions/applications/${applicationId}/ensure-charges/`,
+          {},
+          {
+            headers: currentSchool?.id
+              ? { "X-School-ID": String(currentSchool.id) }
+              : undefined,
+          }
+        );
         if (!cancelled) setApplicationCharges(res.data?.charges || []);
       } catch (e) {
         console.warn("ensure-charges failed", e);
@@ -625,36 +583,10 @@ export default function EnrollmentWizardModal({
     return () => {
       cancelled = true;
     };
-  }, [open, applicationId, currentStep, currentSchool?.id]);
+  }, [open, applicationId, currentStep, currentSchool?.id, applicationData]);
 
-  // Load line items only for the selected structure (1 request, not N)
-  useEffect(() => {
-    const id = formData.fee_structure_id;
-    if (!open || !id) return;
-    const existing = feeStructures.find((s) => String(s.id) === String(id));
-    if (existing && Array.isArray(existing.structure_items) && existing.structure_items.length > 0) {
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await api.get(`/finance/structures/${id}/`, { timeout: 20000 });
-        if (cancelled || !res.data) return;
-        setFeeStructures((prev) => {
-          const idx = prev.findIndex((s) => String(s.id) === String(id));
-          if (idx === -1) return [...prev, res.data];
-          const next = [...prev];
-          next[idx] = { ...prev[idx], ...res.data };
-          return next;
-        });
-      } catch (e) {
-        console.warn("structure detail failed", e);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, formData.fee_structure_id]);
+  // Structure line-item fetch removed (not used during enroll).
+
 
 
   const getAdmissionCategoryName = () => "Admission & Registration";
@@ -891,11 +823,7 @@ export default function EnrollmentWizardModal({
         );
       }
       case 2:
-        return Boolean(
-          formData.guardian_name &&
-            formData.guardian_phone &&
-            formData.guardian_national_id
-        );
+        return Boolean(formData.guardian_name && formData.guardian_phone);
       case 3:
         // Optional health / previous school / transport — always allow continue
         return true;
@@ -1056,12 +984,18 @@ export default function EnrollmentWizardModal({
               { label: "First Name *", key: "first_name" },
               { label: "Middle Name", key: "middle_name" },
               { label: "Last Name *", key: "last_name" },
+              { label: "Preferred name", key: "preferred_name" },
               { label: "Gender *", key: "gender" },
               { label: "Date of Birth *", key: "date_of_birth", type: "date" },
               { label: "Nationality *", key: "nationality" },
+              { label: "Religion", key: "religion" },
               { label: "Birth Certificate Number *", key: "birth_certificate_number" },
               { label: "Passport Number", key: "passport_number" },
-            ].map(({ label, key, type = "text" }) => (
+              { label: "Learner ID / UPI", key: "learner_id" },
+              { label: "Address", key: "address" },
+              { label: "Region / County", key: "region" },
+              { label: "District / Sub-county", key: "district" },
+            ].map(({ label, key, type = "text" }: { label: string; key: string; type?: string }) => (
               <div key={key}>
                 <Label>{label}</Label>
                 {key === "gender" ? (
@@ -1141,7 +1075,7 @@ export default function EnrollmentWizardModal({
             {[
               { label: "Full name *", key: "guardian_name" },
               { label: "Phone *", key: "guardian_phone" },
-              { label: "National ID *", key: "guardian_national_id" },
+              { label: "National ID", key: "guardian_national_id" },
               { label: "Email", key: "guardian_email" },
               { label: "Relationship", key: "guardian_relationship" },
             ].map(({ label, key }) => (
@@ -1161,6 +1095,7 @@ export default function EnrollmentWizardModal({
               { label: "Phone", key: "secondary_guardian_phone" },
               { label: "National ID", key: "secondary_guardian_national_id" },
               { label: "Email", key: "secondary_guardian_email" },
+              { label: "Relationship", key: "secondary_guardian_relationship" },
             ].map(({ label, key }) => (
               <div key={key}>
                 <Label>{label}</Label>
