@@ -84,14 +84,15 @@ export default function FinanceClearancePage() {
     const year =
       r?.structure?.academic_year || r?.matched_year || r?.structure?.year || "";
     const parts = [grade, term, year].filter((x) => x && String(x).trim());
+    // Prefer full Grade · Term · Year whenever we have term or year
     if (parts.length >= 2) return parts.join(" · ");
-    // Name may already be "PP2 · Term 3 · 2026"
-    const named = r?.structure?.name || r?.structure?.raw_name || "";
-    if (named && (String(named).includes("Term") || String(named).includes("·") || String(named).includes("–"))) {
-      return String(named);
+    const named = String(r?.structure?.name || r?.structure?.raw_name || "").trim();
+    if (named && (named.includes("Term") || named.includes("·") || named.includes("–") || named.includes("-"))) {
+      return named;
     }
+    // Last resort: still show whatever we have (avoid silent blank)
     if (parts.length) return parts.join(" · ");
-    return named ? String(named) : "";
+    return named || "";
   };
 
   const mapLines = (lines: any[]) =>

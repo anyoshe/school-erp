@@ -1399,6 +1399,7 @@ class AwaitingClearanceView(APIView):
         )
         ids = [s.id for s in qs]
         inv_map = {}
+        inv_meta = {}  # student_id -> {term, academic_year} from first open invoice
         if ids:
             for row in (
                 Invoice.objects.filter(student_id__in=ids)
@@ -1409,6 +1410,13 @@ class AwaitingClearanceView(APIView):
                 )
             ):
                 inv_map[str(row["student_id"])] = row
+            for inv in Invoice.objects.filter(student_id__in=ids).order_by("generated_at", "id"):
+                sid = str(inv.student_id)
+                if sid not in inv_meta:
+                    inv_meta[sid] = {
+                        "term": (inv.term or "").strip() or None,
+                        "academic_year": (str(inv.academic_year or "").strip() or None),
+                    }
 
         # Fallback structure via assignment or invoice → assignment
         assign_struct = {}
@@ -1433,34 +1441,51 @@ class AwaitingClearanceView(APIView):
                     if fs is not None:
                         assign_struct[sid] = fs
 
+        # Enrollment term/year from applications
+        app_meta = {}
+        if ids:
+            try:
+                from apps.admissions.models import Application
+                for app in Application.objects.filter(student_id__in=ids).only(
+                    "student_id", "enrollment_term", "enrollment_academic_year"
+                ):
+                    app_meta[str(app.student_id)] = {
+                        "term": (app.enrollment_term or "").strip() or None,
+                        "academic_year": (str(app.enrollment_academic_year or "").strip() or None),
+                    }
+            except Exception:
+                pass
+
         rows = []
         for s in qs:
             agg = inv_map.get(str(s.id)) or {}
             due = float(agg.get("total_due") or 0)
             paid = float(agg.get("total_paid") or 0)
             fs = getattr(s, "fee_structure", None) or assign_struct.get(str(s.id))
+            meta = inv_meta.get(str(s.id)) or {}
+            ameta = app_meta.get(str(s.id)) or {}
             structure = None
+            gname = getattr(getattr(s, "current_class", None), "name", None)
+            term = None
+            year = None
             if fs is not None:
-                gname = getattr(getattr(fs, "grade_level", None), "name", None) or getattr(
-                    getattr(s, "current_class", None), "name", None
-                )
-                # Always Grade · Term · Year (never grade-only)
+                gname = getattr(getattr(fs, "grade_level", None), "name", None) or gname
                 term = (fs.period_name or "").strip() or None
                 year = (str(fs.academic_year or "").strip() or None)
-                label_parts = [p for p in [gname, term, year] if p]
-                display_name = (
-                    " · ".join(label_parts)
-                    if len(label_parts) >= 2
-                    else (fs.name or gname or "Fee structure")
-                )
+            # Prefer invoice / enrollment period when structure fields blank or incomplete
+            term = term or meta.get("term") or ameta.get("term")
+            year = year or meta.get("academic_year") or ameta.get("academic_year")
+            label_parts = [p for p in [gname, term, year] if p]
+            display_name = " · ".join(label_parts) if label_parts else None
+            if fs is not None or display_name:
                 structure = {
-                    "id": str(fs.id),
-                    "name": display_name,
-                    "raw_name": fs.name,
+                    "id": str(fs.id) if fs is not None else None,
+                    "name": display_name or (getattr(fs, "name", None) if fs else gname) or "Fee structure",
+                    "raw_name": getattr(fs, "name", None) if fs else None,
                     "academic_year": year,
                     "period_name": term,
                     "grade": gname,
-                    "total_amount": float(getattr(fs, "total_amount", 0) or 0),
+                    "total_amount": float(getattr(fs, "total_amount", 0) or 0) if fs else due,
                 }
             rows.append({
                 "id": str(s.id),
@@ -1480,8 +1505,8 @@ class AwaitingClearanceView(APIView):
                 "total_due": due,
                 "total_paid": paid,
                 "balance": max(0.0, due - paid),
-                "matched_year": getattr(fs, "academic_year", None) if fs else None,
-                "matched_term": getattr(fs, "period_name", None) if fs else None,
+                "matched_year": year,
+                "matched_term": term,
                 "billing_error": None if (fs or due) else "No structure for grade",
                 "billing_ready": bool(due or paid or fs),
             })
