@@ -1394,7 +1394,7 @@ class AwaitingClearanceView(APIView):
                 school_id__in=school_ids,
                 status="PENDING_CLEARANCE",
             )
-            .select_related("current_class")
+            .select_related("current_class", "fee_structure", "fee_structure__grade_level")
             .order_by("-admission_date")[:200]
         )
         ids = [s.id for s in qs]
@@ -1410,11 +1410,33 @@ class AwaitingClearanceView(APIView):
             ):
                 inv_map[str(row["student_id"])] = row
 
+        # Fallback structure names via StudentFeeAssignment when student.fee_structure is empty
+        assign_struct = {}
+        if ids:
+            from apps.finance.models import StudentFeeAssignment
+            for a in (
+                StudentFeeAssignment.objects.filter(student_id__in=ids)
+                .select_related("fee_structure", "fee_structure__grade_level")
+            ):
+                if a.fee_structure_id:
+                    assign_struct[str(a.student_id)] = a.fee_structure
+
         rows = []
         for s in qs:
             agg = inv_map.get(str(s.id)) or {}
             due = float(agg.get("total_due") or 0)
             paid = float(agg.get("total_paid") or 0)
+            fs = getattr(s, "fee_structure", None) or assign_struct.get(str(s.id))
+            structure = None
+            if fs is not None:
+                structure = {
+                    "id": str(fs.id),
+                    "name": fs.name,
+                    "academic_year": fs.academic_year,
+                    "period_name": fs.period_name,
+                    "grade": getattr(getattr(fs, "grade_level", None), "name", None),
+                    "total_amount": float(getattr(fs, "total_amount", 0) or 0),
+                }
             rows.append({
                 "id": str(s.id),
                 "admission_number": s.admission_number,
@@ -1424,17 +1446,19 @@ class AwaitingClearanceView(APIView):
                 "grade": getattr(getattr(s, "current_class", None), "name", None),
                 "grade_id": str(s.current_class_id) if s.current_class_id else None,
                 "admission_date": s.admission_date.isoformat() if s.admission_date else None,
-                "fee_structure_id": str(s.fee_structure_id) if getattr(s, "fee_structure_id", None) else None,
-                "structure": None,
+                "fee_structure_id": str(fs.id) if fs is not None else (
+                    str(s.fee_structure_id) if getattr(s, "fee_structure_id", None) else None
+                ),
+                "structure": structure,
                 "lines": [],
                 "invoices": [],
                 "total_due": due,
                 "total_paid": paid,
                 "balance": max(0.0, due - paid),
-                "matched_year": None,
-                "matched_term": None,
-                "billing_error": None,
-                "billing_ready": bool(due or paid),
+                "matched_year": getattr(fs, "academic_year", None) if fs else None,
+                "matched_term": getattr(fs, "period_name", None) if fs else None,
+                "billing_error": None if (fs or due) else "No structure for grade",
+                "billing_ready": bool(due or paid or fs),
             })
         return Response({"count": len(rows), "results": rows})
 

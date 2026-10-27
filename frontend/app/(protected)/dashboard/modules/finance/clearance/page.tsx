@@ -446,7 +446,11 @@ export default function FinanceClearancePage() {
                       <td className="py-3 px-4">{r.grade || "—"}</td>
                       <td className="py-3 px-4 text-xs text-muted-foreground max-w-[180px]">
                         {r.structure?.name || (
-                          <span className="text-rose-600">No structure for grade</span>
+                          r.total_due > 0 || r.balance > 0 ? (
+                            <span className="text-slate-500">Billed (structure linked)</span>
+                          ) : (
+                            <span className="text-rose-600">No structure for grade</span>
+                          )
                         )}
                         {r.matched_term ? (
                           <span className="block">
