@@ -719,3 +719,36 @@ class Term(models.Model):
     def __str__(self):
 
         return f"{self.academic_year.name} - {self.name}"
+
+
+# =========================================================
+# GRADE ADMISSION REQUIREMENTS (CBC kit / materials lists)
+# =========================================================
+
+class GradeRequirement(models.Model):
+    """
+    Items a learner needs for a given grade (uniforms, books, stationery).
+    Shown on the admission offer letter (page 1) before the fee schedule.
+    """
+    school = models.ForeignKey(
+        School,
+        on_delete=models.CASCADE,
+        related_name="grade_requirements",
+    )
+    grade_level = models.ForeignKey(
+        "GradeLevel",
+        on_delete=models.CASCADE,
+        related_name="admission_requirements",
+    )
+    item_text = models.CharField(max_length=255)
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["grade_level__order", "sort_order", "id"]
+        indexes = [
+            models.Index(fields=["school", "grade_level"]),
+        ]
+
+    def __str__(self):
+        return f"{self.grade_level}: {self.item_text[:40]}"

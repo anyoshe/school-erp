@@ -14,6 +14,7 @@ from .views import (
     SectionViewSet,
     StreamViewSet,
     SubjectViewSet,
+    GradeRequirementViewSet,
 )
 
 router = DefaultRouter()
@@ -26,6 +27,7 @@ router.register(r'terms', TermViewSet, basename='term')
 router.register(r'sections', SectionViewSet, basename='section')
 router.register(r'streams', StreamViewSet, basename='stream')
 router.register(r'subjects', SubjectViewSet, basename='subject')
+router.register(r'grade-requirements', GradeRequirementViewSet, basename='grade-requirement')
 
 urlpatterns = [
     path('copy-template/', CopyCurriculumTemplateAPIView.as_view(), name='copy-curriculum-template'),

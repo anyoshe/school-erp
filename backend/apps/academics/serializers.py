@@ -172,3 +172,22 @@ class SubjectCreateUpdateSerializer(serializers.ModelSerializer):
             'id', 'name', 'code', 'department',
             'is_compulsory', 'is_active', 
         ]
+
+from .models import GradeRequirement
+
+
+class GradeRequirementSerializer(serializers.ModelSerializer):
+    grade_level_name = serializers.CharField(source="grade_level.name", read_only=True)
+
+    class Meta:
+        model = GradeRequirement
+        fields = [
+            "id",
+            "school",
+            "grade_level",
+            "grade_level_name",
+            "item_text",
+            "sort_order",
+            "is_active",
+        ]
+        read_only_fields = ["id"]

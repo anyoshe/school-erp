@@ -41,6 +41,7 @@ export default function OfferLetterModal({
   const [hasGenerated, setHasGenerated] = useState(false);
   const [feeLoading, setFeeLoading] = useState(false);
   const [feeStructures, setFeeStructures] = useState<any[]>([]);
+  const [gradeRequirements, setGradeRequirements] = useState<string[]>([]);
   const [customMessage, setCustomMessage] = useState(
     "We are delighted to offer you admission to our institution for the upcoming academic year. Please review the details below and complete the enrollment process by the deadline."
   );
@@ -91,6 +92,23 @@ export default function OfferLetterModal({
             }
           })
         );
+        try {
+          const reqRes = await api.get("/academics/grade-requirements/", {
+            params: { grade_level: classId, is_active: true },
+          });
+          const reqList = Array.isArray(reqRes.data)
+            ? reqRes.data
+            : reqRes.data?.results || [];
+          setGradeRequirements(
+            reqList
+              .filter((r: any) => r.is_active !== false)
+              .map((r: any) => String(r.item_text || "").trim())
+              .filter(Boolean)
+          );
+        } catch {
+          setGradeRequirements([]);
+        }
+
         setFeeStructures(detailed.filter(Boolean));
         if (detailed.length === 0) {
           toast.message("No fee structure for this grade", {
@@ -311,6 +329,36 @@ export default function OfferLetterModal({
     doc.text("Sincerely,", 20, 210);
     doc.text("Admissions Team", 20, 218);
     doc.text(schoolName, 20, 225);
+
+    // --- PAGE 1: GRADE REQUIREMENTS (before fee schedule on page 2) ---
+    const reqs = (gradeRequirements || []).filter(Boolean);
+    if (reqs.length) {
+      let reqY = 145;
+      // Keep letter body compact; place requirements lower on page 1
+      if (reqY < 130) reqY = 130;
+      doc.setFontSize(11).setFont("helvetica", "bold").setTextColor(15, 118, 110);
+      doc.text(`REQUIREMENTS FOR ${String(className).toUpperCase()}`, 20, reqY);
+      doc.setFontSize(8).setFont("helvetica", "normal").setTextColor(60);
+      reqY += 5;
+      doc.text("Please ensure the following items are available before reporting:", 20, reqY);
+      reqY += 5;
+
+      const cols = reqs.length > 12 ? 3 : reqs.length > 6 ? 2 : 1;
+      const colW = cols === 3 ? 56 : cols === 2 ? 85 : 170;
+      const perCol = Math.ceil(reqs.length / cols);
+      for (let c = 0; c < cols; c++) {
+        let y = reqY;
+        const slice = reqs.slice(c * perCol, (c + 1) * perCol);
+        for (const item of slice) {
+          if (y > 275) break; // stay on page 1
+          const x = 20 + c * (colW + 4);
+          doc.text(`• ${item}`.substring(0, 48), x, y, { maxWidth: colW });
+          y += 4.2;
+        }
+      }
+    }
+
+
 
     // --- PAGE 2: ANNUAL FEE MATRIX (Description × Term 1 / 2 / 3) ---
     doc.addPage();

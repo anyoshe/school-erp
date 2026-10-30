@@ -341,7 +341,22 @@ export default function SchoolAcademicConfigPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="p-8 md:p-12 space-y-10">
-            {/* Academic Year Section */}
+            {/* 
+            <div className="mb-6 rounded-xl border bg-white p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold text-sm">Grade admission requirements</p>
+                <p className="text-xs text-muted-foreground">
+                  Items learners need per class — printed on offer letter page 1.
+                </p>
+              </div>
+              <a
+                href="/dashboard/settings/school/academic/requirements"
+                className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+              >
+                Manage lists
+              </a>
+            </div>
+Academic Year Section */}
             <div className="space-y-6 p-6 bg-white/40 backdrop-blur-sm rounded-2xl border border-slate-200/50">
               <h3 className="text-xl font-semibold flex items-center gap-3 text-slate-800">
                 <Calendar className="h-6 w-6 text-[var(--primary)]" />

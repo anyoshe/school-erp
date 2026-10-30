@@ -503,3 +503,131 @@ class SubjectViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(school=selected_school(self.request))
+
+
+
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from .models import GradeRequirement, GradeLevel
+from .serializers import GradeRequirementSerializer
+
+
+class GradeRequirementViewSet(viewsets.ModelViewSet):
+    """CRUD for per-grade admission requirements (offer letter page 1)."""
+    serializer_class = GradeRequirementSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = GradeRequirement.objects.select_related("grade_level", "school")
+        school_id = self.request.headers.get("X-School-ID") or self.request.query_params.get("school")
+        if school_id:
+            qs = qs.filter(school_id=school_id)
+        grade = self.request.query_params.get("grade_level")
+        if grade:
+            qs = qs.filter(grade_level_id=grade)
+        active = self.request.query_params.get("is_active")
+        if active in ("1", "true", "True"):
+            qs = qs.filter(is_active=True)
+        return qs.order_by("grade_level__order", "sort_order", "id")
+
+    def perform_create(self, serializer):
+        school_id = self.request.headers.get("X-School-ID") or self.request.data.get("school")
+        serializer.save(school_id=school_id)
+
+    @action(detail=False, methods=["post"], url_path="seed-cbc-defaults")
+    def seed_cbc_defaults(self, request):
+        """Create default CBC requirement lists for all school grades (skip existing)."""
+        school_id = request.headers.get("X-School-ID") or request.data.get("school")
+        if not school_id:
+            return Response({"detail": "X-School-ID required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        defaults = _cbc_default_requirements()
+        grades = GradeLevel.objects.filter(school_id=school_id).order_by("order")
+        created = 0
+        for grade in grades:
+            key = _match_grade_key(grade.name)
+            items = defaults.get(key) or defaults.get("PRIMARY_GENERAL") or []
+            if GradeRequirement.objects.filter(school_id=school_id, grade_level=grade).exists():
+                continue
+            for i, text in enumerate(items):
+                GradeRequirement.objects.create(
+                    school_id=school_id,
+                    grade_level=grade,
+                    item_text=text,
+                    sort_order=i,
+                    is_active=True,
+                )
+                created += 1
+        return Response({"created": created, "grades": grades.count()})
+
+
+def _match_grade_key(name: str) -> str:
+    n = (name or "").strip().lower().replace("-", " ")
+    if "play" in n or n in ("pg", "baby"):
+        return "PLAYGROUP"
+    if "pp1" in n or "pre primary 1" in n or "preprimary 1" in n:
+        return "PP1"
+    if "pp2" in n or "pre primary 2" in n or "preprimary 2" in n:
+        return "PP2"
+    for g in range(1, 10):
+        if f"grade {g}" in n or n == f"g{g}" or n == str(g):
+            return f"GRADE_{g}"
+    if "junior" in n:
+        return "GRADE_7"
+    return "PRIMARY_GENERAL"
+
+
+def _cbc_default_requirements():
+    """Sensible CBC Kenya starter lists — schools edit in Settings."""
+    common_pre = [
+        "Birth certificate (copy)",
+        "2 passport-size photos",
+        "School uniform (as per school colours)",
+        "Sports wear / PE kit",
+        "School bag",
+        "Water bottle (labelled)",
+        "Handkerchief / tissue pack",
+    ]
+    books_lower = [
+        "Exercise books (as guided by class teacher)",
+        "Drawing book",
+        "Pencils, eraser, sharpener",
+        "Crayons / coloured pencils",
+        "Glue stick",
+    ]
+    books_mid = [
+        "Mathematical set",
+        "Ruler 30cm",
+        "Blue and red pens",
+        "Pencils, eraser, sharpener",
+        "Exercise books (as guided by class teacher)",
+        "English / Kiswahili dictionary (recommended)",
+    ]
+    books_junior = [
+        "Mathematical set & graph book",
+        "Scientific calculator (as advised)",
+        "Blue, black and red pens",
+        "Exercise books (as guided)",
+        "Ream of ruled paper (optional contribution)",
+    ]
+    return {
+        "PLAYGROUP": common_pre + [
+            "Extra set of clothes",
+            "Feeding bottle / snack container (if applicable)",
+            "Rest mat / towel (if required by school)",
+        ] + books_lower[:4],
+        "PP1": common_pre + books_lower + ["Story book (age-appropriate)"],
+        "PP2": common_pre + books_lower + ["Story book (age-appropriate)", "Number chart (home use)"],
+        "GRADE_1": common_pre + books_lower + ["Homework diary", "Reading book"],
+        "GRADE_2": common_pre + books_lower + ["Homework diary", "Reading book"],
+        "GRADE_3": common_pre + books_mid + ["Homework diary"],
+        "GRADE_4": common_pre + books_mid + ["Homework diary", "Atlas (recommended)"],
+        "GRADE_5": common_pre + books_mid + ["Homework diary", "Atlas (recommended)"],
+        "GRADE_6": common_pre + books_mid + ["Homework diary", "Atlas (recommended)"],
+        "GRADE_7": common_pre + books_junior + ["Homework diary"],
+        "GRADE_8": common_pre + books_junior + ["Homework diary"],
+        "GRADE_9": common_pre + books_junior + ["Homework diary"],
+        "PRIMARY_GENERAL": common_pre + books_mid,
+    }
