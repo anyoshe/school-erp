@@ -9,7 +9,7 @@ import { Hash,
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
-import { useEffect, useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 
 interface SidebarProps {
