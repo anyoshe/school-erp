@@ -323,42 +323,51 @@ export default function OfferLetterModal({
 
     doc.text(`Dear ${applicationData.primary_guardian_name || "Guardian"},`, 20, 105);
 
-    const bodyText = `We are pleased to inform you that ${applicationData.first_name} ${applicationData.last_name} has been offered admission to ${className} for the 2026 Academic Year.\n\n${customMessage}\n\nPlease find the detailed breakdown of fees per term attached on the next page.`;
-    doc.text(doc.splitTextToSize(bodyText, 170), 20, 115);
+    const bodyText = `We are pleased to inform you that ${applicationData.first_name} ${applicationData.last_name} has been offered admission to ${className} for the 2026 Academic Year.\n\n${customMessage}\n\nPlease find the materials checklist below, and the detailed fee breakdown on the next page.`;
+    doc.setFontSize(11).setFont("helvetica", "normal").setTextColor(0);
+    const bodyLines = doc.splitTextToSize(bodyText, 170);
+    const bodyStartY = 115;
+    const bodyLineH = 5.5;
+    doc.text(bodyLines, 20, bodyStartY);
+    // Clear gap after introduction before requirements heading
+    let cursorY = bodyStartY + bodyLines.length * bodyLineH + 14;
 
-    doc.text("Sincerely,", 20, 210);
-    doc.text("Admissions Team", 20, 218);
-    doc.text(schoolName, 20, 225);
-
-    // --- PAGE 1: GRADE REQUIREMENTS (before fee schedule on page 2) ---
+    // --- PAGE 1: GRADE REQUIREMENTS (after letter body, before signature) ---
     const reqs = (gradeRequirements || []).filter(Boolean);
     if (reqs.length) {
-      let reqY = 145;
-      // Keep letter body compact; place requirements lower on page 1
-      if (reqY < 130) reqY = 130;
       doc.setFontSize(11).setFont("helvetica", "bold").setTextColor(15, 118, 110);
-      doc.text(`REQUIREMENTS FOR ${String(className).toUpperCase()}`, 20, reqY);
+      doc.text(`REQUIREMENTS FOR ${String(className).toUpperCase()}`, 20, cursorY);
+      cursorY += 6;
       doc.setFontSize(8).setFont("helvetica", "normal").setTextColor(60);
-      reqY += 5;
-      doc.text("Please ensure the following items are available before reporting:", 20, reqY);
-      reqY += 5;
+      doc.text("Please ensure the following items are available before reporting:", 20, cursorY);
+      cursorY += 6;
 
       const cols = reqs.length > 12 ? 3 : reqs.length > 6 ? 2 : 1;
       const colW = cols === 3 ? 56 : cols === 2 ? 85 : 170;
       const perCol = Math.ceil(reqs.length / cols);
+      let maxColY = cursorY;
       for (let c = 0; c < cols; c++) {
-        let y = reqY;
+        let y = cursorY;
         const slice = reqs.slice(c * perCol, (c + 1) * perCol);
         for (const item of slice) {
-          if (y > 275) break; // stay on page 1
+          if (y > 250) break; // leave room for signature on page 1
           const x = 20 + c * (colW + 4);
           doc.text(`• ${item}`.substring(0, 48), x, y, { maxWidth: colW });
           y += 4.2;
         }
+        if (y > maxColY) maxColY = y;
       }
+      cursorY = maxColY + 10;
+    } else {
+      cursorY += 4;
     }
 
-
+    // Signature block below requirements (never overlapping the intro)
+    if (cursorY > 250) cursorY = 250;
+    doc.setFontSize(11).setFont("helvetica", "normal").setTextColor(0);
+    doc.text("Sincerely,", 20, cursorY);
+    doc.text("Admissions Team", 20, cursorY + 8);
+    doc.text(schoolName, 20, cursorY + 15);
 
     // --- PAGE 2: ANNUAL FEE MATRIX (Description × Term 1 / 2 / 3) ---
     doc.addPage();
