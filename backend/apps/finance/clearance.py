@@ -267,7 +267,11 @@ student, user=None, academic_year=None, period_name=None):
                 stale.delete()
 
     if not invoices and assignment and structure:
-        total = structure.total_amount or Decimal("0")
+        # Mandatory only — optional items are added later at clearance if chosen
+        total = getattr(structure, "mandatory_total", None)
+        if total is None:
+            total = structure.total_amount or Decimal("0")
+        total = Decimal(str(total or 0))
         inv = Invoice.objects.create(
             student=student,
             fee_assignment=assignment,
@@ -280,14 +284,25 @@ student, user=None, academic_year=None, period_name=None):
         )
         try:
             create_invoice_lines_for_assignment(inv, assignment, Decimal("1"))
+            # Align invoice total to actual mandatory lines created
+            line_sum = inv.lines.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            if line_sum != inv.amount_due:
+                inv.amount_due = line_sum
+                inv.save(update_fields=["amount_due"])
         except Exception:
             for si in structure.structure_items.select_related("item").all():
+                item = si.item
+                if item is not None and getattr(item, "is_optional", False):
+                    continue
                 InvoiceLine.objects.create(
                     invoice=inv,
                     item=si.item,
                     description=getattr(si.item, "name", "Fee") or "Fee",
                     amount=si.amount,
                 )
+            line_sum = inv.lines.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+            inv.amount_due = line_sum
+            inv.save(update_fields=["amount_due"])
         invoices = [inv]
 
     # Build line preview
