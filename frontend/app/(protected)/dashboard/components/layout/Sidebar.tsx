@@ -9,7 +9,7 @@ import { Hash,
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
-import { useState } from "react";
+import { useEffect, useState, useEffect } from "react";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 
 interface SidebarProps {
@@ -78,11 +78,14 @@ const SETTINGS_LINKS: MenuItem[] = [
 export default function Sidebar({ isCollapsed }: SidebarProps) {
   const pathname = usePathname();
   const { currentSchool, isPlatformAdmin } = useCurrentSchool();
-  const [isSettingsOpen, setIsSettingsOpen] = useState(() =>
-    typeof window !== "undefined"
-      ? window.location.pathname.startsWith("/dashboard/settings")
-      : false
-  );
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Open Settings submenu after mount when already on a settings route (avoid SSR mismatch)
+  useEffect(() => {
+    if (pathname.startsWith("/dashboard/settings")) {
+      setIsSettingsOpen(true);
+    }
+  }, [pathname]);
 
   const enabledModules = currentSchool?.modules || [];
 // Build unique items by code first (already deduplicated)
