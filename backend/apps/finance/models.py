@@ -424,14 +424,27 @@ class Invoice(models.Model):
         super().save(*args, **kwargs)
 
     def generate_invoice_number(self):
-        """Auto-generate invoice number"""
-        year = self.academic_year[-2:]  # 26 for 2026
-        seq = Invoice.objects.filter(
-            student__school=self.student.school,
-            academic_year=self.academic_year,
-            term=self.term
-        ).count() + 1
-        return f"INV-{self.student.school.admission_prefix or 'SCH'}-{year}-{self.term[:2].upper()}-{seq:04d}"
+        """Auto-generate a school-unique invoice number (no reuse / race on count)."""
+        year = str(self.academic_year or "")[-2:] or "00"
+        term_code = (str(self.term or "T")[:2] or "T").upper()
+        prefix = f"INV-{self.student.school.admission_prefix or 'SCH'}-{year}-{term_code}-"
+        school_id = self.student.school_id
+        max_seq = 0
+        for num in Invoice.objects.filter(
+            school_id=school_id,
+            invoice_number__startswith=prefix,
+        ).values_list("invoice_number", flat=True):
+            try:
+                max_seq = max(max_seq, int(str(num).rsplit("-", 1)[-1]))
+            except (TypeError, ValueError):
+                continue
+        seq = max_seq + 1
+        while Invoice.objects.filter(
+            school_id=school_id,
+            invoice_number=f"{prefix}{seq:04d}",
+        ).exists():
+            seq += 1
+        return f"{prefix}{seq:04d}"
 class InvoiceLine(models.Model):
 
     invoice = models.ForeignKey(
