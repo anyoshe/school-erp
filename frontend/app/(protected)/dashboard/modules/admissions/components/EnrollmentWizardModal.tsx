@@ -625,9 +625,13 @@ export default function EnrollmentWizardModal({
   ]);
 
 
+  // Payment plans are optional at enrollment (term fees are collected in Finance clearance).
+  // Load only on the final step, non-blocking, and never fail the wizard on timeout.
   useEffect(() => {
-    if (!open) return;
+    if (!open || currentStep !== 6) return;
+    if (paymentPlans.length > 0) return;
 
+    let cancelled = false;
     const asList = (data: any): any[] => {
       if (Array.isArray(data)) return data;
       if (Array.isArray(data?.results)) return data.results;
@@ -635,12 +639,17 @@ export default function EnrollmentWizardModal({
       return [];
     };
 
-    const loadPaymentPlans = async () => {
+    (async () => {
       try {
-        const plansRes = await api.get("/finance/payment-plans/", { timeout: 15000 });
+        const plansRes = await api.get("/finance/payment-plans/", {
+          timeout: 8000,
+          headers: currentSchool?.id
+            ? { "X-School-ID": String(currentSchool.id) }
+            : undefined,
+        });
+        if (cancelled) return;
         const plans = asList(plansRes.data);
         setPaymentPlans(plans);
-
         if (plans.length > 0) {
           setFormData((prev) => {
             if (prev.payment_plan) return prev;
@@ -649,13 +658,16 @@ export default function EnrollmentWizardModal({
           });
         }
       } catch (err) {
-        console.error(err);
-        toast.error("Failed to load payment plans from Finance");
+        // Soft-fail: enrollment does not require a payment plan
+        console.warn("payment-plans unavailable (non-blocking)", err);
+        if (!cancelled) setPaymentPlans([]);
       }
-    };
+    })();
 
-    loadPaymentPlans();
-  }, [open]);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, currentStep, currentSchool?.id, paymentPlans.length]);
 
   // Ensure interview/admission charges exist (N/A by default if school amounts are 0)
   useEffect(() => {
@@ -1666,7 +1678,7 @@ export default function EnrollmentWizardModal({
               {!validateStep(6) && (
                 <p className="text-xs text-amber-700 max-w-xs text-right">
                   To enable Confirm & Enroll: select the academic year and term
-                  {paymentPlans.length > 0 && !formData.payment_plan ? ", choose a payment plan" : ""}
+                  
                   {!formData.terms_accepted ? ", accept terms" : ""}
                   {!formData.summary_confirmed ? ", confirm summary" : ""}
                   {Number(formData.initial_payment_amount || 0) > 0 &&
