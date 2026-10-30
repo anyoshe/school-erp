@@ -122,6 +122,14 @@ export default function AdmissionActions({
     "SUBMITTED"
   ).toUpperCase();
 
+  const interviewOutcome = (
+    optimisticOutcome ||
+    (applicationData as any)?.interview_outcome ||
+    ""
+  )
+    .toString()
+    .toUpperCase();
+
   const isLoading = (key: string) => loading === key;
 
   const performAction = async (
