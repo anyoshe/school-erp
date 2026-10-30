@@ -123,15 +123,24 @@ class FeeStructure(models.Model):
     @property
     def mandatory_total(self):
         """Mandatory lines only — optional items excluded until selected at clearance."""
+        optional_ids = set(self.available_optional_items.values_list("id", flat=True))
         total = Decimal("0")
         for si in self.structure_items.select_related("item").all():
             item = si.item
             if item is None:
                 continue
-            if getattr(item, "is_optional", False):
+            if getattr(item, "is_optional", False) or item.id in optional_ids:
                 continue
             total += Decimal(str(si.amount or 0))
         return total
+
+    def is_item_optional(self, item):
+        """True if this structure treats the fee item as optional."""
+        if item is None:
+            return False
+        if getattr(item, "is_optional", False):
+            return True
+        return self.available_optional_items.filter(pk=item.pk).exists()
 
 
 class FeeStructureItem(models.Model):

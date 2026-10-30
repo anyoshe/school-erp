@@ -305,6 +305,78 @@ student, user=None, academic_year=None, period_name=None):
             inv.save(update_fields=["amount_due"])
         invoices = [inv]
 
+
+    # Strip optional lines from unpaid invoices (optionals only via "Add to bill")
+    if structure is not None and invoices:
+        selected_opt = set()
+        if assignment is not None:
+            selected_opt = set(assignment.selected_optional_items.values_list("id", flat=True))
+        optional_ids = set(structure.available_optional_items.values_list("id", flat=True))
+        for inv in invoices:
+            if inv.payments.exists():
+                continue
+            changed = False
+            for ln in list(inv.lines.select_related("item").all()):
+                item = ln.item
+                if item is None:
+                    continue
+                is_opt = bool(getattr(item, "is_optional", False)) or (item.id in optional_ids)
+                if is_opt and item.id not in selected_opt:
+                    ln.delete()
+                    changed = True
+            if changed:
+                line_sum = inv.lines.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+                inv.amount_due = line_sum
+                inv.amount_paid = inv.amount_paid or Decimal("0")
+                inv.balance = max(Decimal("0"), line_sum - Decimal(str(inv.amount_paid or 0)))
+                inv.save(update_fields=["amount_due", "balance"])
+
+    # If still no lines but structure exists, force rebuild mandatory-only invoice
+    if structure is not None and assignment is not None:
+        for inv in list(invoices):
+            if inv.payments.exists():
+                continue
+            if inv.lines.exists():
+                continue
+            inv.delete()
+            invoices = [i for i in invoices if i.id != inv.id]
+        if not invoices:
+            total = Decimal(str(getattr(structure, "mandatory_total", None) or 0))
+            inv = Invoice.objects.create(
+                student=student,
+                fee_assignment=assignment,
+                school=student.school,
+                term=term,
+                academic_year=str(year)[:9],
+                amount_due=total,
+                due_date=timezone.now().date(),
+                generated_by=user if getattr(user, "is_authenticated", False) else None,
+            )
+            try:
+                create_invoice_lines_for_assignment(inv, assignment, Decimal("1"))
+                line_sum = inv.lines.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+                if line_sum != inv.amount_due:
+                    inv.amount_due = line_sum
+                    inv.save(update_fields=["amount_due"])
+            except Exception:
+                for si in structure.structure_items.select_related("item").all():
+                    item = si.item
+                    if item is None:
+                        continue
+                    if structure.is_item_optional(item):
+                        continue
+                    InvoiceLine.objects.create(
+                        invoice=inv,
+                        item=item,
+                        description=getattr(item, "name", "Fee") or "Fee",
+                        amount=si.amount,
+                    )
+                line_sum = inv.lines.aggregate(t=Sum("amount"))["t"] or Decimal("0")
+                inv.amount_due = line_sum
+                inv.save(update_fields=["amount_due"])
+            invoices = [inv]
+
+
     # Build line preview
     lines = []
     for inv in invoices:

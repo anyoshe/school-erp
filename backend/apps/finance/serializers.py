@@ -133,7 +133,12 @@ class FeeStructureItemLiteSerializer(serializers.ModelSerializer):
 
     def get_is_optional(self, obj):
         try:
-            return bool(obj.item.is_optional)
+            if bool(getattr(obj.item, "is_optional", False)):
+                return True
+            structure = getattr(obj, "structure", None)
+            if structure is not None:
+                return structure.available_optional_items.filter(pk=obj.item_id).exists()
+            return False
         except Exception:
             return False
 
