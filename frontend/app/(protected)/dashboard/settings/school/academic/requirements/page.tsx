@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useCurrentSchool } from "@/app/contexts/CurrentSchoolContext";
+import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import api from "@/utils/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
