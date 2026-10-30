@@ -577,8 +577,10 @@ Admissions Team
         applicationId={applicationId}
         applicationData={applicationData}
         onScheduled={() => {
-          onUpdated?.();
-          toast.success("Interview scheduled and status updated");
+          setOptimisticStatus("TEST_SCHEDULED");
+          setIsScheduleOpen(false);
+          void onUpdated?.({ status: "TEST_SCHEDULED" });
+          toast.success("Interview scheduled — next: mark interview done.");
         }}
       />
 
