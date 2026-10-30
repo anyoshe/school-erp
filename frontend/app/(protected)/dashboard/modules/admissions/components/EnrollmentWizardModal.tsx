@@ -1013,6 +1013,9 @@ export default function EnrollmentWizardModal({
       payload.set("initial_payment_amount", "0");
       payload.set("enrollment_term", String(formData.enrollment_term || ""));
       payload.set("enrollment_academic_year", String(formData.enrollment_academic_year || ""));
+      // Never send a stale fee_structure_id — backend matches by year + term + grade
+      payload.delete("fee_structure_id");
+      payload.delete("fee_structure");
 
       if (formData.payment_plan) {
         payload.set("payment_plan", String(formData.payment_plan));   // This is important
@@ -1491,14 +1494,20 @@ export default function EnrollmentWizardModal({
                   className="mt-1"
                   placeholder="e.g. 2026"
                   value={formData.enrollment_academic_year || ""}
-                  onChange={(e) => updateForm("enrollment_academic_year", e.target.value)}
+                  onChange={(e) => {
+                    updateForm("enrollment_academic_year", e.target.value);
+                    updateForm("fee_structure_id", "");
+                  }}
                 />
               </div>
               <div>
                 <label className="text-sm font-medium">Enrolling into term *</label>
                 <Select
                   value={formData.enrollment_term || "none"}
-                  onValueChange={(v) => updateForm("enrollment_term", v === "none" ? "" : v)}
+                  onValueChange={(v) => {
+                    updateForm("enrollment_term", v === "none" ? "" : v);
+                    updateForm("fee_structure_id", "");
+                  }}
                 >
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Select term" />

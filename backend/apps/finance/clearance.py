@@ -99,26 +99,43 @@ def fee_structure_matches(student, structure, academic_year=None, period_name=No
 
 def find_fee_structure(student, academic_year=None, period_name=None):
     """
-    Find the active fee structure for this student's exact grade, year, and term.
+    Match an active FeeStructure for the student's grade + exact year + term.
+    Never falls back to a different year/term (e.g. Term 1 2027 when Term 3 2026 was selected).
     """
     from .models import FeeStructure
 
     grade = resolve_student_grade(student)
     year_tok = _normalize_year_token(academic_year)
     term_tok = _normalize_term_token(period_name)
-    if grade is None or not year_tok or not term_tok:
+    if grade is None:
+        return None
+    if not year_tok or not term_tok:
         return None
 
-    candidates = [
-        structure
-        for structure in FeeStructure.objects.filter(
-            school_id=student.school_id,
-            grade_level_id=grade.id,
-            is_active=True,
-        ).prefetch_related("structure_items__item")
-        if fee_structure_matches(student, structure, academic_year, period_name)
-    ]
-    return candidates[0] if len(candidates) == 1 else None
+    qs = FeeStructure.objects.filter(
+        school_id=student.school_id,
+        is_active=True,
+    ).select_related("grade_level").prefetch_related("structure_items__item")
+
+    exact = []
+    for structure in qs:
+        if getattr(structure, "grade_level_id", None) != getattr(grade, "id", None):
+            # allow name match if ids differ across seeds
+            gn = str(getattr(grade, "name", "") or "").strip().lower()
+            sn = str(getattr(getattr(structure, "grade_level", None), "name", "") or "").strip().lower()
+            if not gn or gn != sn:
+                continue
+        if _normalize_year_token(structure.academic_year) != year_tok:
+            continue
+        if _normalize_term_token(structure.period_name) != term_tok:
+            continue
+        exact.append(structure)
+
+    if not exact:
+        return None
+    # Prefer structures that have line items
+    exact.sort(key=lambda s: (0 if s.structure_items.exists() else 1, s.name or ""))
+    return exact[0]
 
 
 def list_structure_candidates(student, academic_year=None, period_name=None, limit=20):

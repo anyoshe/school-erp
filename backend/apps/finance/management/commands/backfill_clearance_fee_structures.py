@@ -1,48 +1,50 @@
 
 """
-Assign fee structures + invoices for students awaiting finance clearance.
+Assign / correct fee structures for PENDING_CLEARANCE students from Application enrollment term/year.
 
 Usage:
   python manage.py backfill_clearance_fee_structures --dry-run
   python manage.py backfill_clearance_fee_structures
-  python manage.py backfill_clearance_fee_structures --school-id <uuid>
+  python manage.py backfill_clearance_fee_structures --force
 """
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 
 
 class Command(BaseCommand):
-    help = "Backfill fee_structure and billing for PENDING_CLEARANCE / clearance queue students"
+    help = "Backfill/correct fee_structure for clearance students using enrollment term/year"
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true")
         parser.add_argument("--school-id", type=str, default=None)
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Re-match even when a structure is already linked (fixes wrong Term/Year)",
+        )
 
     def handle(self, *args, **options):
         from apps.students.models import Student
-        from apps.finance.clearance import ensure_student_billing, find_fee_structure, resolve_student_grade
+        from apps.finance.clearance import (
+            ensure_student_billing,
+            find_fee_structure,
+            resolve_student_grade,
+            fee_structure_matches,
+        )
+        from apps.finance.models import StudentFeeAssignment, Invoice
         from apps.admissions.models import Application
 
         dry = options["dry_run"]
+        force = options["force"]
         qs = Student.objects.filter(
             Q(status="PENDING_CLEARANCE") | Q(status__iexact="pending_clearance")
         ).select_related("current_class", "school", "fee_structure")
-
-        # Also students with no fee_structure that still look like new admits
-        extra = Student.objects.filter(fee_structure__isnull=True).exclude(
-            id__in=qs.values_list("id", flat=True)
-        )
-        # Prefer those linked from applications enrolled
-        app_student_ids = Application.objects.filter(
-            status="ENROLLED", student__isnull=False
-        ).values_list("student_id", flat=True)
-        extra = extra.filter(id__in=app_student_ids)
-        qs = (qs | extra).distinct()
 
         if options.get("school_id"):
             qs = qs.filter(school_id=options["school_id"])
 
         assigned = 0
+        corrected = 0
         billed = 0
         failed = 0
 
@@ -52,35 +54,70 @@ class Command(BaseCommand):
             app = Application.objects.filter(student=student).only(
                 "enrollment_term", "enrollment_academic_year"
             ).first()
-            year = app.enrollment_academic_year if app else None
-            term = app.enrollment_term if app else None
+            year = (app.enrollment_academic_year if app else None) or None
+            term = (app.enrollment_term if app else None) or None
+            year = str(year or "").strip() or None
+            term = str(term or "").strip() or None
 
-            structure = student.fee_structure
-            if structure is None:
-                structure = find_fee_structure(student, year, term)
-                if structure and not dry:
-                    student.fee_structure = structure
-                    student.save(update_fields=["fee_structure"])
-                    assigned += 1
-                    self.stdout.write(
-                        f"Assigned {structure.name} → {student.admission_number} "
-                        f"({getattr(student.current_class, 'name', '?')})"
+            if not year or not term:
+                failed += 1
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"{student.admission_number}: missing enrollment year/term on application"
                     )
-                elif structure and dry:
-                    assigned += 1
+                )
+                continue
+
+            matched = find_fee_structure(student, year, term)
+            current = student.fee_structure
+            needs = matched is not None and (
+                current is None
+                or force
+                or not fee_structure_matches(student, current, year, term)
+            )
+
+            if needs and matched:
+                label = f"{matched.name} ({matched.period_name} / {matched.academic_year})"
+                if dry:
                     self.stdout.write(
-                        f"[dry] would assign {structure.name} → {student.admission_number}"
+                        f"[dry] {student.admission_number}: "
+                        f"{getattr(current, 'name', None)} → {label}"
                     )
                 else:
-                    failed += 1
+                    student.fee_structure = matched
+                    student.save(update_fields=["fee_structure"])
+                    StudentFeeAssignment.objects.update_or_create(
+                        student=student,
+                        defaults={"fee_structure": matched, "is_waived": False},
+                    )
+                    # Drop unpaid invoices so ensure regenerates for correct period
+                    for inv in Invoice.objects.filter(student=student):
+                        if not inv.payments.exists():
+                            inv.delete()
                     self.stdout.write(
-                        self.style.WARNING(
-                            f"No structure for {student.admission_number} "
-                            f"grade={getattr(student.current_class, 'name', None)} "
-                            f"term={term} year={year}"
+                        self.style.SUCCESS(
+                            f"{student.admission_number}: linked {label}"
                         )
                     )
-                    continue
+                if current is None:
+                    assigned += 1
+                else:
+                    corrected += 1
+            elif matched is None:
+                failed += 1
+                self.stdout.write(
+                    self.style.WARNING(
+                        f"{student.admission_number}: no structure for "
+                        f"grade={getattr(student.current_class, 'name', None)} "
+                        f"term={term} year={year}"
+                    )
+                )
+                continue
+            else:
+                self.stdout.write(
+                    f"{student.admission_number}: already correct "
+                    f"({getattr(current, 'period_name', None)} / {getattr(current, 'academic_year', None)})"
+                )
 
             if not dry:
                 try:
@@ -90,12 +127,12 @@ class Command(BaseCommand):
                     billed += 1
                 except Exception as e:
                     failed += 1
-                    self.stdout.write(self.style.ERROR(f"Billing failed {student.admission_number}: {e}"))
-            else:
-                billed += 1
+                    self.stdout.write(
+                        self.style.ERROR(f"{student.admission_number} billing: {e}")
+                    )
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Done. structures_assigned={assigned} billed={billed} failed={failed} dry={dry}"
+                f"Done. assigned={assigned} corrected={corrected} billed={billed} failed={failed} dry={dry}"
             )
         )

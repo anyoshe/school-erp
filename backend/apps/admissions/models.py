@@ -784,6 +784,35 @@ class Application(models.Model):
             created_by=created_by_user,
         )
 
+        # Attach fee structure for the EXACT enrollment year + term (never default Term 1)
+        try:
+            from apps.finance.clearance import find_fee_structure
+            from apps.finance.models import FeeStructure, StudentFeeAssignment
+            year = str(wd.get("enrollment_academic_year") or self.enrollment_academic_year or "").strip()
+            term = str(wd.get("enrollment_term") or self.enrollment_term or "").strip()
+            fs_key = wd.get("fee_structure") or wd.get("fee_structure_id")
+            fee_structure_obj = None
+            if fs_key and year and term:
+                cand = FeeStructure.objects.filter(pk=fs_key, school_id=self.school_id).first()
+                if cand is not None:
+                    from apps.finance.clearance import fee_structure_matches
+                    if fee_structure_matches(student, cand, year, term):
+                        fee_structure_obj = cand
+            if fee_structure_obj is None and year and term:
+                fee_structure_obj = find_fee_structure(student, academic_year=year, period_name=term)
+            if fee_structure_obj is not None:
+                student.fee_structure = fee_structure_obj
+                student.save(update_fields=["fee_structure"])
+                StudentFeeAssignment.objects.update_or_create(
+                    student=student,
+                    defaults={
+                        "fee_structure": fee_structure_obj,
+                        "is_waived": False,
+                    },
+                )
+        except Exception as e:
+            print(f"[ENROLL] fee structure attach failed: {e}")
+
         # Medical Record
         MedicalRecord.objects.update_or_create(
             student=student,
