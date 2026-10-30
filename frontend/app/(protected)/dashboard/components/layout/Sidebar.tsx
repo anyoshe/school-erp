@@ -67,6 +67,7 @@ const SETTINGS_LINKS: MenuItem[] = [
   { label: "Contact & Address", href: "/dashboard/settings/school/contact", icon: MapPin },
   { label: "Academic Departments", href: "/dashboard/settings/school/departments", icon: Book },
   { label: "Academic Config", href: "/dashboard/settings/school/academic", icon: Book },
+  { label: "Grade requirements", href: "/dashboard/settings/school/academic/requirements", icon: Book },
   { label: "Admission numbers", href: "/dashboard/settings/school/admission-numbers", icon: Hash },
   { label: "Branding", href: "/dashboard/settings/school/branding", icon: Image },
   { label: "Modules", href: "/dashboard/settings/modules", icon: Grid },
@@ -77,7 +78,11 @@ const SETTINGS_LINKS: MenuItem[] = [
 export default function Sidebar({ isCollapsed }: SidebarProps) {
   const pathname = usePathname();
   const { currentSchool, isPlatformAdmin } = useCurrentSchool();
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(() =>
+    typeof window !== "undefined"
+      ? window.location.pathname.startsWith("/dashboard/settings")
+      : false
+  );
 
   const enabledModules = currentSchool?.modules || [];
 // Build unique items by code first (already deduplicated)
