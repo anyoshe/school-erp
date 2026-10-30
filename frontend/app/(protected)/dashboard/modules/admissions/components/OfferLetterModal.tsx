@@ -327,10 +327,10 @@ export default function OfferLetterModal({
     doc.setFontSize(11).setFont("helvetica", "normal").setTextColor(0);
     const bodyLines = doc.splitTextToSize(bodyText, 170);
     const bodyStartY = 115;
-    const bodyLineH = 5.5;
+    const bodyLineH = 5;
     doc.text(bodyLines, 20, bodyStartY);
-    // Clear gap after introduction before requirements heading
-    let cursorY = bodyStartY + bodyLines.length * bodyLineH + 14;
+    // Modest gap after introduction (not too far down)
+    let cursorY = bodyStartY + bodyLines.length * bodyLineH + 8;
 
     // --- PAGE 1: GRADE REQUIREMENTS (after letter body, before signature) ---
     const reqs = (gradeRequirements || []).filter(Boolean);
@@ -357,7 +357,7 @@ export default function OfferLetterModal({
         }
         if (y > maxColY) maxColY = y;
       }
-      cursorY = maxColY + 10;
+      cursorY = maxColY + 8;
     } else {
       cursorY += 4;
     }
