@@ -31,7 +31,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   applicationId: string;
   applicationData: Application;
-  onCompleted?: () => void;
+  onCompleted?: (data?: { status?: string; interview_outcome?: string }) => void;
 }
 
 export default function InterviewCompletedModal({
@@ -71,7 +71,7 @@ export default function InterviewCompletedModal({
       });
       toast.success("Interview marked complete");
       onOpenChange(false);
-      onCompleted?.();
+      onCompleted?.({ status: "INTERVIEW_COMPLETED", interview_outcome: outcome });
     } catch (err: any) {
       toast.error(
         err?.response?.data?.detail ||

@@ -102,6 +102,7 @@ export default function AdmissionActions({
   const [enrolledStudent, setEnrolledStudent] = useState<{ id: string; full_name?: string } | null>(null);
   /** Optimistic status so pipeline advances immediately (parent refetch can lag). */
   const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null);
+  const [optimisticOutcome, setOptimisticOutcome] = useState<string | null>(null);
   const actionLock = useRef(false);
 
   useEffect(() => {
@@ -417,15 +418,46 @@ Admissions Team
       );
     }
 
-    if (status === "INTERVIEW_COMPLETED" && applicationData.interview_outcome === "PASS") {
+    if (status === "INTERVIEW_COMPLETED") {
+      const failed = interviewOutcome === "FAIL" || interviewOutcome === "FAILED";
       return (
-        <Button
-          onClick={() => setIsOfferLetterOpen(true)}
-          className="w-full h-12 bg-primary hover:bg-primary-700 text-white rounded-xl shadow-lg animate-pulse"
-        >
-          <FileText className="mr-2 h-5 w-5" />
-          Issue Admission Offer
-        </Button>
+        <div className="space-y-2 w-full">
+          <p className="text-xs text-muted-foreground">
+            Interview completed{interviewOutcome ? ` (${interviewOutcome})` : ""}.
+            {failed
+              ? " Outcome was not a pass — you may reject, or still issue an offer if appropriate."
+              : " Next: issue an offer, or reject the application."}
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 w-full">
+            {!failed && (
+              <Button
+                onClick={() => setIsOfferLetterOpen(true)}
+                className="flex-1 h-12 bg-primary hover:bg-primary-700 text-white rounded-xl shadow-lg"
+              >
+                <FileText className="mr-2 h-5 w-5" />
+                Issue offer
+              </Button>
+            )}
+            {failed && (
+              <Button
+                variant="outline"
+                onClick={() => setIsOfferLetterOpen(true)}
+                className="flex-1 h-12 rounded-xl"
+              >
+                <FileText className="mr-2 h-5 w-5" />
+                Issue offer anyway
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              onClick={() => setIsRejectOpen(true)}
+              className="h-12 border-red-200 text-red-600 hover:bg-red-50 rounded-xl"
+            >
+              <Ban className="mr-2 h-4 w-4" />
+              Reject
+            </Button>
+          </div>
+        </div>
       );
     }
 
@@ -589,10 +621,16 @@ Admissions Team
         onOpenChange={setIsInterviewDoneOpen}
         applicationId={applicationId}
         applicationData={applicationData}
-        onCompleted={() => {
+        onCompleted={(data) => {
+          const outcome = (data?.interview_outcome || "PASS").toString().toUpperCase();
           setOptimisticStatus("INTERVIEW_COMPLETED");
-          void onUpdated?.({ status: "INTERVIEW_COMPLETED" });
-          toast.success("Interview marked as completed!");
+          setOptimisticOutcome(outcome);
+          setIsInterviewDoneOpen(false);
+          void onUpdated?.({
+            status: "INTERVIEW_COMPLETED",
+            interview_outcome: outcome,
+          });
+          toast.success("Interview completed — next: issue offer or reject.");
         }}
       />
 
