@@ -68,31 +68,42 @@ export default function OfferLetterModal({
         currentSchool?.id ||
         null;
 
-      // Seed from context immediately (usually already in memory)
+      // Seed from context immediately
       if (currentSchool && (currentSchool as any).name) {
-        if (!cancelled) setSchoolProfile(currentSchool);
+        if (!cancelled) setSchoolProfile(currentSchool as any);
       } else if (fromApp && fromApp.name) {
         if (!cancelled) setSchoolProfile(fromApp);
       }
 
-      const candidates: string[] = [];
-      if (schoolId) candidates.push(`/schools/${schoolId}/`);
-      candidates.push("/schools/active/");
-      candidates.push("/schools/my-schools/");
+      // Always try DETAIL first so bank/payment fields are present
+      const tryUrls: string[] = [];
+      if (schoolId) tryUrls.push(`/schools/${schoolId}/`);
+      tryUrls.push("/schools/active/");
 
-      for (const url of candidates) {
+      let best: any = null;
+      for (const url of tryUrls) {
         try {
-          const res = await api.get(url, { timeout: 10000 });
+          const res = await api.get(url, { timeout: 12000 });
           let data = res.data;
           if (Array.isArray(data)) data = data[0];
           if (data?.results && Array.isArray(data.results)) data = data.results[0];
-          if (data && (data.name || data.bank_name || data.logo)) {
-            if (!cancelled) setSchoolProfile((prev: any) => ({ ...(prev || {}), ...data }));
-            return;
+          if (!data) continue;
+          const hasPay =
+            Boolean(data.bank_name) ||
+            Boolean(data.bank_account_number) ||
+            Boolean(data.paybill_number);
+          const hasName = Boolean(data.name);
+          if (hasName || hasPay) {
+            best = { ...(best || {}), ...data };
+            // Prefer a payload that already has payment details
+            if (hasPay) break;
           }
         } catch {
-          /* try next */
+          /* next */
         }
+      }
+      if (best && !cancelled) {
+        setSchoolProfile((prev: any) => ({ ...(prev || {}), ...best }));
       }
     };
     void loadSchoolProfile();
@@ -398,13 +409,40 @@ export default function OfferLetterModal({
   };
 
   const generatePDF = async () => {
+    // Ensure payment details are loaded (detail endpoint) before rendering page 2
+    let profile = schoolProfile;
+    const sid =
+      profile?.id ||
+      currentSchool?.id ||
+      (typeof applicationData.school === "object"
+        ? (applicationData.school as any)?.id
+        : applicationData.school);
+    const hasPay =
+      Boolean(profile?.bank_name || profile?.bank_account_number || profile?.paybill_number) ||
+      Boolean(
+        (currentSchool as any)?.bank_name ||
+          (currentSchool as any)?.bank_account_number ||
+          (currentSchool as any)?.paybill_number
+      );
+    if (sid && !hasPay) {
+      try {
+        const res = await api.get(`/schools/${sid}/`, { timeout: 10000 });
+        if (res.data) {
+          profile = { ...(profile || {}), ...res.data };
+          setSchoolProfile(profile);
+        }
+      } catch {
+        /* use what we have */
+      }
+    }
+
     const doc = new jsPDF();
     const nested: any = typeof applicationData.school === "object" ? applicationData.school : {};
-    // Context first (already loaded in dashboard), then fetched profile, then nested app school
+    // Detail profile (with bank) over session school when present
     const sch: any = {
       ...(nested && typeof nested === "object" ? nested : {}),
-      ...(schoolProfile || {}),
       ...(currentSchool || {}),
+      ...(profile || schoolProfile || {}),
     };
     // Prefer non-empty fields (later sources win only if they have values)
     const pick = (...vals: any[]) => {

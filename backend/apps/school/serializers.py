@@ -87,7 +87,7 @@ class SchoolSessionSerializer(serializers.ModelSerializer):
         model = School
         fields = [
             "id", "owner", "name", "short_name",
-            "email", "phone", "city", "country",
+            "email", "phone", "address", "city", "country",
             "currency", "currency_symbol",
             "admission_number_format",
             "admission_prefix",
@@ -97,6 +97,9 @@ class SchoolSessionSerializer(serializers.ModelSerializer):
             "admission_fee_amount",
             "require_admission_fee_before_enroll", "currency_display",
             "logo", "modules", "setup_complete",
+            # Payment details needed on offer letters / receipts
+            "bank_name", "branch_name", "bank_account_name",
+            "bank_account_number", "paybill_number", "payment_instructions",
             "created_at", "updated_at",
         ]
 
