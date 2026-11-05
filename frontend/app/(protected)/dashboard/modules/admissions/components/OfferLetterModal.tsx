@@ -412,8 +412,15 @@ export default function OfferLetterModal({
 
           const imageData = ctx.getImageData(0, 0, w0, h0);
           const d = imageData.data;
+          const nPix = w0 * h0;
 
-          // Sample corners to detect a flat background (white / light / solid)
+          // Most school logos are PNG/JPG on white or light solid fill.
+          // 1) Soft-remove near-white pixels (with partial alpha on edges)
+          // 2) Flood-fill from image border so only outer background goes transparent
+          //    (preserves white inside the mark, e.g. white text on a badge)
+          const luminance = (r: number, g: number, b: number) =>
+            0.299 * r + 0.587 * g + 0.114 * b;
+
           const sample = (x: number, y: number) => {
             const i = (y * w0 + x) * 4;
             return [d[i], d[i + 1], d[i + 2], d[i + 3]] as const;
@@ -423,24 +430,35 @@ export default function OfferLetterModal({
             sample(w0 - 1, 0),
             sample(0, h0 - 1),
             sample(w0 - 1, h0 - 1),
-            sample(Math.floor(w0 / 2), 0),
-            sample(0, Math.floor(h0 / 2)),
           ];
-          const avg = corners.reduce(
-            (a, c) => [a[0] + c[0], a[1] + c[1], a[2] + c[2], a[3] + c[3]],
-            [0, 0, 0, 0]
-          ).map((v) => v / corners.length);
-          const bgIsLight =
-            avg[0] > 235 && avg[1] > 235 && avg[2] > 235 && avg[3] > 200;
-          const bgIsUniform =
-            corners.every(
-              (c) =>
-                Math.abs(c[0] - avg[0]) < 18 &&
-                Math.abs(c[1] - avg[1]) < 18 &&
-                Math.abs(c[2] - avg[2]) < 18
-            );
+          const avg = corners
+            .reduce((a, c) => [a[0] + c[0], a[1] + c[1], a[2] + c[2]], [0, 0, 0])
+            .map((v) => v / corners.length);
+          const cornerLight = luminance(avg[0], avg[1], avg[2]) > 230;
+          const cornerUniform = corners.every(
+            (c) =>
+              Math.abs(c[0] - avg[0]) < 28 &&
+              Math.abs(c[1] - avg[1]) < 28 &&
+              Math.abs(c[2] - avg[2]) < 28
+          );
 
-          // Knock out near-background / near-white pixels → true transparency
+          // Treat as "logo on solid/light bg" when corners agree; otherwise only
+          // strip pure-white fringes (safer for photo-like uploads).
+          const solidBg = cornerLight && cornerUniform;
+          const isBgColor = (r: number, g: number, b: number, a: number) => {
+            if (a < 16) return true;
+            const lum = luminance(r, g, b);
+            if (lum > 248) return true; // pure / near-white always
+            if (!solidBg) return false;
+            return (
+              Math.abs(r - avg[0]) < 30 &&
+              Math.abs(g - avg[1]) < 30 &&
+              Math.abs(b - avg[2]) < 30 &&
+              lum > 210
+            );
+          };
+
+          // Soft alpha for near-background (anti-aliased logo edges)
           for (let i = 0; i < d.length; i += 4) {
             const r = d[i];
             const g = d[i + 1];
@@ -450,16 +468,47 @@ export default function OfferLetterModal({
               d[i + 3] = 0;
               continue;
             }
-            const nearWhite = r > 245 && g > 245 && b > 245;
-            const nearBg =
-              bgIsUniform &&
-              Math.abs(r - avg[0]) < 22 &&
-              Math.abs(g - avg[1]) < 22 &&
-              Math.abs(b - avg[2]) < 22;
-            if (nearWhite || (bgIsLight && nearBg) || nearBg) {
+            const lum = luminance(r, g, b);
+            if (lum > 252) {
               d[i + 3] = 0;
+            } else if (lum > 242) {
+              d[i + 3] = Math.min(a, Math.round(((252 - lum) / 10) * 255));
             }
           }
+
+          // Border flood-fill: only connected outer background → transparent
+          if (solidBg) {
+            const visited = new Uint8Array(nPix);
+            const stack: number[] = [];
+            const pushIf = (x: number, y: number) => {
+              if (x < 0 || y < 0 || x >= w0 || y >= h0) return;
+              const idx = y * w0 + x;
+              if (visited[idx]) return;
+              const i = idx * 4;
+              if (!isBgColor(d[i], d[i + 1], d[i + 2], d[i + 3])) return;
+              visited[idx] = 1;
+              stack.push(idx);
+            };
+            for (let x = 0; x < w0; x++) {
+              pushIf(x, 0);
+              pushIf(x, h0 - 1);
+            }
+            for (let y = 0; y < h0; y++) {
+              pushIf(0, y);
+              pushIf(w0 - 1, y);
+            }
+            while (stack.length) {
+              const idx = stack.pop()!;
+              d[idx * 4 + 3] = 0;
+              const x = idx % w0;
+              const y = (idx / w0) | 0;
+              pushIf(x + 1, y);
+              pushIf(x - 1, y);
+              pushIf(x, y + 1);
+              pushIf(x, y - 1);
+            }
+          }
+
           ctx.putImageData(imageData, 0, 0);
 
           // Trim transparent margins so the logo does not waste header space
