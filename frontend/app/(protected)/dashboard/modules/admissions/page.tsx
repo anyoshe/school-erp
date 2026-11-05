@@ -1,5 +1,20 @@
 "use client";
 
+const ADMISSION_APP_CACHE = "admission_app_cache_v1";
+function seedAdmissionAppCache(rows: any[]) {
+  if (typeof window === "undefined" || !Array.isArray(rows)) return;
+  try {
+    const raw = sessionStorage.getItem(ADMISSION_APP_CACHE);
+    const map = raw ? JSON.parse(raw) : {};
+    for (const row of rows) {
+      if (!row?.id) continue;
+      map[row.id] = { ...(map[row.id] || {}), ...row };
+    }
+    sessionStorage.setItem(ADMISSION_APP_CACHE, JSON.stringify(map));
+  } catch { /* ignore */ }
+}
+
+
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useCurrentSchool } from '@/contexts/CurrentSchoolContext';
@@ -86,10 +101,12 @@ const AdmissionsPage = () => {
 
   useEffect(() => {
     if (!applicationsPage) return;
-    setAppRows(applicationsPage.results || []);
+    const rows = applicationsPage.results || [];
+    setAppRows(rows);
     setAppTotal(applicationsPage.count || 0);
     setAppHasMore(Boolean(applicationsPage.next));
     setAppPage(1);
+    seedAdmissionAppCache(rows);
   }, [applicationsPage]);
 
   const loadMoreApplications = async () => {
