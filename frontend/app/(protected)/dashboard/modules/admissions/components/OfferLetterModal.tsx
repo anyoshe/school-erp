@@ -618,13 +618,14 @@ export default function OfferLetterModal({
 
     // --- PAGE 1: ADMISSION LETTER ---
     // Logo: short timeout so letter is not blocked when media is slow
-    // Compact centered logo (max ~28mm wide / 16mm tall), transparent background
+    // Medium–large centered logo with clear gap under it before school name
     let headerBottom = 18;
     if (logoUrl) {
       try {
         const logo = await loadImage(logoUrl, 6000);
-        const maxWmm = 28;
-        const maxHmm = 16;
+        // Medium–large: was ~28×16mm (too small); target ~48×30mm max
+        const maxWmm = 48;
+        const maxHmm = 30;
         const aspect = logo.width / Math.max(logo.height, 1);
         let wMm = maxWmm;
         let hMm = wMm / aspect;
@@ -633,22 +634,23 @@ export default function OfferLetterModal({
           wMm = hMm * aspect;
         }
         const xMm = 105 - wMm / 2;
-        const yMm = 8;
+        const yMm = 10;
         doc.addImage(logo.dataUrl, "PNG", xMm, yMm, wMm, hMm);
-        headerBottom = yMm + hMm + 4;
+        // jsPDF text Y is baseline — leave solid gap so name never overlaps logo
+        headerBottom = yMm + hMm + 12;
       } catch {
-        doc.setFontSize(14).text(schoolName, 105, 16, { align: "center" });
-        headerBottom = 20;
+        doc.setFontSize(14).text(schoolName, 105, 18, { align: "center" });
+        headerBottom = 24;
       }
     } else {
-      doc.setFontSize(14).text(schoolName, 105, 16, { align: "center" });
-      headerBottom = 20;
+      doc.setFontSize(14).text(schoolName, 105, 18, { align: "center" });
+      headerBottom = 24;
     }
 
     doc.setFontSize(16).setFont("helvetica", "bold").text(schoolName, 105, headerBottom, { align: "center" });
-    doc.setFontSize(9).setFont("helvetica", "normal").setTextColor(100).text(schoolContact, 105, headerBottom + 6, { align: "center" });
+    doc.setFontSize(9).setFont("helvetica", "normal").setTextColor(100).text(schoolContact, 105, headerBottom + 7, { align: "center" });
 
-    doc.setFontSize(20).setTextColor(44, 62, 80).text("ADMISSION OFFER LETTER", 105, Math.max(headerBottom + 16, 36), { align: "center" });
+    doc.setFontSize(20).setTextColor(44, 62, 80).text("ADMISSION OFFER LETTER", 105, headerBottom + 20, { align: "center" });
 
     doc.setFontSize(12).setTextColor(0).text(`Date: ${new Date().toLocaleDateString()}`, 20, 85);
     doc.text(`Ref: ${applicationId.slice(0, 8).toUpperCase()}`, 160, 85);
