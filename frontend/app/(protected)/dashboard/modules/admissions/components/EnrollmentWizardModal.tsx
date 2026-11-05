@@ -348,9 +348,10 @@ export default function EnrollmentWizardModal({
     };
   }, [open, applicationData, currentSchool?.id]);
 
-  // When wizard opens, re-sync grade label, key admission fields, and edit baseline
+  // When wizard opens, fully prefill from application (do not keep empty mount defaults)
   useEffect(() => {
     if (!open || !applicationData) return;
+
     const name =
       classAppliedName(applicationData) ||
       (applicationData as any).class_applied_name ||
@@ -358,53 +359,77 @@ export default function EnrollmentWizardModal({
     if (name && !/^\d+$/.test(String(name).trim())) {
       setGradeLabel(String(name));
     }
+
+    const ad = applicationData as any;
+    const classId = classAppliedId(applicationData) || "";
+
     setFormData((prev) => {
       const next = {
         ...prev,
-        current_class: classAppliedId(applicationData) || prev.current_class,
+        // Student identity
+        first_name: ad.first_name || prev.first_name || "",
+        middle_name: ad.middle_name || prev.middle_name || "",
+        last_name: ad.last_name || prev.last_name || "",
+        preferred_name: ad.preferred_name || prev.preferred_name || "",
+        gender: ad.gender || prev.gender || "",
+        date_of_birth: ad.date_of_birth || prev.date_of_birth || "",
+        nationality: ad.nationality || prev.nationality || "Kenyan",
+        religion: ad.religion || prev.religion || "",
+        passport_number: ad.passport_number || prev.passport_number || "",
+        birth_certificate_number:
+          ad.birth_certificate_number || prev.birth_certificate_number || "",
+        // Contact / address
+        region: ad.region || prev.region || "",
+        district: ad.district || prev.district || "",
+        address: ad.address || prev.address || "",
+        // Academic placement
+        current_class: classId || prev.current_class || "",
+        previous_school: ad.previous_school || prev.previous_school || "",
+        // Medical
+        blood_group: ad.blood_group || prev.blood_group || "",
+        allergies: ad.allergies || prev.allergies || "",
+        chronic_conditions: ad.chronic_conditions || prev.chronic_conditions || "",
+        disability: ad.disability || prev.disability || "",
+        // Primary guardian
         guardian_name:
-          prev.guardian_name ||
-          applicationData.primary_guardian_name ||
-          "",
+          ad.primary_guardian_name || prev.guardian_name || "",
         guardian_phone:
-          prev.guardian_phone ||
-          applicationData.primary_guardian_phone ||
-          "",
+          ad.primary_guardian_phone || prev.guardian_phone || "",
         guardian_email:
-          prev.guardian_email ||
-          applicationData.primary_guardian_email ||
-          "",
+          ad.primary_guardian_email || prev.guardian_email || "",
         guardian_relationship:
+          ad.primary_guardian_relationship ||
           prev.guardian_relationship ||
-          applicationData.primary_guardian_relationship ||
           "Parent",
         guardian_national_id:
-          prev.guardian_national_id ||
-          (applicationData as any).primary_guardian_id_number ||
-          "",
+          ad.primary_guardian_id_number || prev.guardian_national_id || "",
+        // Secondary guardian
         secondary_guardian_name:
-          prev.secondary_guardian_name ||
-          (applicationData as any).secondary_guardian_name ||
-          "",
+          ad.secondary_guardian_name || prev.secondary_guardian_name || "",
         secondary_guardian_phone:
-          prev.secondary_guardian_phone ||
-          (applicationData as any).secondary_guardian_phone ||
-          "",
+          ad.secondary_guardian_phone || prev.secondary_guardian_phone || "",
         secondary_guardian_email:
-          prev.secondary_guardian_email ||
-          (applicationData as any).secondary_guardian_email ||
-          "",
+          ad.secondary_guardian_email || prev.secondary_guardian_email || "",
         secondary_guardian_national_id:
+          ad.secondary_guardian_id_number ||
           prev.secondary_guardian_national_id ||
-          (applicationData as any).secondary_guardian_id_number ||
           "",
+        secondary_guardian_relationship:
+          ad.secondary_guardian_relationship ||
+          prev.secondary_guardian_relationship ||
+          "",
+        // Enrollment period if already chosen on application
+        enrollment_term: ad.enrollment_term || prev.enrollment_term || "",
+        enrollment_academic_year:
+          ad.enrollment_academic_year || prev.enrollment_academic_year || "",
       };
-      // baseline after sync
       setTimeout(() => snapshotBaseline(next), 0);
       return next;
     });
     setCurrentStep(1);
-  }, [open, applicationData?.id, (applicationData as any)?.class_applied, (applicationData as any)?.class_applied_name]);
+  }, [open, applicationData]);
+
+
 
 
   
