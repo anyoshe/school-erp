@@ -124,10 +124,11 @@ export default function InterviewCompletedModal({
               <ApplicationChargePanel
                 applicationId={applicationId}
                 types={["INTERVIEW"]}
+                initialCharges={(applicationData as any)?.charges || []}
                 currencySymbol={currency}
                 compact
                 title="Interview fee decision"
-                description="Required after the interview — paid, waived, discounted, or not applicable."
+                description="Select a decision — Confirm enables immediately."
                 required
                 onSatisfiedChange={(ok) => setChargeOk(ok)}
               />
@@ -143,7 +144,7 @@ export default function InterviewCompletedModal({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button type="button" disabled={loading} onClick={handleSubmit}>
+          <Button type="button" disabled={loading || (interviewFeeOn && !chargeOk)} onClick={handleSubmit}>
             {loading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
             Save & complete
           </Button>

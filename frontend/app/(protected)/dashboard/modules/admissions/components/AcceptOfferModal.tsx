@@ -110,7 +110,7 @@ export default function AcceptOfferModal({
                 ? "Already decided earlier — no need to re-enter."
                 : "Required before accepting the offer."
             }
-            onSatisfiedChange={(ok) => setChargeOk(ok)}
+            onSatisfiedChange={(ok) => setChargeOk(!!ok)}
           />
 
           <div>

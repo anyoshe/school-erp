@@ -58,13 +58,13 @@ function isChargeSatisfied(c: Charge | undefined) {
   if (!c) return false;
   if (c.is_satisfied) return true;
   const policy = String(c.policy || "").toUpperCase();
+  // Any explicit staff decision unblocks Accept / Interview-done immediately
+  if (c.decision_made && policy) return true;
   if (policy === "NOT_APPLICABLE" || policy === "WAIVED") return true;
-  if (c.decision_made && Number(c.amount_due || 0) <= 0) return true;
-  if (Number(c.amount_paid || 0) >= Number(c.amount_due || 0) && Number(c.amount_due || 0) >= 0) {
-    if (policy === "FULL" || policy === "DISCOUNTED") return Number(c.amount_paid || 0) > 0 || Number(c.amount_due || 0) === 0;
+  if (Number(c.amount_paid || 0) > 0 && Number(c.amount_paid || 0) >= Number(c.amount_due || 0)) {
+    return true;
   }
-  if (c.decision_made && (policy === "WAIVED" || policy === "NOT_APPLICABLE")) return true;
-  return Boolean(c.decision_made && (policy === "WAIVED" || policy === "NOT_APPLICABLE"));
+  return false;
 }
 
 export default function ApplicationChargePanel({
@@ -83,7 +83,7 @@ export default function ApplicationChargePanel({
     [initialCharges, types]
   );
 
-  const [loading, setLoading] = useState(seeded.length === 0);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const [charges, setCharges] = useState<Charge[]>(seeded);
 
@@ -95,18 +95,42 @@ export default function ApplicationChargePanel({
       setLoading(false);
       return;
     }
-    setLoading(true);
+    // Show interactive placeholders immediately — do not block on network
+    setCharges((prev) => {
+      if (prev.length) return prev;
+      return types.map((ctype) => ({
+        charge_type: ctype,
+        policy: "",
+        list_amount: 0,
+        amount_due: 0,
+        amount_paid: 0,
+        decision_made: false,
+      }));
+    });
     try {
       const res = await api.post(
-        `/admissions/applications/${applicationId}/ensure-charges/`
+        `/admissions/applications/${applicationId}/ensure-charges/`,
+        {},
+        { timeout: 8000 }
       );
       const all: Charge[] = res.data?.charges || [];
-      setCharges(filterTypes(all, types));
+      const filtered = filterTypes(all, types);
+      if (filtered.length) {
+        setCharges((prev) => {
+          // Keep optimistic decisions already chosen by staff
+          return filtered.map((server) => {
+            const local = prev.find(
+              (x) =>
+                String(x.charge_type).toUpperCase() ===
+                String(server.charge_type).toUpperCase()
+            );
+            if (local?.decision_made) return { ...server, ...local };
+            return server;
+          });
+        });
+      }
     } catch (e) {
       console.warn("ensure-charges", e);
-      setCharges([]);
-    } finally {
-      setLoading(false);
     }
   }, [applicationId, types, seeded]);
 
@@ -254,13 +278,31 @@ export default function ApplicationChargePanel({
                 <Select
                   value={c.policy || undefined}
                   onValueChange={(policy) => {
-                    void updateCharge(ctype, {
+                    const patch: Record<string, any> = {
                       policy,
                       decision_made: true,
-                      ...(policy === "WAIVED" || policy === "NOT_APPLICABLE"
-                        ? { amount_due: 0, amount_paid: 0 }
-                        : {}),
+                      is_satisfied: true,
+                    };
+                    if (policy === "WAIVED" || policy === "NOT_APPLICABLE") {
+                      patch.amount_due = 0;
+                      patch.amount_paid = 0;
+                    }
+                    // Optimistic — enable Confirm immediately (API follows in background)
+                    setCharges((prev) => {
+                      const idx = prev.findIndex(
+                        (x) => String(x.charge_type).toUpperCase() === ctype
+                      );
+                      if (idx >= 0) {
+                        const next = [...prev];
+                        next[idx] = { ...next[idx], ...patch };
+                        return next;
+                      }
+                      return [
+                        ...prev,
+                        { charge_type: ctype, list_amount: 0, amount_due: 0, amount_paid: 0, ...patch },
+                      ];
                     });
+                    void updateCharge(ctype, patch);
                   }}
                 >
                   <SelectTrigger className="h-9 w-[200px] bg-white">
