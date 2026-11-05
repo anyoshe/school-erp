@@ -230,6 +230,78 @@ const ClassLogisticsStep = ({
   </div>
 );
 
+
+function buildFormFromApplication(applicationData: Application | any, today: string) {
+  const ad = applicationData || {};
+  return {
+    first_name: ad.first_name || "",
+    middle_name: ad.middle_name || "",
+    last_name: ad.last_name || "",
+    preferred_name: ad.preferred_name || "",
+    gender: ad.gender || "",
+    date_of_birth: ad.date_of_birth || "",
+    nationality: ad.nationality || "Kenyan",
+    religion: ad.religion || "",
+    learner_id: ad.learner_id || "",
+    birth_certificate_number: ad.birth_certificate_number || "",
+    passport_number: ad.passport_number || "",
+    admission_number: ad.admission_number || "",
+    auto_generate_admission: true,
+    profile_photo: null as File | null,
+    birth_certificate_file: null as File | null,
+
+    previous_school: ad.previous_school || "",
+    previous_grade: "",
+    transfer_letter: null,
+
+    current_class: classAppliedId(ad) || "",
+    section: "",
+    pathway: "",
+    track: "",
+    stream: "",
+    house: "",
+    boarding_status: "DAY",
+    dorm_room: "",
+    transport_mode: "walking",
+    transport_route: "",
+
+    blood_group: ad.blood_group || "",
+    allergies: ad.allergies || "",
+    chronic_conditions: ad.chronic_conditions || "",
+    disability: ad.disability || "",
+    disability_type: "",
+    special_needs_category: "",
+    vaccination_status: "UNKNOWN",
+    immunization_card: null,
+
+    guardian_name: ad.primary_guardian_name || "",
+    guardian_phone: ad.primary_guardian_phone || "",
+    guardian_email: ad.primary_guardian_email || "",
+    guardian_relationship: ad.primary_guardian_relationship || "Parent",
+    guardian_national_id: ad.primary_guardian_id_number || "",
+    secondary_guardian_name: ad.secondary_guardian_name || "",
+    secondary_guardian_phone: ad.secondary_guardian_phone || "",
+    secondary_guardian_email: ad.secondary_guardian_email || "",
+    secondary_guardian_national_id: ad.secondary_guardian_id_number || "",
+    secondary_guardian_relationship: ad.secondary_guardian_relationship || "",
+
+    enrollment_term: ad.enrollment_term || "",
+    enrollment_academic_year: ad.enrollment_academic_year || "",
+    fee_structure_id: "",
+    selected_optional_items: [] as string[],
+    is_waived: false,
+    waiver_amount: 0,
+    initial_payment_amount: 0,
+    initial_payment_reference: "",
+    initial_payment_proof: null,
+    payment_plan: "",
+    item_amounts: {} as Record<string, number>,
+    remaining_payment_due_date: today,
+    terms_accepted: false,
+    summary_confirmed: false,
+  };
+}
+
 export default function EnrollmentWizardModal({
   open,
   onOpenChange,
@@ -348,170 +420,50 @@ export default function EnrollmentWizardModal({
     };
   }, [open, applicationData, currentSchool?.id]);
 
-  // When wizard opens, fully prefill from application (do not keep empty mount defaults)
+  // Hard-reset form from application every time the wizard opens
+  const prevOpenRef = useRef(false);
   useEffect(() => {
+    const justOpened = open && !prevOpenRef.current;
+    prevOpenRef.current = open;
     if (!open || !applicationData) return;
+    // Prefill on open, and again if application data arrives after open (was empty)
+    const needsPrefill =
+      justOpened ||
+      !String(formData.first_name || "").trim() ||
+      !String(formData.last_name || "").trim();
+    if (!needsPrefill && !justOpened) return;
 
-    const name =
-      classAppliedName(applicationData) ||
-      (applicationData as any).class_applied_name ||
-      "";
-    if (name && !/^\d+$/.test(String(name).trim())) {
-      setGradeLabel(String(name));
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    const next = buildFormFromApplication(applicationData, todayStr);
+    // Preserve in-progress enrollment choices if re-prefill mid-open due to late data
+    if (!justOpened) {
+      next.enrollment_term = formData.enrollment_term || next.enrollment_term;
+      next.enrollment_academic_year =
+        formData.enrollment_academic_year || next.enrollment_academic_year;
+      next.terms_accepted = formData.terms_accepted;
+      next.section = formData.section || next.section;
     }
+    setFormData(next);
+    const gname =
+      classAppliedName(applicationData) ||
+      (applicationData as any)?.class_applied_name ||
+      "";
+    if (gname && !/^\d+$/.test(String(gname).trim())) {
+      setGradeLabel(String(gname));
+    }
+    setTimeout(() => snapshotBaseline(next), 0);
+    if (justOpened) setCurrentStep(1);
+  }, [open, applicationData, applicationId]);
 
-    const ad = applicationData as any;
-    const classId = classAppliedId(applicationData) || "";
 
-    setFormData((prev) => {
-      const next = {
-        ...prev,
-        // Student identity
-        first_name: ad.first_name || prev.first_name || "",
-        middle_name: ad.middle_name || prev.middle_name || "",
-        last_name: ad.last_name || prev.last_name || "",
-        preferred_name: ad.preferred_name || prev.preferred_name || "",
-        gender: ad.gender || prev.gender || "",
-        date_of_birth: ad.date_of_birth || prev.date_of_birth || "",
-        nationality: ad.nationality || prev.nationality || "Kenyan",
-        religion: ad.religion || prev.religion || "",
-        passport_number: ad.passport_number || prev.passport_number || "",
-        birth_certificate_number:
-          ad.birth_certificate_number || prev.birth_certificate_number || "",
-        // Contact / address
-        region: ad.region || prev.region || "",
-        district: ad.district || prev.district || "",
-        address: ad.address || prev.address || "",
-        // Academic placement
-        current_class: classId || prev.current_class || "",
-        previous_school: ad.previous_school || prev.previous_school || "",
-        // Medical
-        blood_group: ad.blood_group || prev.blood_group || "",
-        allergies: ad.allergies || prev.allergies || "",
-        chronic_conditions: ad.chronic_conditions || prev.chronic_conditions || "",
-        disability: ad.disability || prev.disability || "",
-        // Primary guardian
-        guardian_name:
-          ad.primary_guardian_name || prev.guardian_name || "",
-        guardian_phone:
-          ad.primary_guardian_phone || prev.guardian_phone || "",
-        guardian_email:
-          ad.primary_guardian_email || prev.guardian_email || "",
-        guardian_relationship:
-          ad.primary_guardian_relationship ||
-          prev.guardian_relationship ||
-          "Parent",
-        guardian_national_id:
-          ad.primary_guardian_id_number || prev.guardian_national_id || "",
-        // Secondary guardian
-        secondary_guardian_name:
-          ad.secondary_guardian_name || prev.secondary_guardian_name || "",
-        secondary_guardian_phone:
-          ad.secondary_guardian_phone || prev.secondary_guardian_phone || "",
-        secondary_guardian_email:
-          ad.secondary_guardian_email || prev.secondary_guardian_email || "",
-        secondary_guardian_national_id:
-          ad.secondary_guardian_id_number ||
-          prev.secondary_guardian_national_id ||
-          "",
-        secondary_guardian_relationship:
-          ad.secondary_guardian_relationship ||
-          prev.secondary_guardian_relationship ||
-          "",
-        // Enrollment period if already chosen on application
-        enrollment_term: ad.enrollment_term || prev.enrollment_term || "",
-        enrollment_academic_year:
-          ad.enrollment_academic_year || prev.enrollment_academic_year || "",
-      };
-      setTimeout(() => snapshotBaseline(next), 0);
-      return next;
-    });
-    setCurrentStep(1);
-  }, [open, applicationData]);
 
 
 
 
   
-  const [formData, setFormData] = useState<Record<string, any>>(() => ({
-    first_name: applicationData.first_name || "",
-    middle_name: applicationData.middle_name || "",
-    last_name: applicationData.last_name || "",
-    preferred_name: applicationData.preferred_name || "",
-    gender: applicationData.gender || "",
-    date_of_birth: applicationData.date_of_birth || "",
-    nationality: applicationData.nationality || "Kenyan",
-    religion: applicationData.religion || "",
-    learner_id: applicationData.learner_id || "",
-
-    birth_certificate_number: (applicationData as any).birth_certificate_number || "",
-    admission_number: "",
-    auto_generate_admission: true,
-    profile_photo: null as File | null,
-    birth_certificate_file: null as File | null,
-    passport_number: "",
-
-    previous_school: applicationData.previous_school || "",
-    previous_grade: "",
-    transfer_letter: null,
-
-    current_class: classAppliedId(applicationData),
-    section: "",
-    pathway: "",
-    track: "",
-    stream: "",
-    house: "",
-    boarding_status: "DAY",
-    dorm_room: "",
-    transport_mode: "walking",
-    transport_route: "",
-
-    blood_group: applicationData.blood_group || "",
-    allergies: applicationData.allergies || "",
-    chronic_conditions: applicationData.chronic_conditions || "",
-    disability: applicationData.disability || "",
-    disability_type: "",
-    special_needs_category: "",
-    vaccination_status: "UNKNOWN",
-    immunization_card: null,
-
-    guardian_name: applicationData.primary_guardian_name || "",
-    guardian_phone: applicationData.primary_guardian_phone || "",
-    guardian_email: applicationData.primary_guardian_email || "",
-    guardian_national_id: (applicationData as any).primary_guardian_id_number || (applicationData as any).guardian_national_id || "",
-    guardian_relation: applicationData.primary_guardian_relationship || "Parent",
-    secondary_guardian_name: (applicationData as any).secondary_guardian_name || "",
-    secondary_guardian_phone: (applicationData as any).secondary_guardian_phone || "",
-    secondary_guardian_email: (applicationData as any).secondary_guardian_email || "",
-    secondary_guardian_national_id: (applicationData as any).secondary_guardian_id_number || "",
-    emergency_name:
-      applicationData.emergency_contact_name || applicationData.primary_guardian_name || "",
-    emergency_phone:
-      applicationData.emergency_contact_phone || applicationData.primary_guardian_phone || "",
-    emergency_relation:
-      applicationData.emergency_relationship || applicationData.primary_guardian_relationship || "",
-
-    fee_structure_id: "",
-    initial_payment_amount: 0,
-    is_waived: false,
-    waiver_amount: 0,
-    waiver_reason: "",
-    selected_optional_items: [],
-    item_amounts: {} as Record<string, number>,
-    sponsor_name: "",
-    initial_payment_proof: null as File | null,
-    initial_payment_reference: "",
-    payment_plan: "",
-    remaining_payment_due_date: today,
-    notes: "",
-
-    // ── New final fields ───────────────────────────────
-    admission_date: today,
-    enrollment_term: "",
-    enrollment_academic_year: "",
-    terms_accepted: false,
-    summary_confirmed: false,
-  }));
+  const [formData, setFormData] = useState<Record<string, any>>(() =>
+    buildFormFromApplication(applicationData, format(new Date(), "yyyy-MM-dd"))
+  );
 
   const [feeStructures, setFeeStructures] = useState<any[]>([]);
   const [applicationCharges, setApplicationCharges] = useState<any[]>([]);
@@ -1689,7 +1641,7 @@ export default function EnrollmentWizardModal({
         <DialogHeader>
           <DialogTitle>Complete Student Enrollment</DialogTitle>
           <DialogDescription>
-            For {formData.first_name} {formData.last_name}. Step {currentStep} of {totalSteps}
+            For {formData.first_name || applicationData?.first_name || ""} {formData.last_name || applicationData?.last_name || ""}. Step {currentStep} of {totalSteps}
           </DialogDescription>
         </DialogHeader>
 
