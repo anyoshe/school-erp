@@ -18,38 +18,104 @@ import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
+const CACHE_KEY = "admission_app_cache_v1";
+
+function readCachedApplication(id: string): any | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const map = JSON.parse(raw) as Record<string, any>;
+    const row = map?.[id];
+    return row && typeof row === "object" ? row : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedApplication(id: string, data: any) {
+  if (typeof window === "undefined" || !data) return;
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[id] = {
+      id: data.id,
+      first_name: data.first_name,
+      middle_name: data.middle_name,
+      last_name: data.last_name,
+      preferred_name: data.preferred_name,
+      status: data.status,
+      class_applied: data.class_applied,
+      admission_number: data.admission_number,
+      primary_guardian_name: data.primary_guardian_name,
+      primary_guardian_phone: data.primary_guardian_phone,
+      primary_guardian_email: data.primary_guardian_email,
+      primary_guardian_relationship: data.primary_guardian_relationship,
+      primary_guardian_id_number: data.primary_guardian_id_number,
+      gender: data.gender,
+      date_of_birth: data.date_of_birth,
+      nationality: data.nationality,
+      photo: data.photo,
+      charges: data.charges,
+      interview_outcome: data.interview_outcome,
+      enrollment_term: data.enrollment_term,
+      enrollment_academic_year: data.enrollment_academic_year,
+    };
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify(map));
+  } catch {
+    /* ignore quota */
+  }
+}
+
 export default function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
-  const { currentSchool, loading: schoolLoading } = useCurrentSchool();
-  const [application, setApplication] = useState<any | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { currentSchool } = useCurrentSchool();
+  const cached = typeof window !== "undefined" ? readCachedApplication(id) : null;
+  const [application, setApplication] = useState<any | null>(cached);
+  const [loading, setLoading] = useState(!cached);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchApplication = async (opts?: { silent?: boolean }) => {
-    // Silent = status-only updates; keep the page mounted (no full-screen spinner)
-    const silent = opts?.silent === true || application != null;
+    const hasData = application != null;
+    const silent = opts?.silent === true || hasData;
     try {
       if (!silent) setLoading(true);
-      const res = await api.get(`/admissions/applications/${id}/`);
+      else setRefreshing(true);
+      const res = await api.get(`/admissions/applications/${id}/`, {
+        timeout: 12000,
+        headers: currentSchool?.id
+          ? { "X-School-ID": String(currentSchool.id) }
+          : undefined,
+      });
       setApplication(res.data);
+      writeCachedApplication(id, res.data);
     } catch (err: any) {
-      if (!silent) toast.error("Failed to load details");
+      if (!hasData) toast.error("Failed to load details");
     } finally {
-      if (!silent) setLoading(false);
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
   const applyApplicationPatch = (data?: any) => {
     if (data && typeof data === "object") {
-      setApplication((prev: any) => (prev ? { ...prev, ...data } : data));
+      setApplication((prev: any) => {
+        const next = prev ? { ...prev, ...data } : data;
+        writeCachedApplication(id, next);
+        return next;
+      });
       return;
     }
     void fetchApplication({ silent: true });
   };
 
+  // Fetch as soon as we have an id — do not wait for school context
   useEffect(() => {
-    if (id && currentSchool) fetchApplication();
-  }, [id, currentSchool]);
+    if (!id) return;
+    void fetchApplication({ silent: !!readCachedApplication(id) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, currentSchool?.id]);
 
   const handlePrint = () => window.print();
 
@@ -76,16 +142,21 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     );
   };
 
-  if (loading || schoolLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="flex flex-col items-center gap-4">
-        <div className="h-12 w-12 border-4 border-primary-500/20 border-t-primary rounded-full animate-spin" />
-        <p className="text-slate-500 font-medium animate-pulse">Decrypting Dossier...</p>
+  // Only block the full page when we have nothing to show yet
+  if (loading && !application) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 border-4 border-primary-500/20 border-t-primary rounded-full animate-spin" />
+          <p className="text-slate-500 text-sm">Opening application…</p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
-  if (!application) return <div className="p-10 text-center">Application not found.</div>;
+  if (!application) {
+    return <div className="p-10 text-center">Application not found.</div>;
+  }
 
   const getImageUrl = (path: string | null | undefined) => {
     if (!path) return "";
@@ -117,6 +188,9 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             <Badge className={`px-4 py-1.5 rounded-full border shadow-none font-bold uppercase tracking-tighter ${getStatusColor(application.status)}`}>
               {application.status}
             </Badge>
+            {refreshing ? (
+              <span className="text-[10px] text-slate-400 uppercase tracking-wide">Updating…</span>
+            ) : null}
             {(application.status === "DRAFT" || application.status === "SUBMITTED") && (
               <Link href={`/dashboard/modules/admissions/new?id=${application.id}`}>
                 <Button className="ml-2 rounded-xl bg-primary text-white">

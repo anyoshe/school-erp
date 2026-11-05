@@ -5,6 +5,15 @@ from .models import Application, ApplicationDocument, AdmissionFeePayment, Appli
 from apps.academics.serializers import GradeLevelSerializer
 from apps.school.models import School
 from apps.school.serializers import SchoolSerializer
+from apps.school.models import School
+
+class SchoolMiniSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = School
+        fields = ['id', 'name', 'short_name', 'logo', 'phone', 'email', 'address', 'city',
+                  'currency_symbol', 'interview_fee_enabled', 'interview_fee_amount',
+                  'admission_fee_enabled', 'admission_fee_amount']
+
 from apps.students.models import Student
 
 
@@ -53,7 +62,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
     fee_payments = AdmissionFeePaymentSerializer(many=True, read_only=True)
     charges = ApplicationChargeSerializer(many=True, read_only=True)
     photo = serializers.ImageField(read_only=True)
-    school = SchoolSerializer(read_only=True)
+    school = SchoolMiniSerializer(read_only=True)
 
     # Computed read-only fields
     full_name = serializers.SerializerMethodField()
