@@ -373,7 +373,15 @@ export default function OfferLetterModal({
   };
 
 
-  const loadImage = (url: string, timeoutMs = 8000): Promise<string> => {
+  /**
+   * Load logo for PDF: resize to a manageable size, strip flat/near-white
+   * backgrounds (so it sits cleanly like an SVG/PNG with transparency),
+   * and trim empty margins.
+   */
+  const loadImage = (
+    url: string,
+    timeoutMs = 8000
+  ): Promise<{ dataUrl: string; width: number; height: number }> => {
     return new Promise((resolve, reject) => {
       if (!url) {
         reject(new Error("no url"));
@@ -381,21 +389,119 @@ export default function OfferLetterModal({
       }
       const img = new Image();
       img.crossOrigin = "anonymous";
-      const timer = setTimeout(() => {
-        reject(new Error("logo load timeout"));
-      }, timeoutMs);
+      const timer = setTimeout(() => reject(new Error("logo load timeout")), timeoutMs);
       img.onload = () => {
         clearTimeout(timer);
         try {
+          // Working size — sharp enough for print, small enough for PDF
+          const maxSide = 320;
+          const scale0 = Math.min(1, maxSide / Math.max(img.width, img.height, 1));
+          const w0 = Math.max(1, Math.round(img.width * scale0));
+          const h0 = Math.max(1, Math.round(img.height * scale0));
+
           const canvas = document.createElement("canvas");
-          // Cap size so large logos don't stall the canvas
-          const maxW = 240;
-          const scale = img.width > maxW ? maxW / img.width : 1;
-          canvas.width = Math.max(1, Math.round(img.width * scale));
-          canvas.height = Math.max(1, Math.round(img.height * scale));
-          const ctx = canvas.getContext("2d");
-          ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-          resolve(canvas.toDataURL("image/png"));
+          canvas.width = w0;
+          canvas.height = h0;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          if (!ctx) {
+            reject(new Error("no canvas"));
+            return;
+          }
+          ctx.clearRect(0, 0, w0, h0);
+          ctx.drawImage(img, 0, 0, w0, h0);
+
+          const imageData = ctx.getImageData(0, 0, w0, h0);
+          const d = imageData.data;
+
+          // Sample corners to detect a flat background (white / light / solid)
+          const sample = (x: number, y: number) => {
+            const i = (y * w0 + x) * 4;
+            return [d[i], d[i + 1], d[i + 2], d[i + 3]] as const;
+          };
+          const corners = [
+            sample(0, 0),
+            sample(w0 - 1, 0),
+            sample(0, h0 - 1),
+            sample(w0 - 1, h0 - 1),
+            sample(Math.floor(w0 / 2), 0),
+            sample(0, Math.floor(h0 / 2)),
+          ];
+          const avg = corners.reduce(
+            (a, c) => [a[0] + c[0], a[1] + c[1], a[2] + c[2], a[3] + c[3]],
+            [0, 0, 0, 0]
+          ).map((v) => v / corners.length);
+          const bgIsLight =
+            avg[0] > 235 && avg[1] > 235 && avg[2] > 235 && avg[3] > 200;
+          const bgIsUniform =
+            corners.every(
+              (c) =>
+                Math.abs(c[0] - avg[0]) < 18 &&
+                Math.abs(c[1] - avg[1]) < 18 &&
+                Math.abs(c[2] - avg[2]) < 18
+            );
+
+          // Knock out near-background / near-white pixels → true transparency
+          for (let i = 0; i < d.length; i += 4) {
+            const r = d[i];
+            const g = d[i + 1];
+            const b = d[i + 2];
+            const a = d[i + 3];
+            if (a < 12) {
+              d[i + 3] = 0;
+              continue;
+            }
+            const nearWhite = r > 245 && g > 245 && b > 245;
+            const nearBg =
+              bgIsUniform &&
+              Math.abs(r - avg[0]) < 22 &&
+              Math.abs(g - avg[1]) < 22 &&
+              Math.abs(b - avg[2]) < 22;
+            if (nearWhite || (bgIsLight && nearBg) || nearBg) {
+              d[i + 3] = 0;
+            }
+          }
+          ctx.putImageData(imageData, 0, 0);
+
+          // Trim transparent margins so the logo does not waste header space
+          let minX = w0;
+          let minY = h0;
+          let maxX = 0;
+          let maxY = 0;
+          for (let y = 0; y < h0; y++) {
+            for (let x = 0; x < w0; x++) {
+              const a = d[(y * w0 + x) * 4 + 3];
+              if (a > 10) {
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+              }
+            }
+          }
+
+          let outCanvas = canvas;
+          let outW = w0;
+          let outH = h0;
+          if (maxX > minX && maxY > minY) {
+            const tw = maxX - minX + 1;
+            const th = maxY - minY + 1;
+            // Small padding so edges are not clipped
+            const pad = 2;
+            outW = tw + pad * 2;
+            outH = th + pad * 2;
+            outCanvas = document.createElement("canvas");
+            outCanvas.width = outW;
+            outCanvas.height = outH;
+            const octx = outCanvas.getContext("2d");
+            octx?.clearRect(0, 0, outW, outH);
+            octx?.drawImage(canvas, minX, minY, tw, th, pad, pad, tw, th);
+          }
+
+          resolve({
+            dataUrl: outCanvas.toDataURL("image/png"),
+            width: outW,
+            height: outH,
+          });
         } catch (e) {
           reject(e);
         }
@@ -463,21 +569,37 @@ export default function OfferLetterModal({
 
     // --- PAGE 1: ADMISSION LETTER ---
     // Logo: short timeout so letter is not blocked when media is slow
+    // Compact centered logo (max ~28mm wide / 16mm tall), transparent background
+    let headerBottom = 18;
     if (logoUrl) {
       try {
-        const imgData = await loadImage(logoUrl, 6000);
-        doc.addImage(imgData, "PNG", 85, 10, 40, 20);
+        const logo = await loadImage(logoUrl, 6000);
+        const maxWmm = 28;
+        const maxHmm = 16;
+        const aspect = logo.width / Math.max(logo.height, 1);
+        let wMm = maxWmm;
+        let hMm = wMm / aspect;
+        if (hMm > maxHmm) {
+          hMm = maxHmm;
+          wMm = hMm * aspect;
+        }
+        const xMm = 105 - wMm / 2;
+        const yMm = 8;
+        doc.addImage(logo.dataUrl, "PNG", xMm, yMm, wMm, hMm);
+        headerBottom = yMm + hMm + 4;
       } catch {
-        doc.setFontSize(14).text(schoolName, 105, 20, { align: "center" });
+        doc.setFontSize(14).text(schoolName, 105, 16, { align: "center" });
+        headerBottom = 20;
       }
     } else {
-      doc.setFontSize(14).text(schoolName, 105, 20, { align: "center" });
+      doc.setFontSize(14).text(schoolName, 105, 16, { align: "center" });
+      headerBottom = 20;
     }
 
-    doc.setFontSize(18).setFont("helvetica", "bold").text(schoolName, 105, 40, { align: "center" });
-    doc.setFontSize(9).setFont("helvetica", "normal").setTextColor(100).text(schoolContact, 105, 46, { align: "center" });
+    doc.setFontSize(16).setFont("helvetica", "bold").text(schoolName, 105, headerBottom, { align: "center" });
+    doc.setFontSize(9).setFont("helvetica", "normal").setTextColor(100).text(schoolContact, 105, headerBottom + 6, { align: "center" });
 
-    doc.setFontSize(22).setTextColor(44, 62, 80).text("ADMISSION OFFER LETTER", 105, 70, { align: "center" });
+    doc.setFontSize(20).setTextColor(44, 62, 80).text("ADMISSION OFFER LETTER", 105, Math.max(headerBottom + 16, 36), { align: "center" });
 
     doc.setFontSize(12).setTextColor(0).text(`Date: ${new Date().toLocaleDateString()}`, 20, 85);
     doc.text(`Ref: ${applicationId.slice(0, 8).toUpperCase()}`, 160, 85);
