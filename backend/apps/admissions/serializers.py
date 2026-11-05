@@ -2,17 +2,51 @@
 import hashlib
 from rest_framework import serializers
 from .models import Application, ApplicationDocument, AdmissionFeePayment, ApplicationCharge
-from apps.academics.serializers import GradeLevelSerializer
+from apps.academics.serializers import GradeLevelSerializer, GradeLevelLiteSerializer
 from apps.school.models import School
 from apps.school.serializers import SchoolSerializer
 from apps.school.models import School
 
 class SchoolMiniSerializer(serializers.ModelSerializer):
+    """Compact school payload for application detail (tolerant of missing columns)."""
+    currency_symbol = serializers.SerializerMethodField()
+    interview_fee_enabled = serializers.SerializerMethodField()
+    interview_fee_amount = serializers.SerializerMethodField()
+    admission_fee_enabled = serializers.SerializerMethodField()
+    admission_fee_amount = serializers.SerializerMethodField()
+
     class Meta:
         model = School
-        fields = ['id', 'name', 'short_name', 'logo', 'phone', 'email', 'address', 'city',
-                  'currency_symbol', 'interview_fee_enabled', 'interview_fee_amount',
-                  'admission_fee_enabled', 'admission_fee_amount']
+        fields = [
+            "id",
+            "name",
+            "short_name",
+            "logo",
+            "phone",
+            "email",
+            "address",
+            "city",
+            "currency_symbol",
+            "interview_fee_enabled",
+            "interview_fee_amount",
+            "admission_fee_enabled",
+            "admission_fee_amount",
+        ]
+
+    def get_currency_symbol(self, obj):
+        return getattr(obj, "currency_symbol", None) or "KSh"
+
+    def get_interview_fee_enabled(self, obj):
+        return bool(getattr(obj, "interview_fee_enabled", False))
+
+    def get_interview_fee_amount(self, obj):
+        return getattr(obj, "interview_fee_amount", 0) or 0
+
+    def get_admission_fee_enabled(self, obj):
+        return bool(getattr(obj, "admission_fee_enabled", False))
+
+    def get_admission_fee_amount(self, obj):
+        return getattr(obj, "admission_fee_amount", 0) or 0
 
 from apps.students.models import Student
 
@@ -57,7 +91,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
     """
     Detailed read-only serializer - used for list/retrieve
     """
-    class_applied = GradeLevelSerializer(read_only=True)
+    class_applied = GradeLevelLiteSerializer(read_only=True)
     class_applied_name = serializers.SerializerMethodField()
     documents = ApplicationDocumentSerializer(many=True, read_only=True)
     fee_payments = AdmissionFeePaymentSerializer(many=True, read_only=True)
@@ -150,6 +184,10 @@ class ApplicationSerializer(serializers.ModelSerializer):
         if obj.primary_guardian_name:
             return f"{obj.primary_guardian_name} ({obj.primary_guardian_phone})"
         return None
+
+    def get_class_applied_name(self, obj):
+        ca = getattr(obj, "class_applied", None)
+        return getattr(ca, "name", None) if ca else None
 
 
 class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
@@ -312,10 +350,6 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 # Optional: Minimal serializer for list view (faster)
-
-    def get_class_applied_name(self, obj):
-        ca = getattr(obj, "class_applied", None)
-        return getattr(ca, "name", None) if ca else None
 
 class ApplicationListSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()

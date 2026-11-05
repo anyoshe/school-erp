@@ -505,9 +505,6 @@ export default function EnrollmentWizardModal({
     installments: [],
   });
 
-  useEffect(() => {
-    console.log("APPLICATION DATA received in wizard:", applicationData);
-  }, [applicationData]);
   const currencySymbol = currentSchool?.currency_symbol || "Ksh";
 
   const calculatePayments = () => {
