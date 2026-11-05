@@ -127,32 +127,12 @@ export default function FinanceClearancePage() {
     setBillingError(err);
     setStructureCandidates(Array.isArray(billing?.candidates) ? billing.candidates : []);
     if (err) toast.message(String(err));
-    // Immediate proportional allocation (don't wait for effect)
-    if (payAmt > 0 && mapped.length > 0) {
-      const weights = mapped.map((l) =>
-        l.is_waived ? 0 : Math.max(0, Number(l.amount) || Number(l.original_amount) || 0)
-      );
-      const totalW = weights.reduce((s, w) => s + w, 0) || 1;
-      let remaining = payAmt;
-      const next: Record<string, string> = {};
-      const active = weights.map((w, i) => (w > 0 ? i : -1)).filter((i) => i >= 0);
-      mapped.forEach((ln, i) => {
-        if (weights[i] <= 0) {
-          next[ln.id] = "0";
-          return;
-        }
-        if (i === active[active.length - 1]) {
-          next[ln.id] = String(Math.round(remaining * 100) / 100);
-        } else {
-          const share = Math.round((weights[i] / totalW) * payAmt * 100) / 100;
-          next[ln.id] = String(share);
-          remaining -= share;
-        }
-      });
-      setAllocations(next);
-    } else {
-      setAllocations({});
-    }
+    // Manual allocation by default — waived lines locked at 0
+    const nextAlloc: Record<string, string> = {};
+    mapped.forEach((ln) => {
+      nextAlloc[ln.id] = ln.is_waived ? "0" : "";
+    });
+    setAllocations(nextAlloc);
     setRow({
       ...r,
       ...billing,
@@ -245,6 +225,7 @@ export default function FinanceClearancePage() {
       if (res.data?.billing) {
         applyBilling(res.data.billing, row || {});
       } else if (res.data?.line) {
+        const waived = Boolean(res.data.line.is_waived);
         setInvoiceLines((prev) =>
           prev.map((ln) =>
             ln.id === lineId
@@ -253,11 +234,14 @@ export default function FinanceClearancePage() {
                   amount: Number(res.data.line.amount),
                   original_amount: Number(res.data.line.original_amount),
                   discount_amount: Number(res.data.line.discount_amount),
-                  is_waived: Boolean(res.data.line.is_waived),
+                  is_waived: waived,
                 }
               : ln
           )
         );
+        if (waived) {
+          setAllocations((prev) => ({ ...prev, [lineId]: "0" }));
+        }
         if (res.data?.invoice) {
           const bal = Number(res.data.invoice.balance || 0);
           setAmount(bal > 0 ? String(bal) : "0");
@@ -278,28 +262,39 @@ export default function FinanceClearancePage() {
   );
 
   const applyProportional = () => {
+    const active = invoiceLines.filter((l) => !l.is_waived);
+    if (active.length === 0) {
+      toast.message("All lines are waived — nothing to allocate");
+      return;
+    }
     const bal =
       Number(row?.balance) ||
-      invoiceLines.reduce((s, l) => s + (l.is_waived ? 0 : Number(l.amount) || 0), 0);
+      active.reduce((s, l) => s + (Number(l.amount) || 0), 0);
     const amt = Number(amount) > 0 ? Number(amount) : bal;
-    if (amt <= 0 || invoiceLines.length === 0) return;
+    if (amt <= 0) {
+      toast.error("Enter amount received first");
+      return;
+    }
     if (!(Number(amount) > 0)) setAmount(String(amt));
-    // Weight by current billed amount; waived (0) lines get 0 share
-    const weights = invoiceLines.map((l) => {
-      if (l.is_waived) return 0;
-      const w = Number(l.amount) > 0 ? Number(l.amount) : Number(l.original_amount || 0);
-      return Math.max(0, w);
-    });
+
+    const weights = active.map((l) =>
+      Math.max(0, Number(l.amount) || Number(l.original_amount) || 0)
+    );
     const billTotal = weights.reduce((s, w) => s + w, 0);
     const next: Record<string, string> = {};
+    // Waived always 0
+    invoiceLines.forEach((ln) => {
+      if (ln.is_waived) next[ln.id] = "0";
+    });
+
     if (billTotal <= 0) {
-      // Equal split across all lines as last resort
-      const n = invoiceLines.length;
+      // Equal split across unwaived only; remainder on last unwaived
       let remaining = amt;
-      invoiceLines.forEach((ln, i) => {
-        if (i === n - 1) next[ln.id] = String(Math.round(remaining * 100) / 100);
-        else {
-          const share = Math.round((amt / n) * 100) / 100;
+      active.forEach((ln, i) => {
+        if (i === active.length - 1) {
+          next[ln.id] = String(Math.round(remaining * 100) / 100);
+        } else {
+          const share = Math.round((amt / active.length) * 100) / 100;
           next[ln.id] = String(share);
           remaining -= share;
         }
@@ -307,18 +302,14 @@ export default function FinanceClearancePage() {
       setAllocations(next);
       return;
     }
+
     let remaining = amt;
-    const activeIdx = weights.map((w, i) => (w > 0 ? i : -1)).filter((i) => i >= 0);
-    invoiceLines.forEach((ln, i) => {
-      if (weights[i] <= 0) {
-        next[ln.id] = "0";
-        return;
-      }
-      const isLast = i === activeIdx[activeIdx.length - 1];
-      if (isLast) {
+    active.forEach((ln, i) => {
+      const w = weights[i];
+      if (i === active.length - 1) {
         next[ln.id] = String(Math.round(remaining * 100) / 100);
       } else {
-        const share = Math.round((weights[i] / billTotal) * amt * 100) / 100;
+        const share = Math.round((w / billTotal) * amt * 100) / 100;
         next[ln.id] = String(share);
         remaining -= share;
       }
@@ -327,27 +318,32 @@ export default function FinanceClearancePage() {
   };
 
   const applyToFirst = () => {
+    const active = invoiceLines.filter((l) => !l.is_waived);
+    if (active.length === 0) {
+      toast.message("All lines are waived — nothing to allocate");
+      return;
+    }
     const bal =
       Number(row?.balance) ||
-      invoiceLines.reduce((s, l) => s + (l.is_waived ? 0 : Number(l.amount) || 0), 0);
+      active.reduce((s, l) => s + (Number(l.amount) || 0), 0);
     const amt = Number(amount) > 0 ? Number(amount) : bal;
-    if (amt <= 0 || invoiceLines.length === 0) return;
+    if (amt <= 0) {
+      toast.error("Enter amount received first");
+      return;
+    }
     if (!(Number(amount) > 0)) setAmount(String(amt));
+    const firstId = active[0].id;
     const next: Record<string, string> = {};
-    invoiceLines.forEach((ln, i) => {
-      next[ln.id] = i === 0 ? String(amt) : "0";
+    invoiceLines.forEach((ln) => {
+      if (ln.is_waived) next[ln.id] = "0";
+      else if (ln.id === firstId) next[ln.id] = String(amt);
+      else next[ln.id] = "0";
     });
     setAllocations(next);
   };
 
-  // Auto-split when amount received or line amounts change
-  useEffect(() => {
-    if (!payOpen) return;
-    const amt = Number(amount) || 0;
-    if (amt <= 0 || invoiceLines.length === 0) return;
-    applyProportional();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amount, invoiceLines, payOpen]);
+
+  // Allocation is manual by default; use Split / First-item buttons when needed
 
   const addExtra = async () => {
     if (!row?.id) return;
@@ -674,10 +670,10 @@ export default function FinanceClearancePage() {
                 <p className="text-sm font-medium">Allocate to fee items</p>
                 <div className="flex gap-1">
                   <Button type="button" size="sm" variant="outline" onClick={applyProportional}>
-                    Split by ratio
+                    Split across unwaived
                   </Button>
                   <Button type="button" size="sm" variant="outline" onClick={applyToFirst}>
-                    First item
+                    All on first unwaived
                   </Button>
                 </div>
               </div>
@@ -705,12 +701,32 @@ export default function FinanceClearancePage() {
                             type="checkbox"
                             checked={!!ln.is_waived}
                             disabled={adjustingLine === ln.id}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const waived = e.target.checked;
+                              // Optimistic UI — zero allocation on waived lines immediately
+                              setInvoiceLines((prev) =>
+                                prev.map((x) =>
+                                  x.id === ln.id
+                                    ? {
+                                        ...x,
+                                        is_waived: waived,
+                                        amount: waived
+                                          ? 0
+                                          : Number(x.original_amount ?? x.amount ?? 0),
+                                        discount_amount: waived ? 0 : x.discount_amount,
+                                      }
+                                    : x
+                                )
+                              );
+                              setAllocations((prev) => ({
+                                ...prev,
+                                [ln.id]: waived ? "0" : prev[ln.id] || "",
+                              }));
                               void adjustLine(ln.id, {
-                                waived: e.target.checked,
-                                reason: e.target.checked ? "Waived at clearance" : "",
-                              })
-                            }
+                                waived,
+                                reason: waived ? "Waived at clearance" : "",
+                              });
+                            }}
                           />
                           Waive
                         </label>
@@ -758,7 +774,8 @@ export default function FinanceClearancePage() {
                           className="h-7 w-24 ml-auto"
                           type="number"
                           placeholder="Pay"
-                          value={allocations[ln.id] ?? ""}
+                          value={ln.is_waived ? "0" : allocations[ln.id] ?? ""}
+                        disabled={!!ln.is_waived}
                           onChange={(e) =>
                             setAllocations((prev) => ({
                               ...prev,

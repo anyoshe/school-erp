@@ -521,11 +521,20 @@ def adjust_invoice_line(line, *, waived=None, discount=None, reason=""):
         line.is_waived = True
         line.discount_amount = Decimal("0")
         line.amount = Decimal("0")
-    elif waived is False and discount is None:
-        # restore full
+    elif waived is False:
+        # restore full (clear waive)
         line.is_waived = False
-        line.discount_amount = Decimal("0")
-        line.amount = Decimal(str(line.original_amount))
+        if discount is None:
+            line.discount_amount = Decimal("0")
+            line.amount = Decimal(str(line.original_amount or base))
+        else:
+            d = Decimal(str(discount))
+            if d < 0:
+                d = Decimal("0")
+            if d > base:
+                d = base
+            line.discount_amount = d
+            line.amount = max(Decimal("0"), base - d)
     elif discount is not None:
         d = Decimal(str(discount))
         if d < 0:
