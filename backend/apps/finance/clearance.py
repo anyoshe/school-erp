@@ -381,16 +381,18 @@ student, user=None, academic_year=None, period_name=None):
     lines = []
     for inv in invoices:
         for ln in inv.lines.select_related("item").all():
+            orig = float(getattr(ln, "original_amount", None) or ln.amount or 0)
+            waived = bool(getattr(ln, "is_waived", False))
             lines.append({
                 "invoice_id": str(inv.id),
                 "invoice_number": inv.invoice_number,
                 "id": str(ln.id),
                 "line_id": str(ln.id),
                 "description": ln.description,
-                "amount": float(ln.amount or 0),
-                "original_amount": float(getattr(ln, "original_amount", None) or ln.amount or 0),
+                "amount": float(0 if waived else (ln.amount or 0)),
+                "original_amount": orig,
                 "discount_amount": float(getattr(ln, "discount_amount", None) or 0),
-                "is_waived": bool(getattr(ln, "is_waived", False)),
+                "is_waived": waived,
                 "item_id": str(ln.item_id) if ln.item_id else None,
                 "term": inv.term,
                 "academic_year": inv.academic_year,
@@ -402,10 +404,17 @@ student, user=None, academic_year=None, period_name=None):
         .aggregate(t=Sum("amount"))["t"]
         or Decimal("0")
     )
+    # Collectible due only (waived lines already amount=0 / is_waived excluded from amount_due)
     due = sum(
         (Decimal(str(i.amount_due or 0)) + Decimal(str(i.late_fee_applied or 0)) for i in invoices),
         Decimal("0"),
     )
+    waived_total = Decimal("0")
+    for inv in invoices:
+        for ln in inv.lines.all():
+            if getattr(ln, "is_waived", False):
+                base = getattr(ln, "original_amount", None) or 0
+                waived_total += Decimal(str(base or 0))
 
     return {
         "structure": {
@@ -431,6 +440,7 @@ student, user=None, academic_year=None, period_name=None):
         "lines": lines,
         "total_due": float(due),
         "total_paid": float(paid),
+        "waived_total": float(waived_total),
         "balance": float(max(Decimal("0"), due - paid)),
         "matched_year": str(year) if year else None,
         "matched_term": term,
@@ -490,19 +500,42 @@ def add_extra_fee_line(student, description, amount, user=None, fee_item_id=None
 
 
 def recalculate_invoice_totals(invoice):
-    """Set amount_due from sum of line amounts; preserve amount_paid."""
+    """
+    Collectible amount_due = sum of non-waived line amounts only.
+    Waivers reduce what is owed but must NOT increase amount_paid (collections).
+    Fully waived invoices (due=0) are settled with zero cash collected.
+    """
     from decimal import Decimal
-    from django.db.models import Sum
+    from django.db.models import Sum, Q
     from .models import InvoiceLine
 
-    total = (
-        InvoiceLine.objects.filter(invoice=invoice).aggregate(s=Sum("amount"))["s"]
+    lines = InvoiceLine.objects.filter(invoice=invoice)
+    collectible = (
+        lines.filter(is_waived=False).aggregate(s=Sum("amount"))["s"]
         or Decimal("0")
     )
-    invoice.amount_due = Decimal(str(total))
+    # Also treat amount=0 waived rows as excluded (amount already 0 when waived)
+    collectible = Decimal(str(collectible))
+
     paid = Decimal(str(invoice.amount_paid or 0))
-    invoice.is_paid = paid >= Decimal(str(total)) and Decimal(str(total)) > 0
-    invoice.save(update_fields=["amount_due", "is_paid"])
+    late = Decimal(str(getattr(invoice, "late_fee_applied", 0) or 0))
+    total_due = collectible + late
+
+    invoice.amount_due = collectible
+    invoice.balance = max(Decimal("0"), total_due - paid)
+    # Settled if nothing left to collect (including all waived) OR cash covers due
+    invoice.is_paid = total_due <= 0 or paid >= total_due
+    if invoice.is_paid and total_due > 0 and not getattr(invoice, "paid_at", None):
+        from django.utils import timezone
+        invoice.paid_at = timezone.now()
+    elif total_due <= 0:
+        # Fully waived / zero bill — settled without treating as a cash payment event
+        pass
+
+    update_fields = ["amount_due", "balance", "is_paid"]
+    if invoice.is_paid and getattr(invoice, "paid_at", None):
+        update_fields.append("paid_at")
+    invoice.save(update_fields=update_fields)
     return invoice
 
 

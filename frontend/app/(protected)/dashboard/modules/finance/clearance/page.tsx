@@ -620,7 +620,7 @@ export default function FinanceClearancePage() {
               </ul>
             )}
             <p className="text-sm font-semibold mt-2 flex justify-between">
-              <span>Balance due</span>
+              <span>Balance due (excludes waived)</span>
               <span>
                 {currency} {Number(row?.balance ?? 0).toLocaleString()}
               </span>
