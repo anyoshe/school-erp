@@ -58,6 +58,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
     Detailed read-only serializer - used for list/retrieve
     """
     class_applied = GradeLevelSerializer(read_only=True)
+    class_applied_name = serializers.SerializerMethodField()
     documents = ApplicationDocumentSerializer(many=True, read_only=True)
     fee_payments = AdmissionFeePaymentSerializer(many=True, read_only=True)
     charges = ApplicationChargeSerializer(many=True, read_only=True)
@@ -94,6 +95,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'category',
             'previous_school',
             'class_applied',
+            'class_applied_name',
             'primary_guardian_name',
             'primary_guardian_phone',
             'primary_guardian_email',
@@ -310,6 +312,11 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 # Optional: Minimal serializer for list view (faster)
+
+    def get_class_applied_name(self, obj):
+        ca = getattr(obj, "class_applied", None)
+        return getattr(ca, "name", None) if ca else None
+
 class ApplicationListSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source="get_status_display", read_only=True)
