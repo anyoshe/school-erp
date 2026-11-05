@@ -141,9 +141,9 @@ class Student(models.Model):
         ],
         default="UNKNOWN"
     )
-    emergency_name = models.CharField(max_length=100, blank=True)
-    emergency_phone = models.CharField(max_length=20, blank=True)
-    emergency_relation = models.CharField(max_length=50, blank=True)
+    emergency_name = models.CharField(max_length=100, blank=True, default="")
+    emergency_phone = models.CharField(max_length=20, blank=True, default="")
+    emergency_relation = models.CharField(max_length=50, blank=True, default="")
 
     # Operational / Management Fields (admin fills or confirms)
     special_needs = models.TextField(blank=True, verbose_name="Special Educational Needs")

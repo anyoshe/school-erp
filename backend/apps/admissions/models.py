@@ -751,10 +751,28 @@ class Application(models.Model):
             chronic_conditions=self.chronic_conditions,
             disability=self.disability,
 
-            # Emergency contact
-            emergency_name=self.emergency_contact_name or wd.get('emergency_name'),
-            emergency_phone=self.emergency_contact_phone or wd.get('emergency_phone'),
-            emergency_relation=self.emergency_relationship or wd.get('emergency_relation'),
+            # Emergency contact — DB columns are NOT NULL; never pass None
+            emergency_name=(
+                self.emergency_contact_name
+                or wd.get("emergency_name")
+                or wd.get("guardian_name")
+                or self.primary_guardian_name
+                or "Guardian"
+            ),
+            emergency_phone=(
+                self.emergency_contact_phone
+                or wd.get("emergency_phone")
+                or wd.get("guardian_phone")
+                or self.primary_guardian_phone
+                or ""
+            ),
+            emergency_relation=(
+                self.emergency_relationship
+                or wd.get("emergency_relation")
+                or wd.get("guardian_relationship")
+                or self.primary_guardian_relationship
+                or "Parent"
+            ),
 
             current_class=enroll_class,
             boarding_status=wd.get('boarding_status', 'DAY'),
