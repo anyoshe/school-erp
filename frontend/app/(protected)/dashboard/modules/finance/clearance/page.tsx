@@ -103,15 +103,19 @@ export default function FinanceClearancePage() {
   };
 
   const mapLines = (lines: any[]) =>
-    (lines || []).map((ln: any) => ({
-      id: String(ln.id || ln.line_id || ""),
-      description: ln.description || ln.item_name || "Fee item",
-      category: ln.category_name || ln.category || "",
-      amount: Number(ln.amount || 0),
-      original_amount: Number(ln.original_amount ?? ln.amount ?? 0),
-      discount_amount: Number(ln.discount_amount || 0),
-      is_waived: Boolean(ln.is_waived),
-    })).filter((ln) => ln.id && ln.id !== "undefined");
+    (lines || []).map((ln: any) => {
+      // Prefer invoice line PK (line_id / id), never fee-item id
+      const linePk = ln.line_id ?? ln.id;
+      return {
+        id: linePk != null && linePk !== "" ? String(linePk) : "",
+        description: ln.description || ln.item_name || "Fee item",
+        category: ln.category_name || ln.category || "",
+        amount: Number(ln.amount || 0),
+        original_amount: Number(ln.original_amount ?? ln.amount ?? 0),
+        discount_amount: Number(ln.discount_amount || 0),
+        is_waived: Boolean(ln.is_waived),
+      };
+    }).filter((ln) => ln.id && ln.id !== "undefined");
 
   const applyBilling = (billing: any, r: any) => {
     const invs = billing?.invoices || [];

@@ -37,7 +37,7 @@ urlpatterns = [
     path('awaiting-clearance/', AwaitingClearanceView.as_view(), name='awaiting-clearance'),
     path('awaiting-clearance/<uuid:student_id>/add-item/', ClearanceAddItemView.as_view(), name='clearance-add-item'),
     path('awaiting-clearance/<uuid:student_id>/prepare/', ClearancePrepareView.as_view(), name='clearance-prepare'),
-    path('clearance/lines/<uuid:line_id>/', ClearanceAdjustLineView.as_view(), name='clearance-adjust-line'),
+    path('clearance/lines/<str:line_id>/', ClearanceAdjustLineView.as_view(), name='clearance-adjust-line'),
     path('owner-standing/', OwnerStandingView.as_view(), name='owner-standing'),
     path('students/<uuid:student_id>/statement/', StudentFeeStatementView.as_view(), name='student-fee-statement'),
     path('', include(router.urls)),

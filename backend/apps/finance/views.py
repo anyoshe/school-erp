@@ -1697,13 +1697,23 @@ class ClearanceAdjustLineView(APIView):
         from apps.finance.clearance import adjust_invoice_line, ensure_student_billing
 
         school_ids = _resolve_school_ids(request)
+        # InvoiceLine PK is integer (AutoField); accept str/int from the client
         line = (
             InvoiceLine.objects.select_related("invoice__student", "invoice__school")
             .filter(id=line_id)
             .first()
         )
         if not line:
-            return Response({"detail": "Line not found"}, status=404)
+            try:
+                line = (
+                    InvoiceLine.objects.select_related("invoice__student", "invoice__school")
+                    .filter(pk=int(str(line_id)))
+                    .first()
+                )
+            except (TypeError, ValueError):
+                line = None
+        if not line:
+            return Response({"detail": f"Line not found: {line_id}"}, status=404)
         inv = line.invoice
         sid = getattr(inv, "school_id", None) or getattr(getattr(inv, "student", None), "school_id", None)
         if sid and sid not in school_ids:
