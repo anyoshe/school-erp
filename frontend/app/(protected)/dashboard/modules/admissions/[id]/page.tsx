@@ -38,29 +38,8 @@ function writeCachedApplication(id: string, data: any) {
   try {
     const raw = sessionStorage.getItem(CACHE_KEY);
     const map = raw ? JSON.parse(raw) : {};
-    map[id] = {
-      id: data.id,
-      first_name: data.first_name,
-      middle_name: data.middle_name,
-      last_name: data.last_name,
-      preferred_name: data.preferred_name,
-      status: data.status,
-      class_applied: data.class_applied,
-      admission_number: data.admission_number,
-      primary_guardian_name: data.primary_guardian_name,
-      primary_guardian_phone: data.primary_guardian_phone,
-      primary_guardian_email: data.primary_guardian_email,
-      primary_guardian_relationship: data.primary_guardian_relationship,
-      primary_guardian_id_number: data.primary_guardian_id_number,
-      gender: data.gender,
-      date_of_birth: data.date_of_birth,
-      nationality: data.nationality,
-      photo: data.photo,
-      charges: data.charges,
-      interview_outcome: data.interview_outcome,
-      enrollment_term: data.enrollment_term,
-      enrollment_academic_year: data.enrollment_academic_year,
-    };
+    // Store the full application so enrollment prefill is never half-empty
+    map[id] = { ...data };
     sessionStorage.setItem(CACHE_KEY, JSON.stringify(map));
   } catch {
     /* ignore quota */

@@ -420,40 +420,60 @@ export default function EnrollmentWizardModal({
     };
   }, [open, applicationData, currentSchool?.id]);
 
-  // Hard-reset form from application every time the wizard opens
+  // Prefill from props immediately, then always load FULL application from API
   const prevOpenRef = useRef(false);
   useEffect(() => {
     const justOpened = open && !prevOpenRef.current;
     prevOpenRef.current = open;
-    if (!open || !applicationData) return;
-    // Prefill on open, and again if application data arrives after open (was empty)
-    const needsPrefill =
-      justOpened ||
-      !String(formData.first_name || "").trim() ||
-      !String(formData.last_name || "").trim();
-    if (!needsPrefill && !justOpened) return;
+    if (!open || !applicationId) return;
 
     const todayStr = format(new Date(), "yyyy-MM-dd");
-    const next = buildFormFromApplication(applicationData, todayStr);
-    // Preserve in-progress enrollment choices if re-prefill mid-open due to late data
-    if (!justOpened) {
-      next.enrollment_term = formData.enrollment_term || next.enrollment_term;
-      next.enrollment_academic_year =
-        formData.enrollment_academic_year || next.enrollment_academic_year;
-      next.terms_accepted = formData.terms_accepted;
-      next.section = formData.section || next.section;
+
+    const applyApp = (ad: any) => {
+      if (!ad) return;
+      const next = buildFormFromApplication(ad, todayStr);
+      setFormData(next);
+      const gname =
+        classAppliedName(ad) ||
+        ad.class_applied_name ||
+        "";
+      if (gname && !/^\d+$/.test(String(gname).trim())) {
+        setGradeLabel(String(gname));
+      } else if (classAppliedId(ad)) {
+        // keep resolving via grade effect
+      }
+      setTimeout(() => snapshotBaseline(next), 0);
+    };
+
+    // 1) Instant paint from whatever parent already has
+    if (applicationData) {
+      applyApp(applicationData);
     }
-    setFormData(next);
-    const gname =
-      classAppliedName(applicationData) ||
-      (applicationData as any)?.class_applied_name ||
-      "";
-    if (gname && !/^\d+$/.test(String(gname).trim())) {
-      setGradeLabel(String(gname));
-    }
-    setTimeout(() => snapshotBaseline(next), 0);
     if (justOpened) setCurrentStep(1);
-  }, [open, applicationData, applicationId]);
+
+    // 2) Authoritative full record from API (list/cache are incomplete)
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get(`/admissions/applications/${applicationId}/`, {
+          timeout: 12000,
+          headers: currentSchool?.id
+            ? { "X-School-ID": String(currentSchool.id) }
+            : undefined,
+        });
+        if (cancelled || !res.data) return;
+        applyApp(res.data);
+      } catch (e) {
+        console.warn("enrollment prefill fetch failed", e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, applicationId, currentSchool?.id]);
+
+
 
 
 
