@@ -247,7 +247,15 @@ export default function FinanceClearancePage() {
           setAmount(bal > 0 ? String(bal) : "0");
         }
       }
-      toast.success(payload.waived ? "Line waived" : "Line updated");
+      if (payload.waived && res.data?.line && !res.data.line.is_waived) {
+        toast.error("Server did not save the waive — try again or use management command");
+      } else {
+        toast.success(
+          payload.waived && res.data?.line?.is_waived
+            ? "Line waived — balance updated (not counted as collection)"
+            : "Line updated"
+        );
+      }
       qc.invalidateQueries({ queryKey: ["awaiting-clearance"] });
     } catch (e: any) {
       const st = e?.response?.status;
