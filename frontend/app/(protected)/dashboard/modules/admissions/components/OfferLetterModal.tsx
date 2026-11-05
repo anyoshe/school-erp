@@ -330,7 +330,7 @@ export default function OfferLetterModal({
     const bodyLineH = 5;
     doc.text(bodyLines, 20, bodyStartY);
     // Modest gap after introduction (not too far down)
-    let cursorY = bodyStartY + bodyLines.length * bodyLineH + 8;
+    let cursorY = bodyStartY + bodyLines.length * bodyLineH + 5;
 
     // --- PAGE 1: GRADE REQUIREMENTS (after letter body, before signature) ---
     const reqs = (gradeRequirements || []).filter(Boolean);
