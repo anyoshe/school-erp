@@ -46,9 +46,10 @@ const getMonthNumber = (name: string) => monthNames.indexOf(name) + 1 || 1;
 
 export default function EditSchoolBasicInfoPage() {
   // const { currentSchool, refreshSchools } = useCurrentSchool();
-  const { currentSchool, refreshSchools } = useCurrentSchool() as { 
-    currentSchool: School | null; 
-    refreshSchools: () => Promise<void>; 
+  const { currentSchool, refreshSchools, setCurrentSchool } = useCurrentSchool() as {
+    currentSchool: School | null;
+    refreshSchools: () => Promise<void>;
+    setCurrentSchool: (s: School | null) => void;
   };
 
   const [formData, setFormData] = useState({
@@ -81,6 +82,29 @@ export default function EditSchoolBasicInfoPage() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  // If session school has no bank fields, fetch full detail so form prefills
+  useEffect(() => {
+    if (!currentSchool?.id) return;
+    const missingBank =
+      !currentSchool.bank_name &&
+      !currentSchool.bank_account_number &&
+      !currentSchool.paybill_number;
+    if (!missingBank) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get(`/schools/${currentSchool.id}/`);
+        if (!cancelled && res.data) setCurrentSchool(res.data as School);
+      } catch {
+        /* keep session school */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentSchool?.id]);
 
   useEffect(() => {
     if (currentSchool) {
@@ -171,13 +195,34 @@ export default function EditSchoolBasicInfoPage() {
         payload.append("logo", formData.logo);
       }
 
-      await api.patch(`/schools/${currentSchool.id}/`, payload);
+      await api.patch(`/schools/${currentSchool.id}/`, payload, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      // Reload FULL school detail so bank fields persist in context + form prefill
+      try {
+        const detail = await api.get(`/schools/${currentSchool.id}/`);
+        if (detail.data) {
+          setCurrentSchool(detail.data as School);
+          setFormData((prev) => ({
+            ...prev,
+            bankName: detail.data.bank_name || prev.bankName,
+            branchName: detail.data.branch_name || prev.branchName,
+            bankAccountName: detail.data.bank_account_name || prev.bankAccountName,
+            bankAccountNumber: detail.data.bank_account_number || prev.bankAccountNumber,
+            paybillNumber: detail.data.paybill_number || prev.paybillNumber,
+            paymentInstructions: detail.data.payment_instructions || prev.paymentInstructions,
+            logo: null,
+          }));
+        }
+      } catch {
+        await refreshSchools();
+      }
 
       toast.success("School information updated successfully!", {
         style: { background: colors.secondary, color: 'white' }
       });
       setSuccess(true);
-      await refreshSchools();
 
       setTimeout(() => setSuccess(false), 4000);
     } catch (err: any) {

@@ -164,6 +164,23 @@ export function CurrentSchoolProvider({ children }: { children: ReactNode }) {
       persistActiveSchool(selected.id);
       cacheActiveSchool(selected);
       cacheSchoolsList(fetchedSchools);
+      // Hydrate bank/payment fields from detail when session list omits them
+      const needsDetail =
+        selected &&
+        !(selected as any).bank_name &&
+        !(selected as any).bank_account_number &&
+        !(selected as any).paybill_number;
+      if (needsDetail && selected?.id) {
+        try {
+          const detail = await api.get(`/schools/${selected.id}/`);
+          if (detail.data) {
+            setCurrentSchoolState(detail.data as School);
+            cacheActiveSchool(detail.data as School);
+          }
+        } catch {
+          /* keep session payload */
+        }
+      }
     } catch (err: any) {
       console.error("[Context] Failed to load schools:", err);
       setError("Could not load your schools. Please try again later.");

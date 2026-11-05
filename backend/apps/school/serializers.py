@@ -218,8 +218,9 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
 
         user = request.user
 
-        # Security: Only owner or admin can update
-        if instance.owner != user and not user.is_staff:
+        # Owner, staff, or any user linked to this school may update settings
+        is_member = instance.users.filter(pk=user.pk).exists()
+        if instance.owner_id != getattr(user, "id", None) and not user.is_staff and not is_member:
             raise PermissionDenied("You do not have permission to update this school.")
 
         module_ids = validated_data.pop('module_ids', None)
