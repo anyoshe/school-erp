@@ -250,7 +250,16 @@ export default function FinanceClearancePage() {
       toast.success(payload.waived ? "Line waived" : "Line updated");
       qc.invalidateQueries({ queryKey: ["awaiting-clearance"] });
     } catch (e: any) {
-      toast.error(e?.response?.data?.detail || "Adjustment failed");
+      const st = e?.response?.status;
+      const det = e?.response?.data?.detail || e?.response?.data || e?.message;
+      console.error("clearance adjust failed", st, det);
+      toast.error(
+        typeof det === "string"
+          ? det
+          : st
+            ? `Adjustment failed (${st})`
+            : "Adjustment failed — is the backend migrated?"
+      );
     } finally {
       setAdjustingLine(null);
     }
