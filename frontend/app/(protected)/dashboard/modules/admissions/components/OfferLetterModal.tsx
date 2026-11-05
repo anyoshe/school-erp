@@ -20,6 +20,7 @@ import { Application } from "@/types/admission";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import api from "@/utils/api";
+import { resolveMediaUrl } from "@/utils/media";
 
 interface Props {
   open: boolean;
@@ -42,6 +43,7 @@ export default function OfferLetterModal({
   const [feeLoading, setFeeLoading] = useState(false);
   const [feeStructures, setFeeStructures] = useState<any[]>([]);
   const [gradeRequirements, setGradeRequirements] = useState<string[]>([]);
+  const [schoolProfile, setSchoolProfile] = useState<any>(null);
   const [customMessage, setCustomMessage] = useState(
     "We are delighted to offer you admission to our institution for the upcoming academic year. Please review the details below and complete the enrollment process by the deadline."
   );
@@ -54,6 +56,17 @@ export default function OfferLetterModal({
 
     if (!classId) {
       setFeeStructures([]);
+      // Still load school for logo/bank when possible
+      const schoolId =
+        typeof applicationData.school === "object"
+          ? (applicationData.school as any)?.id
+          : applicationData.school;
+      if (schoolId) {
+        api
+          .get(`/schools/${schoolId}/`, { timeout: 12000 })
+          .then((r) => r.data && setSchoolProfile(r.data))
+          .catch(() => {});
+      }
       return;
     }
 
@@ -92,22 +105,36 @@ export default function OfferLetterModal({
             }
           })
         );
-        try {
-          const reqRes = await api.get("/academics/grade-requirements/", {
-            params: { grade_level: classId, is_active: true },
-          });
-          const reqList = Array.isArray(reqRes.data)
+        // Requirements + school profile in parallel (logo/bank for letter)
+        const schoolId =
+          typeof applicationData.school === "object"
+            ? (applicationData.school as any)?.id
+            : applicationData.school;
+        const [reqRes, schoolRes] = await Promise.all([
+          api
+            .get("/academics/grade-requirements/", {
+              params: { grade_level: classId, is_active: true },
+              timeout: 12000,
+            })
+            .catch(() => null),
+          schoolId
+            ? api
+                .get(`/schools/${schoolId}/`, { timeout: 12000 })
+                .catch(() => null)
+            : Promise.resolve(null),
+        ]);
+        const reqList = reqRes
+          ? Array.isArray(reqRes.data)
             ? reqRes.data
-            : reqRes.data?.results || [];
-          setGradeRequirements(
-            reqList
-              .filter((r: any) => r.is_active !== false)
-              .map((r: any) => String(r.item_text || "").trim())
-              .filter(Boolean)
-          );
-        } catch {
-          setGradeRequirements([]);
-        }
+            : reqRes.data?.results || []
+          : [];
+        setGradeRequirements(
+          reqList
+            .filter((r: any) => r.is_active !== false)
+            .map((r: any) => String(r.item_text || "").trim())
+            .filter(Boolean)
+        );
+        if (schoolRes?.data) setSchoolProfile(schoolRes.data);
 
         setFeeStructures(detailed.filter(Boolean));
         if (detailed.length === 0) {
@@ -282,34 +309,60 @@ export default function OfferLetterModal({
   };
 
 
-  const loadImage = (url: string): Promise<string> => {
+  const loadImage = (url: string, timeoutMs = 8000): Promise<string> => {
     return new Promise((resolve, reject) => {
+      if (!url) {
+        reject(new Error("no url"));
+        return;
+      }
       const img = new Image();
-      img.crossOrigin = "Anonymous";
+      img.crossOrigin = "anonymous";
+      const timer = setTimeout(() => {
+        reject(new Error("logo load timeout"));
+      }, timeoutMs);
       img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = img.width; canvas.height = img.height;
-        const ctx = canvas.getContext("2d");
-        ctx?.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL("image/png"));
+        clearTimeout(timer);
+        try {
+          const canvas = document.createElement("canvas");
+          // Cap size so large logos don't stall the canvas
+          const maxW = 240;
+          const scale = img.width > maxW ? maxW / img.width : 1;
+          canvas.width = Math.max(1, Math.round(img.width * scale));
+          canvas.height = Math.max(1, Math.round(img.height * scale));
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/png"));
+        } catch (e) {
+          reject(e);
+        }
       };
-      img.onerror = reject;
+      img.onerror = () => {
+        clearTimeout(timer);
+        reject(new Error("logo load failed"));
+      };
       img.src = url;
     });
   };
 
   const generatePDF = async () => {
     const doc = new jsPDF();
-    const sch: any = typeof applicationData.school === "object" ? applicationData.school : {};
-    const schoolName = sch?.name || "School Name";
-    const logoUrl = sch?.logo || "https://via.placeholder.com/120x60?text=Logo";
+    const nested: any = typeof applicationData.school === "object" ? applicationData.school : {};
+    const sch: any = { ...nested, ...(schoolProfile || {}) };
+    const schoolName = sch?.name || nested?.name || "School Name";
+    const rawLogo = sch?.logo || sch?.logo_url || nested?.logo || "";
+    const logoUrl = rawLogo ? resolveMediaUrl(rawLogo) || rawLogo : "";
     const schoolContact = `${sch?.address || ""}, ${sch?.city || ""} | ${sch?.phone || ""} | ${sch?.email || ""}`.trim();
 
     // --- PAGE 1: ADMISSION LETTER ---
-    try {
-      const imgData = await loadImage(logoUrl);
-      doc.addImage(imgData, "PNG", 85, 10, 40, 20);
-    } catch (err) {
+    // Logo: short timeout so letter is not blocked when media is slow
+    if (logoUrl) {
+      try {
+        const imgData = await loadImage(logoUrl, 6000);
+        doc.addImage(imgData, "PNG", 85, 10, 40, 20);
+      } catch {
+        doc.setFontSize(14).text(schoolName, 105, 20, { align: "center" });
+      }
+    } else {
       doc.setFontSize(14).text(schoolName, 105, 20, { align: "center" });
     }
 
@@ -343,17 +396,22 @@ export default function OfferLetterModal({
       cursorY += 6;
 
       const cols = reqs.length > 12 ? 3 : reqs.length > 6 ? 2 : 1;
-      const colW = cols === 3 ? 56 : cols === 2 ? 85 : 170;
+      const gap = 5;
+      const colW = cols === 3 ? 55 : cols === 2 ? 82 : 170;
       const perCol = Math.ceil(reqs.length / cols);
+      const lineH = 3.6;
       let maxColY = cursorY;
       for (let c = 0; c < cols; c++) {
         let y = cursorY;
         const slice = reqs.slice(c * perCol, (c + 1) * perCol);
         for (const item of slice) {
-          if (y > 250) break; // leave room for signature on page 1
-          const x = 20 + c * (colW + 4);
-          doc.text(`• ${item}`.substring(0, 48), x, y, { maxWidth: colW });
-          y += 4.2;
+          if (y > 248) break; // leave room for signature on page 1
+          const x = 20 + c * (colW + gap);
+          const bullet = `• ${item}`;
+          const wrapped = doc.splitTextToSize(bullet, colW - 1);
+          doc.text(wrapped, x, y);
+          // Advance by actual wrapped height so multi-line items never overlap
+          y += Math.max(lineH, wrapped.length * lineH) + 1.2;
         }
         if (y > maxColY) maxColY = y;
       }
