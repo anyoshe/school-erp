@@ -21,6 +21,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import api from "@/utils/api";
 import { resolveMediaUrl } from "@/utils/media";
+import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 
 interface Props {
   open: boolean;
@@ -37,6 +38,7 @@ export default function OfferLetterModal({
   applicationData,
   onIssued,
 }: Props) {
+  const { currentSchool } = useCurrentSchool();
   const [loading, setLoading] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [hasGenerated, setHasGenerated] = useState(false);
@@ -47,6 +49,57 @@ export default function OfferLetterModal({
   const [customMessage, setCustomMessage] = useState(
     "We are delighted to offer you admission to our institution for the upcoming academic year. Please review the details below and complete the enrollment process by the deadline."
   );
+
+
+  // Prefer full school (name, address, bank, logo) — application often only has school id
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const loadSchoolProfile = async () => {
+      const fromApp =
+        typeof applicationData.school === "object" && applicationData.school
+          ? (applicationData.school as any)
+          : null;
+      const schoolId =
+        fromApp?.id ||
+        (typeof applicationData.school === "string" || typeof applicationData.school === "number"
+          ? applicationData.school
+          : null) ||
+        currentSchool?.id ||
+        null;
+
+      // Seed from context immediately (usually already in memory)
+      if (currentSchool && (currentSchool as any).name) {
+        if (!cancelled) setSchoolProfile(currentSchool);
+      } else if (fromApp && fromApp.name) {
+        if (!cancelled) setSchoolProfile(fromApp);
+      }
+
+      const candidates: string[] = [];
+      if (schoolId) candidates.push(`/schools/${schoolId}/`);
+      candidates.push("/schools/active/");
+      candidates.push("/schools/my-schools/");
+
+      for (const url of candidates) {
+        try {
+          const res = await api.get(url, { timeout: 10000 });
+          let data = res.data;
+          if (Array.isArray(data)) data = data[0];
+          if (data?.results && Array.isArray(data.results)) data = data.results[0];
+          if (data && (data.name || data.bank_name || data.logo)) {
+            if (!cancelled) setSchoolProfile((prev: any) => ({ ...(prev || {}), ...data }));
+            return;
+          }
+        } catch {
+          /* try next */
+        }
+      }
+    };
+    void loadSchoolProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, applicationData.school, currentSchool?.id]);
 
   const classId = classAppliedId(applicationData) || undefined;
   const className = classAppliedName(applicationData) || "the applied class";
@@ -347,11 +400,28 @@ export default function OfferLetterModal({
   const generatePDF = async () => {
     const doc = new jsPDF();
     const nested: any = typeof applicationData.school === "object" ? applicationData.school : {};
-    const sch: any = { ...nested, ...(schoolProfile || {}) };
-    const schoolName = sch?.name || nested?.name || "School Name";
-    const rawLogo = sch?.logo || sch?.logo_url || nested?.logo || "";
-    const logoUrl = rawLogo ? resolveMediaUrl(rawLogo) || rawLogo : "";
-    const schoolContact = `${sch?.address || ""}, ${sch?.city || ""} | ${sch?.phone || ""} | ${sch?.email || ""}`.trim();
+    // Context first (already loaded in dashboard), then fetched profile, then nested app school
+    const sch: any = {
+      ...(nested && typeof nested === "object" ? nested : {}),
+      ...(schoolProfile || {}),
+      ...(currentSchool || {}),
+    };
+    // Prefer non-empty fields (later sources win only if they have values)
+    const pick = (...vals: any[]) => {
+      for (const v of vals) {
+        if (v !== undefined && v !== null && String(v).trim() !== "") return v;
+      }
+      return "";
+    };
+    const schoolName = pick(currentSchool?.name, schoolProfile?.name, nested?.name, "School Name");
+    const address = pick(sch.address, sch.physical_address, sch.location);
+    const city = pick(sch.city, sch.town);
+    const phone = pick(sch.phone, sch.phone_number, sch.contact_phone);
+    const email = pick(sch.email, sch.contact_email);
+    const rawLogo = pick(sch.logo, sch.logo_url, currentSchool?.logo, schoolProfile?.logo);
+    const logoUrl = rawLogo ? resolveMediaUrl(String(rawLogo)) || String(rawLogo) : "";
+    const contactParts = [address, city].filter(Boolean).join(", ");
+    const schoolContact = [contactParts, phone, email].filter(Boolean).join(" | ") || schoolName;
 
     // --- PAGE 1: ADMISSION LETTER ---
     // Logo: short timeout so letter is not blocked when media is slow
@@ -504,13 +574,22 @@ export default function OfferLetterModal({
     doc.setFontSize(9).setFont("helvetica", "normal").setTextColor(0);
     let bankY = currentY + 7;
     
-    if (sch?.bank_name) {
-      doc.text(`Bank: ${sch.bank_name} (${sch.branch_name || "Main"})`, 20, bankY); bankY += 5;
-      doc.text(`Acc Name: ${sch.bank_account_name || schoolName}`, 20, bankY); bankY += 5;
-      doc.text(`Acc No: ${sch.bank_account_number || "N/A"}`, 20, bankY); bankY += 5;
+    const bankName = pick(sch.bank_name, currentSchool?.bank_name, schoolProfile?.bank_name);
+    const branchName = pick(sch.branch_name, currentSchool?.branch_name, schoolProfile?.branch_name, "Main");
+    const accName = pick(sch.bank_account_name, currentSchool?.bank_account_name, schoolProfile?.bank_account_name, schoolName);
+    const accNo = pick(sch.bank_account_number, currentSchool?.bank_account_number, schoolProfile?.bank_account_number);
+    const paybill = pick(sch.paybill_number, currentSchool?.paybill_number, schoolProfile?.paybill_number);
+    if (bankName || accNo || paybill) {
+      if (bankName) {
+        doc.text(`Bank: ${bankName} (${branchName || "Main"})`, 20, bankY); bankY += 5;
+      }
+      doc.text(`Acc Name: ${accName || schoolName}`, 20, bankY); bankY += 5;
+      if (accNo) {
+        doc.text(`Acc No: ${accNo}`, 20, bankY); bankY += 5;
+      }
     }
-    if (sch?.paybill_number) {
-      doc.text(`M-Pesa Paybill: ${sch.paybill_number}`, 20, bankY); bankY += 5;
+    if (paybill) {
+      doc.text(`M-Pesa Paybill: ${paybill}`, 20, bankY); bankY += 5;
     }
     doc.setFont("helvetica", "bold").text(`Payment Reference: ${applicationData.first_name.toUpperCase()}${applicationId.slice(0, 4)}`, 20, bankY);
 
