@@ -137,11 +137,17 @@ export default function InvoicesPage() {
     setDetailError(null);
     setSelectedInvoice(null);
     try {
-      const response = await api.get(`/finance/invoices/${invoiceId}/`, { timeout: 20000 });
+      const response = await api.get(`/finance/invoices/${invoiceId}/`, { timeout: 15000 });
       setSelectedInvoice(response.data);
-    } catch (err) {
-      setDetailError("Failed to load invoice details");
-      toast.error("Failed to load invoice details");
+    } catch (err: any) {
+      const msg =
+        err?.code === "ECONNABORTED"
+          ? "Invoice details timed out — try again"
+          : err?.response?.data?.detail ||
+            err?.message ||
+            "Failed to load invoice details";
+      setDetailError(String(msg));
+      toast.error(String(msg));
     } finally {
       setDetailLoading(false);
     }

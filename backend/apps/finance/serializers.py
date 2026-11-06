@@ -527,6 +527,88 @@ class InvoiceLiteSerializer(serializers.ModelSerializer):
             return float(getattr(obj, "balance", 0) or 0)
 
 
+
+class InvoiceDetailSerializer(serializers.ModelSerializer):
+    """Fast invoice detail for view modal — no heavy nested Student/assignment trees."""
+    student = serializers.SerializerMethodField()
+    student_name = serializers.SerializerMethodField()
+    lines = serializers.SerializerMethodField()
+    payments = serializers.SerializerMethodField()
+    balance = serializers.SerializerMethodField()
+    current_total_due = serializers.ReadOnlyField()
+    payment_plan = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Invoice
+        fields = [
+            "id", "student", "student_name", "term", "academic_year",
+            "invoice_number", "amount_due", "amount_paid", "balance",
+            "due_date", "generated_at", "is_paid", "paid_at",
+            "payments", "lines", "current_total_due", "late_fee_applied",
+            "installment_number", "payment_plan",
+        ]
+
+    def get_student(self, obj):
+        s = obj.student
+        if not s:
+            return None
+        return {
+            "id": str(s.id),
+            "first_name": s.first_name or "",
+            "last_name": s.last_name or "",
+            "admission_number": getattr(s, "admission_number", "") or "",
+        }
+
+    def get_student_name(self, obj):
+        s = obj.student
+        if not s:
+            return ""
+        return f"{s.first_name or ''} {s.last_name or ''}".strip()
+
+    def get_balance(self, obj):
+        try:
+            due = Decimal(str(obj.amount_due or 0)) + Decimal(str(obj.late_fee_applied or 0))
+            paid = Decimal(str(obj.amount_paid or 0))
+            return float(max(Decimal("0"), due - paid))
+        except Exception:
+            return float(getattr(obj, "balance", 0) or 0)
+
+    def get_lines(self, obj):
+        out = []
+        for ln in obj.lines.all():
+            out.append({
+                "id": str(ln.id),
+                "description": ln.description or (
+                    getattr(getattr(ln, "item", None), "name", None) or "Fee item"
+                ),
+                "amount": float(ln.amount or 0),
+                "original_amount": float(getattr(ln, "original_amount", None) or ln.amount or 0),
+                "is_waived": bool(getattr(ln, "is_waived", False)),
+                "discount_amount": float(getattr(ln, "discount_amount", None) or 0),
+            })
+        return out
+
+    def get_payments(self, obj):
+        out = []
+        for p in obj.payments.all():
+            out.append({
+                "id": str(p.id),
+                "amount": float(p.amount or 0),
+                "payment_method": p.payment_method or "",
+                "reference_number": p.reference_number or getattr(p, "receipt_number", "") or "",
+                "paid_at": (p.paid_at.isoformat() if p.paid_at else None),
+                "payment_date": str(p.payment_date) if getattr(p, "payment_date", None) else None,
+                "paid_by": None,
+            })
+        return out
+
+    def get_payment_plan(self, obj):
+        plan = getattr(obj, "payment_plan", None)
+        if not plan:
+            return None
+        return {"id": str(plan.id), "name": getattr(plan, "name", "") or ""}
+
+
 class InvoiceSerializer(serializers.ModelSerializer):
     student = StudentSerializer(read_only=True)
     fee_assignment = StudentFeeAssignmentSerializer(read_only=True)

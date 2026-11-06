@@ -1133,7 +1133,7 @@ class StudentFeeAssignmentViewSet(viewsets.ModelViewSet):
 
 
 class InvoiceViewSet(viewsets.ModelViewSet):
-    queryset = Invoice.objects.select_related('student', 'fee_assignment__fee_structure').prefetch_related('payments').all()
+    queryset = Invoice.objects.select_related('student', 'fee_assignment__fee_structure').prefetch_related('payments', 'lines').all()
     permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['student', 'term', 'academic_year', 'is_paid']
@@ -1144,23 +1144,44 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if self.action == "list":
             from .serializers import InvoiceLiteSerializer
             return InvoiceLiteSerializer
+        if self.action == "retrieve":
+            from .serializers import InvoiceDetailSerializer
+            return InvoiceDetailSerializer
         return InvoiceSerializer
 
     def get_queryset(self):
         school_ids = accessible_school_ids(self.request)
-        qs = Invoice.objects.select_related("student").filter(
+        qs = Invoice.objects.filter(
             Q(school_id__in=school_ids) | Q(student__school_id__in=school_ids)
         ).distinct()
         unpaid = self.request.query_params.get("unpaid")
         if unpaid in ("1", "true", "True"):
-            # balance > 0 approximately
-            from django.db.models import F
             qs = qs.filter(is_paid=False)
-        # list does not need payments/lines
-        return qs.only(
-            "id", "invoice_number", "student_id", "amount_due", "amount_paid",
-            "late_fee_applied", "balance", "is_paid", "due_date", "term",
-            "academic_year", "school_id",
+
+        # List: light columns only. Detail: full row + related (only() broke retrieve).
+        if self.action == "list":
+            return qs.select_related("student").only(
+                "id", "invoice_number", "student_id", "amount_due", "amount_paid",
+                "late_fee_applied", "balance", "is_paid", "due_date", "term",
+                "academic_year", "school_id",
+                "student__id", "student__first_name", "student__last_name",
+                "student__admission_number",
+            )
+
+        return (
+            qs.select_related(
+                "student",
+                "student__current_class",
+                "fee_assignment",
+                "fee_assignment__fee_structure",
+                "payment_plan",
+            )
+            .prefetch_related(
+                "lines",
+                "lines__item",
+                "lines__item__category",
+                "payments",
+            )
         )
 
     @action(detail=False, methods=['get'], url_path='overdue')
