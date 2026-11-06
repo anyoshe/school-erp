@@ -492,10 +492,37 @@ def add_extra_fee_line(student, description, amount, user=None, fee_item_id=None
         description=description,
         amount=amount,
     )
-    inv.amount_due = Decimal(str(inv.amount_due or 0)) + amount
-    inv.save()  # refreshes balance
+    # Keep invoice totals in sync with all lines (including this extra)
+    recalculate_invoice_totals(inv)
+    inv.refresh_from_db()
 
-    return line, inv, ensure_student_billing(student, user=user)
+    billing = ensure_student_billing(student, user=user)
+    # Guarantee the new line is present even if billing rebuild races
+    line_ids = {str(x.get("id")) for x in (billing.get("lines") or [])}
+    if str(line.id) not in line_ids:
+        billing.setdefault("lines", []).append({
+            "id": str(line.id),
+            "invoice_id": str(inv.id),
+            "description": line.description or description,
+            "amount": float(line.amount or amount),
+            "original_amount": float(getattr(line, "original_amount", None) or line.amount or amount),
+            "discount_amount": 0,
+            "is_waived": False,
+            "item_id": str(line.item_id) if line.item_id else None,
+            "term": inv.term,
+            "academic_year": inv.academic_year,
+        })
+        billing["total_due"] = float(
+            Decimal(str(billing.get("total_due") or 0)) + Decimal(str(amount))
+        )
+        billing["balance"] = float(
+            max(
+                Decimal("0"),
+                Decimal(str(billing.get("total_due") or 0))
+                - Decimal(str(billing.get("total_paid") or 0)),
+            )
+        )
+    return line, inv, billing
 
 
 

@@ -393,23 +393,22 @@ export default function FinanceClearancePage() {
       );
       const billing = res.data?.billing;
       if (billing) {
-        setRow((prev: any) => ({
-          ...prev,
-          ...billing,
-          structure: billing.structure ?? prev.structure,
-          lines: billing.lines ?? prev.lines,
-          invoices: billing.invoices ?? prev.invoices,
-          total_due: billing.total_due,
-          total_paid: billing.total_paid,
-          balance: billing.balance,
-        }));
-        setAmount(String(billing.balance ?? billing.total_due ?? ""));
-        if (billing.invoices?.[0]) setInvoiceId(String(billing.invoices[0].id));
+        // Refresh visible fee lines + balance (was only updating row meta before)
+        applyBilling(billing, row || {});
+      } else if (res.data?.line_id) {
+        const prep = await api.get(`/finance/awaiting-clearance/${row.id}/prepare/`, {
+          headers,
+        });
+        applyBilling(prep.data, row || {});
       }
+      const label = extraName.trim();
+      const n = Number(extraAmount);
       setExtraName("");
       setExtraAmount("");
-      toast.success("Extra fee item added");
-      qc.invalidateQueries({ queryKey: ["awaiting-clearance"] });
+      toast.success(
+        `Added ${label}${n ? ` · ${n.toLocaleString()}` : ""} — included in balance`
+      );
+      void qc.invalidateQueries({ queryKey: ["awaiting-clearance"] });
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || "Could not add item");
     } finally {
