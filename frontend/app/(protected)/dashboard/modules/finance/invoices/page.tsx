@@ -9,7 +9,15 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import api from "@/utils/api";
-import { Loader2, Search, Download, Eye } from "lucide-react";
+import { Loader2, Search, Download, Eye, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 type Invoice = {
   id: string;
@@ -42,7 +50,10 @@ type InvoiceDetail = Invoice & {
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDetail | null>(null);
-  
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<"all" | "paid" | "unpaid" | "overdue">("all");
@@ -120,13 +131,29 @@ export default function InvoicesPage() {
   };
 
   const handleViewDetails = async (invoiceId: string) => {
+    // Always open modal and reset so a new eye click replaces the previous invoice
+    setDetailOpen(true);
+    setDetailLoading(true);
+    setDetailError(null);
+    setSelectedInvoice(null);
     try {
-      const response = await api.get(`/finance/invoices/${invoiceId}/`);
+      const response = await api.get(`/finance/invoices/${invoiceId}/`, { timeout: 20000 });
       setSelectedInvoice(response.data);
     } catch (err) {
+      setDetailError("Failed to load invoice details");
       toast.error("Failed to load invoice details");
+    } finally {
+      setDetailLoading(false);
     }
   };
+
+  const closeDetail = () => {
+    setDetailOpen(false);
+    setSelectedInvoice(null);
+    setDetailError(null);
+    setDetailLoading(false);
+  };
+
 
   // Shell first — never block the whole module on network
   return (
@@ -337,108 +364,200 @@ export default function InvoicesPage() {
       </Card>
 
       {/* Invoice Details Modal */}
-      {selectedInvoice && (
-        <Card className="border-2 border-primary">
-          <CardHeader className="bg-primary-50">
-            <div className="flex justify-between items-start">
-              <div>
-                <CardTitle>Invoice {selectedInvoice.invoice_number}</CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {selectedInvoice.student.first_name} {selectedInvoice.student.last_name}
-                </p>
-              </div>
-              <Button variant="ghost" onClick={() => setSelectedInvoice(null)}>
-                ✕
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h4 className="font-semibold mb-3">Invoice Details</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Term:</span>
-                    <span className="font-medium">{selectedInvoice.term} {selectedInvoice.academic_year}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Generated:</span>
-                    <span className="font-medium">{new Date(selectedInvoice.generated_at).toLocaleDateString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Due Date:</span>
-                    <span className="font-medium">{new Date(selectedInvoice.due_date).toLocaleDateString()}</span>
-                  </div>
-                  {selectedInvoice.installment_number && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Installment:</span>
-                      <span className="font-medium">{selectedInvoice.installment_number}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
 
-              <div>
-                <h4 className="font-semibold mb-3">Financial Summary</h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Amount Due:</span>
-                    <span className="font-medium">KES {selectedInvoice.amount_due.toLocaleString()}</span>
+      <Dialog
+        open={detailOpen}
+        onOpenChange={(open) => {
+          if (!open) closeDetail();
+          else setDetailOpen(true);
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between gap-2 pr-6">
+              <span>
+                {selectedInvoice
+                  ? `Invoice ${selectedInvoice.invoice_number}`
+                  : detailLoading
+                    ? "Loading invoice…"
+                    : "Invoice details"}
+              </span>
+              {selectedInvoice && (
+                selectedInvoice.is_paid ? (
+                  <Badge className="bg-secondary-100 text-secondary-700">Paid</Badge>
+                ) : (
+                  <Badge variant="destructive">Unpaid</Badge>
+                )
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedInvoice
+                ? `${selectedInvoice.student?.first_name || ""} ${selectedInvoice.student?.last_name || ""}`.trim()
+                : detailLoading
+                  ? "Fetching full bill and payments…"
+                  : detailError || "Select an invoice from the list."}
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailLoading && (
+            <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Loading…
+            </div>
+          )}
+
+          {!detailLoading && detailError && (
+            <p className="text-sm text-red-600 py-6 text-center">{detailError}</p>
+          )}
+
+          {!detailLoading && selectedInvoice && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div className="space-y-2 rounded-lg border bg-slate-50/80 p-3">
+                  <h4 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">
+                    Invoice info
+                  </h4>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Term / Year</span>
+                    <span className="font-medium text-right">
+                      {selectedInvoice.term} {selectedInvoice.academic_year}
+                    </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Amount Paid:</span>
-                    <span className="font-medium text-secondary-600">KES {selectedInvoice.amount_paid.toLocaleString()}</span>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Generated</span>
+                    <span className="font-medium">
+                      {new Date(selectedInvoice.generated_at).toLocaleDateString()}
+                    </span>
                   </div>
-                  {selectedInvoice.late_fee_applied > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Late Fee:</span>
-                      <span className="font-medium text-red-600">KES {selectedInvoice.late_fee_applied.toLocaleString()}</span>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Due date</span>
+                    <span className="font-medium">
+                      {new Date(selectedInvoice.due_date).toLocaleDateString()}
+                    </span>
+                  </div>
+                  {selectedInvoice.installment_number ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Installment</span>
+                      <span className="font-medium">#{selectedInvoice.installment_number}</span>
+                    </div>
+                  ) : null}
+                  {selectedInvoice.payment_plan ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Payment plan</span>
+                      <span className="font-medium text-right">
+                        {selectedInvoice.payment_plan.name}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="space-y-2 rounded-lg border bg-slate-50/80 p-3">
+                  <h4 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">
+                    Amounts
+                  </h4>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Amount due</span>
+                    <span className="font-medium">
+                      KES {Number(selectedInvoice.amount_due).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">Amount paid</span>
+                    <span className="font-medium text-emerald-700">
+                      KES {Number(selectedInvoice.amount_paid).toLocaleString()}
+                    </span>
+                  </div>
+                  {Number(selectedInvoice.late_fee_applied) > 0 && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">Late fee</span>
+                      <span className="font-medium text-red-600">
+                        KES {Number(selectedInvoice.late_fee_applied).toLocaleString()}
+                      </span>
                     </div>
                   )}
-                  <div className="border-t pt-2 mt-2 flex justify-between font-bold">
-                    <span>Balance:</span>
-                    <span className={selectedInvoice.balance > 0 ? "text-red-600" : "text-secondary-600"}>
-                      KES {selectedInvoice.balance.toLocaleString()}
+                  <div className="border-t pt-2 mt-1 flex justify-between font-bold">
+                    <span>Balance</span>
+                    <span
+                      className={
+                        Number(selectedInvoice.balance) > 0 ? "text-amber-700" : "text-emerald-700"
+                      }
+                    >
+                      KES {Number(selectedInvoice.balance).toLocaleString()}
                     </span>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {selectedInvoice.payments && selectedInvoice.payments.length > 0 && (
-              <div className="border-t pt-4">
-                <h4 className="font-semibold mb-3">Payment History</h4>
-                <div className="space-y-2">
-                  {selectedInvoice.payments.map((payment) => (
-                    <div
-                      key={payment.id}
-                      className="flex justify-between items-start bg-gray-50 p-3 rounded text-sm"
-                    >
-                      <div>
-                        <p className="font-medium">{payment.payment_method}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(payment.paid_at).toLocaleDateString()} • {payment.reference_number}
+              {Array.isArray((selectedInvoice as any).lines) &&
+                (selectedInvoice as any).lines.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2 text-sm">Fee lines</h4>
+                    <ul className="divide-y rounded-lg border text-sm">
+                      {(selectedInvoice as any).lines.map((ln: any) => (
+                        <li
+                          key={ln.id || ln.description}
+                          className="flex justify-between gap-2 px-3 py-2"
+                        >
+                          <span className="truncate">{ln.description || ln.item_name || "Item"}</span>
+                          <span className="tabular-nums shrink-0">
+                            KES {Number(ln.amount || 0).toLocaleString()}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+              {selectedInvoice.payments && selectedInvoice.payments.length > 0 && (
+                <div>
+                  <h4 className="font-semibold mb-2 text-sm">Payment history</h4>
+                  <div className="space-y-2">
+                    {selectedInvoice.payments.map((payment) => (
+                      <div
+                        key={payment.id}
+                        className="flex justify-between items-start bg-slate-50 border p-3 rounded-lg text-sm"
+                      >
+                        <div>
+                          <p className="font-medium">{payment.payment_method}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {payment.paid_at
+                              ? new Date(payment.paid_at).toLocaleDateString()
+                              : "—"}
+                            {payment.reference_number ? ` · ${payment.reference_number}` : ""}
+                          </p>
+                        </div>
+                        <p className="font-semibold text-emerald-700 tabular-nums">
+                          +KES {Number(payment.amount).toLocaleString()}
                         </p>
                       </div>
-                      <p className="font-semibold text-secondary-600">+KES {payment.amount.toLocaleString()}</p>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            <div className="border-t pt-4 flex gap-3">
-              <Button onClick={() => window.print()}>
-                <Download className="h-4 w-4 mr-2" />
-                Print Invoice
-              </Button>
-              <Button variant="outline" onClick={() => setSelectedInvoice(null)}>
-                Close
-              </Button>
+              {(!selectedInvoice.payments || selectedInvoice.payments.length === 0) && (
+                <p className="text-sm text-muted-foreground">No payments recorded on this invoice yet.</p>
+              )}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button type="button" variant="outline" className="min-w-[7rem]" onClick={closeDetail}>
+              Close
+            </Button>
+            <Button
+              type="button"
+              className="min-w-[7rem]"
+              disabled={!selectedInvoice}
+              onClick={() => window.print()}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Print
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
