@@ -462,20 +462,23 @@ export default function FinanceClearancePage() {
           notes: `Finance clearance — ${row?.admission_number || ""}`,
           ...(line_allocations.length ? { line_allocations } : {}),
         },
-        { headers }
+        { headers, timeout: 20000 }
       );
+      // Close immediately — do not wait for list refetch
+      setPayOpen(false);
+      setSaving(false);
       toast.success(
         `Payment recorded${res.data?.receipt_number ? ` · ${res.data.receipt_number}` : ""}`
       );
-      setPayOpen(false);
-      qc.invalidateQueries({ queryKey: ["awaiting-clearance"] });
-      qc.invalidateQueries({ queryKey: ["owner-standing"] });
+      // Background refresh (non-blocking)
+      void qc.invalidateQueries({ queryKey: ["awaiting-clearance"] });
+      void qc.invalidateQueries({ queryKey: ["owner-standing"] });
+      void qc.invalidateQueries({ queryKey: ["finance-dashboard"] });
     } catch (e: any) {
       const d = e?.response?.data;
       toast.error(
         d?.payment_date?.[0] || d?.detail || (typeof d === "object" ? JSON.stringify(d) : "Payment failed")
       );
-    } finally {
       setSaving(false);
     }
   };
@@ -919,17 +922,30 @@ export default function FinanceClearancePage() {
             </div>
           </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setPayOpen(false)}>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-w-[8.5rem] h-10"
+              disabled={saving}
+              onClick={() => setPayOpen(false)}
+            >
               Cancel
             </Button>
             <Button
               type="button"
               disabled={saving}
-              className="bg-emerald-600 text-white"
+              className="min-w-[8.5rem] h-10 bg-emerald-600 text-white hover:bg-emerald-700"
               onClick={submit}
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Record payment"}
+              {saving ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving…
+                </span>
+              ) : (
+                "Record payment"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

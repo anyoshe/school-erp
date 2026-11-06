@@ -1205,8 +1205,25 @@ class PaymentViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         payment = serializer.save()
-        payment.invoice.refresh_from_db()  # Re-calculate balance
-        return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+        # Lite response — nested InvoiceSerializer was making record-payment feel slow
+        inv = payment.invoice
+        try:
+            inv.refresh_from_db(fields=["amount_paid", "amount_due", "balance", "is_paid"])
+        except Exception:
+            pass
+        return Response(
+            {
+                "id": str(payment.id),
+                "amount": float(payment.amount or 0),
+                "receipt_number": payment.receipt_number or "",
+                "payment_date": str(payment.payment_date or ""),
+                "payment_method": payment.payment_method or "",
+                "invoice": str(getattr(payment, "invoice_id", "") or ""),
+                "invoice_balance": float(getattr(inv, "balance", 0) or 0),
+                "invoice_is_paid": bool(getattr(inv, "is_paid", False)),
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
     @action(detail=True, methods=['get'], url_path='receipt')
     def receipt(self, request, pk=None):
