@@ -258,13 +258,19 @@ student, user=None, academic_year=None, period_name=None):
             and _normalize_term_token(invoice.term) == term_token
         ]
     if assignment and structure and not invoices:
-        # A legacy assignment can have invoices for the wrong year/term. If it
-        # has no payments, retag and regenerate those invoices from the exact
-        # enrollment structure. Paid invoices retain their historical period.
-        stale_invoices = list(assignment.invoices.all().prefetch_related("payments"))
-        if stale_invoices and all(not invoice.payments.exists() for invoice in stale_invoices):
-            for stale in stale_invoices:
-                stale.delete()
+        # Prefer retagging unpaid invoices (keeps cashier-added lines) over delete.
+        stale_invoices = list(assignment.invoices.all().prefetch_related("payments", "lines"))
+        retagged = []
+        for stale in stale_invoices:
+            if stale.payments.exists():
+                continue
+            stale.academic_year = str(year)[:9] if year else stale.academic_year
+            stale.term = term or stale.term
+            stale.fee_assignment = assignment
+            stale.save(update_fields=["academic_year", "term", "fee_assignment"])
+            retagged.append(stale)
+        if retagged:
+            invoices = retagged
 
     if not invoices and assignment and structure:
         # Mandatory only — optional items are added later at clearance if chosen
@@ -306,7 +312,8 @@ student, user=None, academic_year=None, period_name=None):
         invoices = [inv]
 
 
-    # Strip optional lines from unpaid invoices (optionals only via "Add to bill")
+    # Strip only STRUCTURE optional items not selected on the assignment.
+    # Cashier "Add to bill" extras (Additional charges / non-structure items) must stay.
     if structure is not None and invoices:
         selected_opt = set()
         if assignment is not None:
@@ -316,20 +323,21 @@ student, user=None, academic_year=None, period_name=None):
             if inv.payments.exists():
                 continue
             changed = False
-            for ln in list(inv.lines.select_related("item").all()):
+            for ln in list(inv.lines.select_related("item", "item__category").all()):
                 item = ln.item
                 if item is None:
                     continue
-                is_opt = bool(getattr(item, "is_optional", False)) or (item.id in optional_ids)
-                if is_opt and item.id not in selected_opt:
+                # Never strip Additional charges / non-structure fee items
+                cat_name = (getattr(getattr(item, "category", None), "name", "") or "").lower()
+                if "additional" in cat_name:
+                    continue
+                if item.id not in optional_ids:
+                    continue
+                if item.id not in selected_opt:
                     ln.delete()
                     changed = True
             if changed:
-                line_sum = inv.lines.aggregate(t=Sum("amount"))["t"] or Decimal("0")
-                inv.amount_due = line_sum
-                inv.amount_paid = inv.amount_paid or Decimal("0")
-                inv.balance = max(Decimal("0"), line_sum - Decimal(str(inv.amount_paid or 0)))
-                inv.save(update_fields=["amount_due", "balance"])
+                recalculate_invoice_totals(inv)
 
     # If still no lines but structure exists, force rebuild mandatory-only invoice
     if structure is not None and assignment is not None:
@@ -483,8 +491,13 @@ def add_extra_fee_line(student, description, amount, user=None, fee_item_id=None
         item, _ = FeeItem.objects.get_or_create(
             category=cat,
             name=description[:100],
-            defaults={"is_optional": True, "description": description},
+            # Not structure-optional — cashier extras must not be auto-stripped
+            defaults={"is_optional": False, "description": description, "is_active": True},
         )
+        # Repair legacy rows created as optional extras
+        if getattr(item, "is_optional", False):
+            item.is_optional = False
+            item.save(update_fields=["is_optional"])
 
     line = InvoiceLine.objects.create(
         invoice=inv,
