@@ -62,6 +62,8 @@ export default function FinanceClearancePage() {
     }>
   >([]);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
+  /** Local discount text while typing — applied on Enter / Apply, not each keystroke */
+  const [discountDrafts, setDiscountDrafts] = useState<Record<string, string>>({});
   const [loadingLines, setLoadingLines] = useState(false);
   const [adjustingLine, setAdjustingLine] = useState<string | null>(null);
   const [structureCandidates, setStructureCandidates] = useState<any[]>([]);
@@ -123,6 +125,16 @@ export default function FinanceClearancePage() {
     setInvoiceId(iid);
     const mapped = mapLines(billing?.lines || []);
     setInvoiceLines(mapped);
+    setDiscountDrafts(
+      Object.fromEntries(
+        mapped.map((ln) => [
+          ln.id,
+          ln.discount_amount && ln.discount_amount > 0
+            ? String(ln.discount_amount)
+            : "",
+        ])
+      )
+    );
     const bal = Number(billing?.balance ?? r?.balance ?? 0);
     const due = Number(billing?.total_due ?? r?.total_due ?? 0);
     const payAmt = bal > 0 ? bal : due > 0 ? due : 0;
@@ -751,38 +763,40 @@ export default function FinanceClearancePage() {
                           />
                           Waive
                         </label>
-                        <div className="flex items-center gap-1 text-xs">
-                          <span className="text-muted-foreground">Discount</span>
+                        <div className="flex items-center gap-1.5 text-xs flex-wrap">
+                          <span className="text-muted-foreground shrink-0">Discount</span>
                           <Input
-                            className="h-7 w-24"
-                            type="number"
-                            min={0}
+                            className="h-8 w-28"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="e.g. 500"
                             disabled={!!ln.is_waived || adjustingLine === ln.id}
-                            defaultValue={ln.discount_amount || ""}
-                            key={`${ln.id}-disc-${ln.discount_amount}-${ln.is_waived}`}
+                            value={
+                              discountDrafts[ln.id] !== undefined
+                                ? discountDrafts[ln.id]
+                                : ln.discount_amount
+                                  ? String(ln.discount_amount)
+                                  : ""
+                            }
                             onChange={(e) => {
-                              // Live: amount due = original - discount
-                              const d = Number(e.target.value || 0);
-                              if (Number.isNaN(d)) return;
-                              const orig = Number(ln.original_amount ?? ln.amount ?? 0);
-                              const nextAmt = Math.max(0, orig - d);
-                              setInvoiceLines((prev) =>
-                                prev.map((x) =>
-                                  x.id === ln.id
-                                    ? {
-                                        ...x,
-                                        discount_amount: d,
-                                        amount: nextAmt,
-                                      }
-                                    : x
-                                )
-                              );
+                              // Allow full amount entry — do not hit API per keystroke
+                              const raw = e.target.value.replace(/[^0-9.]/g, "");
+                              setDiscountDrafts((prev) => ({ ...prev, [ln.id]: raw }));
                             }}
-                            onBlur={(e) => {
-                              const v = e.target.value;
-                              if (v === "" || v == null) return;
-                              const d = Number(v);
-                              if (Number.isNaN(d)) return;
+                            onKeyDown={(e) => {
+                              if (e.key !== "Enter") return;
+                              e.preventDefault();
+                              const raw = discountDrafts[ln.id] ?? e.currentTarget.value;
+                              const d = Number(raw || 0);
+                              if (Number.isNaN(d) || d < 0) {
+                                toast.error("Enter a valid discount amount");
+                                return;
+                              }
+                              const orig = Number(ln.original_amount ?? ln.amount ?? 0);
+                              if (d > orig) {
+                                toast.error(`Discount cannot exceed ${orig.toLocaleString()}`);
+                                return;
+                              }
                               void adjustLine(ln.id, {
                                 waived: false,
                                 discount: d,
@@ -790,6 +804,42 @@ export default function FinanceClearancePage() {
                               });
                             }}
                           />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-2 text-xs"
+                            disabled={!!ln.is_waived || adjustingLine === ln.id}
+                            onClick={() => {
+                              const raw = discountDrafts[ln.id] ?? "";
+                              const d = Number(raw || 0);
+                              if (raw === "") {
+                                toast.message("Type the discount amount, then Apply");
+                                return;
+                              }
+                              if (Number.isNaN(d) || d < 0) {
+                                toast.error("Enter a valid discount amount");
+                                return;
+                              }
+                              const orig = Number(ln.original_amount ?? ln.amount ?? 0);
+                              if (d > orig) {
+                                toast.error(`Discount cannot exceed ${orig.toLocaleString()}`);
+                                return;
+                              }
+                              void adjustLine(ln.id, {
+                                waived: false,
+                                discount: d,
+                                reason: d > 0 ? "Discount at clearance" : "",
+                              });
+                            }}
+                          >
+                            {adjustingLine === ln.id ? "…" : "Apply"}
+                          </Button>
+                          {!!ln.discount_amount && ln.discount_amount > 0 && !ln.is_waived && (
+                            <span className="text-[11px] text-amber-700">
+                              −{Number(ln.discount_amount).toLocaleString()} applied
+                            </span>
+                          )}
                         </div>
                         <Input
                           className="h-7 w-24 ml-auto"
