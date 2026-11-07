@@ -1,5 +1,6 @@
-import { FinanceNavLinks } from "../components/FinanceNav";
 "use client";
+
+import { FinanceNavLinks } from "../components/FinanceNav";
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
