@@ -434,6 +434,85 @@ class StudentViewSet(viewsets.ModelViewSet):
 
         return Response({"results": results, "errors": errors, "count": len(results)})
 
+
+    @action(detail=False, methods=["post"], url_path="assign-section")
+    def assign_section(self, request):
+        """
+        Place learners into a section (and optional stream) within a grade.
+        Body: {
+          grade_level_id: required,
+          section_id: required,
+          stream_id?: optional,
+          student_ids?: list — if omitted, all in grade (respecting only_unassigned),
+          only_unassigned?: true (default) — only students with no section yet
+        }
+        """
+        from apps.academics.models import GradeLevel, Section, Stream
+
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "School context required"}, status=400)
+
+        grade_id = request.data.get("grade_level_id") or request.data.get("grade_level")
+        section_id = request.data.get("section_id") or request.data.get("section")
+        stream_id = request.data.get("stream_id") or request.data.get("stream")
+        student_ids = request.data.get("student_ids") or []
+        only_unassigned = request.data.get("only_unassigned", True) is not False
+
+        if not grade_id or not section_id:
+            return Response(
+                {"detail": "grade_level_id and section_id are required"},
+                status=400,
+            )
+
+        try:
+            grade = GradeLevel.objects.get(id=grade_id, school=school)
+        except GradeLevel.DoesNotExist:
+            return Response({"detail": "Grade not found"}, status=404)
+        try:
+            section = Section.objects.get(id=section_id, grade_level=grade)
+        except Section.DoesNotExist:
+            return Response(
+                {"detail": "Section not found for this grade"},
+                status=404,
+            )
+
+        stream = None
+        if stream_id:
+            try:
+                stream = Stream.objects.get(id=stream_id, grade_level=grade)
+            except Stream.DoesNotExist:
+                return Response({"detail": "Stream not found for this grade"}, status=404)
+
+        qs = (
+            self.get_queryset()
+            .filter(current_class=grade)
+            .exclude(status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED"])
+        )
+        if student_ids:
+            qs = qs.filter(id__in=student_ids)
+        elif only_unassigned:
+            qs = qs.filter(section__isnull=True)
+
+        updated = 0
+        for student in qs:
+            student.section = section
+            if stream is not None:
+                student.stream = stream
+            fields = ["section"]
+            if stream is not None:
+                fields.append("stream")
+            student.save(update_fields=fields)
+            updated += 1
+
+        return Response({
+            "grade": grade.name,
+            "section": section.name,
+            "stream": stream.name if stream else None,
+            "updated": updated,
+            "only_unassigned": only_unassigned and not student_ids,
+        })
+
     @action(detail=False, methods=["post"], url_path="promote-class")
     def promote_class(self, request):
         """

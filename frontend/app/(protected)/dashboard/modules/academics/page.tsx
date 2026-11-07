@@ -20,7 +20,7 @@ import {
   fetchAcademicYears, createAcademicYear, activateAcademicYear, addTerm,
   setCurrentTerm, seedDefaultTerms, fetchCurrentCalendar,
   fetchGradeLevels, createGradeLevel, createSection,
-  fetchClassRegister, ensureGradeSections,
+  fetchClassRegister, ensureGradeSections, assignStudentsToSection,
   fetchSubjects, createSubject, fetchCurricula,
   fetchGradeSubjects, assignSubjectToGrade, removeGradeSubject,
   seedSubjectMap, mapDefaultSubjectsForGrade,
@@ -635,6 +635,25 @@ function ClassesPanel({
     onError: () => toast.error("Could not create default section"),
   });
 
+  const sectionAssignMut = useMutation({
+    mutationFn: (payload: {
+      grade_level_id: number;
+      section_id: number;
+      only_unassigned?: boolean;
+    }) => assignStudentsToSection(payload),
+    onSuccess: (data) => {
+      toast.success(
+        data.updated
+          ? `Moved ${data.updated} learner(s) into section ${data.section}`
+          : "No learners needed updating"
+      );
+      onRefresh();
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || "Could not assign section");
+    },
+  });
+
   const openRegister = async (
     grade: GradeLevel,
     sectionId?: number | null,
@@ -743,6 +762,31 @@ function ClassesPanel({
                         Add default “A”
                       </Button>
                     )}
+                    {sections.map((s) => (
+                      <Button
+                        key={`to-sec-${g.id}-${s.id}`}
+                        size="sm"
+                        variant="ghost"
+                        className="text-primary"
+                        disabled={sectionAssignMut.isPending}
+                        title={`Assign unsectioned learners to ${s.name}`}
+                        onClick={() => {
+                          if (
+                            !confirm(
+                              `Assign all ${g.name} learners who have no section yet to "${s.name}"?`
+                            )
+                          )
+                            return;
+                          sectionAssignMut.mutate({
+                            grade_level_id: g.id,
+                            section_id: s.id,
+                            only_unassigned: true,
+                          });
+                        }}
+                      >
+                        → {s.name}
+                      </Button>
+                    ))}
                   </div>
                 </CardContent>
               </Card>
@@ -847,8 +891,50 @@ function ClassesPanel({
               </div>
             </div>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setRegister(null)}>Close</Button>
+          <DialogFooter className="flex-col sm:flex-row gap-2 sm:justify-between items-stretch sm:items-center">
+            <div className="flex flex-wrap gap-2">
+              {register &&
+                (register.grade.sections || []).map((sec) => (
+                  <Button
+                    key={`reg-assign-${sec.id}`}
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={sectionAssignMut.isPending}
+                    onClick={() => {
+                      const onlyUnassigned = !register.sectionId;
+                      const msg = onlyUnassigned
+                        ? `Assign all ${register.grade.name} learners with no section to "${sec.name}"?`
+                        : `Move all learners in this register view into section "${sec.name}"?`;
+                      if (!confirm(msg)) return;
+                      sectionAssignMut.mutate(
+                        {
+                          grade_level_id: register.grade.id,
+                          section_id: sec.id,
+                          only_unassigned: onlyUnassigned,
+                        },
+                        {
+                          onSuccess: () => {
+                            openRegister(
+                              register.grade,
+                              register.sectionId,
+                              register.sectionName
+                            );
+                          },
+                        }
+                      );
+                    }}
+                  >
+                    {sectionAssignMut.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                    ) : null}
+                    Assign to {sec.name}
+                  </Button>
+                ))}
+            </div>
+            <Button variant="outline" onClick={() => setRegister(null)}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

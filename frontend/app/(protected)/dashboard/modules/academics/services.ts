@@ -326,3 +326,21 @@ export async function fetchStudentsByGrade(gradeLevelId: number) {
     current_class?: { id: number; name: string } | number;
   }[];
 }
+
+
+export async function assignStudentsToSection(payload: {
+  grade_level_id: number;
+  section_id: number;
+  stream_id?: number;
+  student_ids?: string[];
+  only_unassigned?: boolean;
+}) {
+  const { data } = await api.post("/students/assign-section/", payload);
+  return data as {
+    grade: string;
+    section: string;
+    stream?: string | null;
+    updated: number;
+    only_unassigned: boolean;
+  };
+}
