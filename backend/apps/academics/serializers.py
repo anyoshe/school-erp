@@ -45,9 +45,17 @@ class CurriculumCreateUpdateSerializer(serializers.ModelSerializer):
 
 
 class SectionSerializer(serializers.ModelSerializer):
+    student_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Section
-        fields = ['id', 'grade_level', 'name',  'capacity', 'is_active']
+        fields = ['id', 'grade_level', 'name', 'description', 'capacity', 'is_active', 'student_count']
+
+    def get_student_count(self, obj):
+        try:
+            return obj.students.exclude(status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED"]).count()
+        except Exception:
+            return 0
 
 
 class StreamSerializer(serializers.ModelSerializer):
@@ -86,7 +94,9 @@ class GradeLevelSerializer(serializers.ModelSerializer):
 
     def get_student_count(self, obj):
         try:
-            return obj.students.filter(status='ACTIVE').count()
+            return obj.students.exclude(
+                status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED", "INACTIVE"]
+            ).count()
         except Exception:
             return 0
 

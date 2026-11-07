@@ -41,6 +41,7 @@ export type Section = {
   name: string;
   capacity?: number | null;
   is_active: boolean;
+  student_count?: number;
 };
 
 export type Subject = {
@@ -106,7 +107,10 @@ export async function createSection(payload: {
   name: string;
   capacity?: number;
 }) {
-  const { data } = await api.post("/academics/sections/", payload);
+  const { data } = await api.post("/academics/sections/", {
+    ...payload,
+    is_active: true,
+  });
   return data as Section;
 }
 
@@ -170,4 +174,57 @@ export async function fetchCurrentCalendar() {
     current_term: Term | null;
     terms: Term[];
   };
+}
+
+export type ClassRegisterStudent = {
+  id: string;
+  admission_number: string;
+  first_name: string;
+  middle_name?: string;
+  last_name: string;
+  full_name: string;
+  gender: string;
+  status: string;
+  section_id?: string | null;
+  section_name?: string | null;
+  admission_date?: string | null;
+};
+
+export async function fetchClassRegister(params: {
+  grade_level: number | string;
+  section?: number | string | null;
+}) {
+  const { data } = await api.get("/academics/class-register/", {
+    params: {
+      grade_level: params.grade_level,
+      ...(params.section ? { section: params.section } : {}),
+    },
+  });
+  return data as {
+    grade: { id: number; name: string };
+    section: { id: number; name: string; capacity?: number } | null;
+    count: number;
+    students: ClassRegisterStudent[];
+  };
+}
+
+export async function ensureGradeSections(
+  gradeId: number,
+  names: string[] = ["A"],
+  capacity?: number
+) {
+  const { data } = await api.post(`/academics/grade-levels/${gradeId}/ensure-sections/`, {
+    names,
+    capacity,
+  });
+  return data;
+}
+
+export async function createSectionFull(payload: {
+  grade_level: number;
+  name: string;
+  capacity?: number;
+}) {
+  const { data } = await api.post("/academics/sections/", payload);
+  return data as Section;
 }

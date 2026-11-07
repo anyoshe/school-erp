@@ -20,9 +20,11 @@ import {
   fetchAcademicYears, createAcademicYear, activateAcademicYear, addTerm,
   setCurrentTerm, seedDefaultTerms, fetchCurrentCalendar,
   fetchGradeLevels, createGradeLevel, createSection,
+  fetchClassRegister, ensureGradeSections,
   fetchSubjects, createSubject, fetchCurricula,
   fetchCurriculumTemplates, adoptCurriculumTemplate,
   type AcademicYear, type GradeLevel, type CurriculumTemplate, type Term,
+  type ClassRegisterStudent,
 } from "./services";
 
 type Tab = "overview" | "years" | "classes" | "subjects";
@@ -543,6 +545,7 @@ function YearsPanel({
   );
 }
 
+
 function ClassesPanel({
   grades, curricula, loading, onRefresh,
 }: {
@@ -556,7 +559,16 @@ function ClassesPanel({
   const [form, setForm] = useState({
     name: "", short_name: "", order: 1, education_level: "PRIMARY", curriculum: 0,
   });
-  const [secName, setSecName] = useState("");
+  const [secName, setSecName] = useState("A");
+  const [secCap, setSecCap] = useState("");
+  const [register, setRegister] = useState<{
+    grade: GradeLevel;
+    sectionId?: number | null;
+    sectionName?: string | null;
+  } | null>(null);
+  const [roster, setRoster] = useState<ClassRegisterStudent[]>([]);
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterMeta, setRosterMeta] = useState<{ count: number; title: string }>({ count: 0, title: "" });
 
   const createMut = useMutation({
     mutationFn: () =>
@@ -573,21 +585,67 @@ function ClassesPanel({
   });
 
   const secMut = useMutation({
-    mutationFn: () => createSection({ grade_level: sectionFor!.id, name: secName }),
+    mutationFn: () =>
+      createSection({
+        grade_level: sectionFor!.id,
+        name: secName.trim() || "A",
+        capacity: secCap ? Number(secCap) : undefined,
+      }),
     onSuccess: () => {
       toast.success("Section added");
       setSectionFor(null);
-      setSecName("");
+      setSecName("A");
+      setSecCap("");
       onRefresh();
     },
     onError: () => toast.error("Could not add section"),
   });
 
+  const ensureMut = useMutation({
+    mutationFn: (gradeId: number) => ensureGradeSections(gradeId, ["A"]),
+    onSuccess: (data) => {
+      toast.success(
+        data?.created?.length
+          ? `Created section(s): ${data.created.join(", ")}`
+          : "Section already exists"
+      );
+      onRefresh();
+    },
+    onError: () => toast.error("Could not create default section"),
+  });
+
+  const openRegister = async (
+    grade: GradeLevel,
+    sectionId?: number | null,
+    sectionName?: string | null
+  ) => {
+    setRegister({ grade, sectionId, sectionName });
+    setRosterLoading(true);
+    setRoster([]);
+    try {
+      const data = await fetchClassRegister({
+        grade_level: grade.id,
+        section: sectionId,
+      });
+      setRoster(data.students || []);
+      setRosterMeta({
+        count: data.count || 0,
+        title: data.section
+          ? `${data.grade.name} — ${data.section.name}`
+          : data.grade.name,
+      });
+    } catch {
+      toast.error("Could not load class register");
+    } finally {
+      setRosterLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap justify-between items-center gap-2">
         <p className="text-textMuted text-sm">
-          Grades and sections are where students sit — keep names the school already uses.
+          Grades and sections are where learners sit. Open a register to see who is enrolled.
         </p>
         <Button className="bg-primary hover:bg-primary-700" onClick={() => setOpen(true)} disabled={!curricula.length}>
           <Plus className="h-4 w-4 mr-2" /> Grade level
@@ -604,99 +662,179 @@ function ClassesPanel({
         <Empty hint="Adopt an academic system first (CBC / 8-4-4) — grades load automatically" />
       ) : (
         <div className="grid md:grid-cols-2 gap-3">
-          {grades.slice().sort((a, b) => a.order - b.order).map((g) => (
-            <Card key={g.id} className="border-border rounded-2xl">
-              <CardContent className="p-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-semibold text-textPrimary">{g.name}</p>
-                    <p className="text-xs text-textMuted">{g.curriculum_name || "Curriculum"} · {g.student_count} students</p>
+          {grades.slice().sort((a, b) => a.order - b.order).map((g) => {
+            const sections = g.sections || [];
+            const total = g.student_count ?? 0;
+            return (
+              <Card key={g.id} className="border-border rounded-2xl overflow-hidden">
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex justify-between items-start gap-2">
+                    <div>
+                      <p className="font-semibold text-textPrimary text-lg">{g.name}</p>
+                      <p className="text-xs text-textMuted capitalize">
+                        {(g.education_level || "").toLowerCase().replace(/_/g, " ") || "Grade"}
+                        {g.curriculum_name ? ` · ${g.curriculum_name}` : ""}
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="bg-primary-50 text-primary-900 border-0">
+                      <Users className="h-3 w-3 mr-1" />
+                      {total} learners
+                    </Badge>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => setSectionFor(g)}>
-                    <Plus className="h-3 w-3 mr-1" /> Section
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-1.5 mt-3">
-                  {(g.sections || []).map((s) => (
-                    <span key={s.id} className="text-xs bg-primary-50 text-primary-900 px-2.5 py-1 rounded-full border border-primary-100">
-                      {s.name}
-                    </span>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {sections.length === 0 ? (
+                      <span className="text-xs text-amber-800 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full">
+                        No sections yet
+                      </span>
+                    ) : (
+                      sections.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => openRegister(g, s.id, s.name)}
+                          className="text-xs px-2.5 py-1 rounded-full border border-border bg-white hover:border-primary/50 hover:bg-primary-50 transition-colors"
+                        >
+                          <span className="font-medium">{s.name}</span>
+                          <span className="text-muted-foreground ml-1">
+                            {s.student_count ?? 0}
+                            {s.capacity != null ? `/${s.capacity}` : ""}
+                          </span>
+                        </button>
+                      ))
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button size="sm" variant="outline" onClick={() => openRegister(g, null, null)}>
+                      Class register
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setSectionFor(g)}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Section
+                    </Button>
+                    {sections.length === 0 && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={ensureMut.isPending}
+                        onClick={() => ensureMut.mutate(g.id)}
+                      >
+                        Add default “A”
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
+      {/* New grade */}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="rounded-2xl sm:max-w-md">
           <DialogHeader><DialogTitle>New grade level</DialogTitle></DialogHeader>
           <div className="space-y-3 py-2">
             <div>
               <Label>Name</Label>
-              <Input placeholder="Grade 4" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Grade 1" />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Short name</Label>
-                <Input placeholder="G4" value={form.short_name} onChange={(e) => setForm({ ...form, short_name: e.target.value })} />
+                <Input value={form.short_name} onChange={(e) => setForm({ ...form, short_name: e.target.value })} placeholder="G1" />
               </div>
               <div>
                 <Label>Order</Label>
                 <Input type="number" value={form.order} onChange={(e) => setForm({ ...form, order: Number(e.target.value) })} />
               </div>
             </div>
-            <div>
-              <Label>Education level</Label>
-              <select
-                className="w-full border border-border rounded-lg h-10 px-3 text-sm"
-                value={form.education_level}
-                onChange={(e) => setForm({ ...form, education_level: e.target.value })}
-              >
-                {["PRE_PRIMARY", "PRIMARY", "JUNIOR", "SENIOR", "TERTIARY", "OTHER"].map((l) => (
-                  <option key={l} value={l}>{l.replace("_", " ")}</option>
-                ))}
-              </select>
-            </div>
-            {curricula.length > 0 && (
-              <div>
-                <Label>Curriculum</Label>
-                <select
-                  className="w-full border border-border rounded-lg h-10 px-3 text-sm"
-                  value={form.curriculum || curricula[0].id}
-                  onChange={(e) => setForm({ ...form, curriculum: Number(e.target.value) })}
-                >
-                  {curricula.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-            <Button className="bg-primary" onClick={() => createMut.mutate()} disabled={createMut.isPending}>Create</Button>
+            <Button className="bg-primary" disabled={createMut.isPending} onClick={() => createMut.mutate()}>Create</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* New section */}
       <Dialog open={!!sectionFor} onOpenChange={(v) => !v && setSectionFor(null)}>
-        <DialogContent className="rounded-2xl sm:max-w-sm">
+        <DialogContent className="rounded-2xl sm:max-w-md">
           <DialogHeader><DialogTitle>Section for {sectionFor?.name}</DialogTitle></DialogHeader>
-          <div className="py-2">
-            <Label>Section name</Label>
-            <Input placeholder="A / Blue / East" value={secName} onChange={(e) => setSecName(e.target.value)} />
+          <div className="space-y-3 py-2">
+            <div>
+              <Label>Section name</Label>
+              <Input value={secName} onChange={(e) => setSecName(e.target.value)} placeholder="A, B, East…" />
+            </div>
+            <div>
+              <Label>Capacity (optional)</Label>
+              <Input type="number" min={1} value={secCap} onChange={(e) => setSecCap(e.target.value)} placeholder="e.g. 40" />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSectionFor(null)}>Cancel</Button>
-            <Button className="bg-primary" onClick={() => secMut.mutate()} disabled={!secName || secMut.isPending}>Add</Button>
+            <Button className="bg-primary" disabled={secMut.isPending} onClick={() => secMut.mutate()}>Add section</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Class register */}
+      <Dialog open={!!register} onOpenChange={(v) => !v && setRegister(null)}>
+        <DialogContent className="rounded-2xl sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Class register — {rosterMeta.title || register?.grade.name}
+              {register?.sectionName ? "" : register ? " (all sections)" : ""}
+            </DialogTitle>
+          </DialogHeader>
+          {rosterLoading ? (
+            <div className="flex items-center gap-2 py-10 justify-center text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" /> Loading roster…
+            </div>
+          ) : roster.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              No learners placed in this class yet. Enrolled students with this grade appear here.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">{rosterMeta.count} learner(s)</p>
+              <div className="overflow-x-auto rounded-xl border">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2">Adm #</th>
+                      <th className="px-3 py-2">Name</th>
+                      <th className="px-3 py-2">Section</th>
+                      <th className="px-3 py-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roster.map((s) => (
+                      <tr key={s.id} className="border-t">
+                        <td className="px-3 py-2 font-mono text-xs">{s.admission_number || "—"}</td>
+                        <td className="px-3 py-2 font-medium">{s.full_name}</td>
+                        <td className="px-3 py-2">{s.section_name || "—"}</td>
+                        <td className="px-3 py-2">
+                          <Badge variant="secondary" className="text-[10px]">
+                            {s.status}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRegister(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
   );
 }
+
 
 function SubjectsPanel({
   subjects, loading, onRefresh,

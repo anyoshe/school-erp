@@ -8,7 +8,7 @@ from rest_framework.decorators import action
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from django.db.models import Q
-from .models import Curriculum, GradeLevel, Department
+from .models import Curriculum, GradeLevel, Department, Section
 from .serializers import (
     CurriculumSerializer, CurriculumCreateUpdateSerializer,
     CurriculumTemplateSerializer,
@@ -203,9 +203,9 @@ class GradeLevelViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return GradeLevelCreateUpdateSerializer
-        # List: lite (id/name only). Detail: full serializer.
-        # ?full=1 forces nested/counts when a page needs them.
-        if self.action == "list" and self.request.query_params.get("full") != "1":
+        # Default list includes sections + student_count (Classes UI).
+        # ?lite=1 for id/name-only dropdowns.
+        if self.action == "list" and self.request.query_params.get("lite") == "1":
             return GradeLevelLiteSerializer
         return GradeLevelSerializer
 
@@ -230,8 +230,9 @@ class GradeLevelViewSet(viewsets.ModelViewSet):
             if hasattr(GradeLevel, "is_active"):
                 queryset = queryset.filter(is_active=(str(is_active).lower() == "true"))
 
-        # Only join what list needs
-        if self.action == "list" and self.request.query_params.get("full") != "1":
+        # Classes UI needs sections + counts; lite=1 for minimal selects
+        lite = self.request.query_params.get("lite") == "1"
+        if self.action == "list" and lite:
             return queryset.order_by("order", "name").only(
                 "id", "name", "short_name", "order", "code", "curriculum_id", "school_id"
             )
@@ -242,6 +243,27 @@ class GradeLevelViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(school=selected_school(self.request))
+
+    @action(detail=True, methods=["post"], url_path="ensure-sections")
+    def ensure_sections(self, request, pk=None):
+        """Create default section A (or names in body) if missing."""
+        grade = self.get_object()
+        names = request.data.get("names") or ["A"]
+        if isinstance(names, str):
+            names = [n.strip() for n in names.split(",") if n.strip()]
+        created = []
+        for name in names:
+            sec, was = Section.objects.get_or_create(
+                grade_level=grade,
+                name=name,
+                defaults={"is_active": True, "capacity": request.data.get("capacity")},
+            )
+            if was:
+                created.append(sec.name)
+        return Response({
+            "created": created,
+            "sections": SectionSerializer(grade.sections.all(), many=True).data,
+        })
 
     @action(detail=False, methods=['delete'], url_path='bulk-delete')
     @transaction.atomic
@@ -674,3 +696,66 @@ def _cbc_default_requirements():
         "GRADE_9": common_pre + books_junior + ["Homework diary"],
         "PRIMARY_GENERAL": common_pre + books_mid,
     }
+
+
+class ClassRegisterView(APIView):
+    """Roster for a grade level (optional section filter)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+        grade_id = request.query_params.get("grade_level") or request.query_params.get("grade")
+        section_id = request.query_params.get("section")
+        if not grade_id:
+            return Response({"detail": "grade_level is required"}, status=400)
+
+        from apps.academics.models import GradeLevel, Section as SecModel
+        from apps.students.models import Student
+
+        grade = GradeLevel.objects.filter(pk=grade_id, school=school).first()
+        if not grade:
+            grade = GradeLevel.objects.filter(pk=grade_id).first()
+        if not grade:
+            return Response({"detail": "Grade not found"}, status=404)
+
+        section = None
+        if section_id:
+            section = SecModel.objects.filter(pk=section_id, grade_level=grade).first()
+
+        qs = (
+            Student.objects.filter(school=school, current_class=grade)
+            .exclude(status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED"])
+            .select_related("current_class", "section")
+            .order_by("last_name", "first_name")
+        )
+        if section:
+            qs = qs.filter(section=section)
+
+        rows = []
+        for s in qs[:500]:
+            rows.append({
+                "id": str(s.id),
+                "admission_number": s.admission_number or "",
+                "first_name": s.first_name or "",
+                "middle_name": getattr(s, "middle_name", "") or "",
+                "last_name": s.last_name or "",
+                "full_name": f"{s.first_name or ''} {s.last_name or ''}".strip(),
+                "gender": s.gender or "",
+                "status": s.status or "",
+                "section_id": str(s.section_id) if s.section_id else None,
+                "section_name": s.section.name if s.section_id and s.section else None,
+                "admission_date": str(s.admission_date) if getattr(s, "admission_date", None) else None,
+            })
+
+        return Response({
+            "grade": {"id": grade.id, "name": grade.name},
+            "section": {
+                "id": section.id,
+                "name": section.name,
+                "capacity": section.capacity,
+            } if section else None,
+            "count": len(rows),
+            "students": rows,
+        })
