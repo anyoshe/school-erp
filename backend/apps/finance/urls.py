@@ -10,6 +10,7 @@ from .views import (
     ClearanceAddItemView, ClearancePrepareView, ClearanceAdjustLineView,
 )
 from .accounting_views import (
+    AccountViewSet, AccountBalancesView,
     ExpenseCategoryViewSet,
     VendorViewSet,
     ExpenseViewSet,
@@ -28,10 +29,12 @@ router.register(r'payments', PaymentViewSet, basename='payment')
 router.register(r'payment-plans', PaymentPlanViewSet, basename='payment-plan')
 router.register(r'expense-categories', ExpenseCategoryViewSet, basename='expense-category')
 router.register(r'vendors', VendorViewSet, basename='vendor')
+router.register(r'accounts', AccountViewSet, basename='account')
 router.register(r'expenses', ExpenseViewSet, basename='expense')
 router.register(r'bills', BillViewSet, basename='bill')
 
 urlpatterns = [
+    path('account-balances/', AccountBalancesView.as_view(), name='account-balances'),
     path('income-receipts/', IncomeReceiptListView.as_view(), name='income-receipts'),
     path('dashboard-summary/', FinanceDashboardSummaryView.as_view(), name='finance-dashboard-summary'),
     path('awaiting-clearance/', AwaitingClearanceView.as_view(), name='awaiting-clearance'),

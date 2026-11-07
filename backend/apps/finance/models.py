@@ -694,6 +694,32 @@ class Expense(models.Model):
     vendor = models.ForeignKey(
         Vendor, on_delete=models.SET_NULL, null=True, blank=True, related_name="expenses"
     )
+    # Where the money is drawn from (Cash / Bank / M-Pesa asset accounts)
+    paid_from_account = models.ForeignKey(
+        "Account",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="expenses_paid",
+        help_text="Asset account the payment is drawn from (cash, bank, M-Pesa).",
+    )
+    # Optional link to fee income group this spend relates to (tuition, transport, etc.)
+    related_fee_category = models.ForeignKey(
+        FeeCategory,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="related_expenses",
+        help_text="Fee group this expense is associated with (e.g. Transport for fuel).",
+    )
+    related_fee_item = models.ForeignKey(
+        FeeItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="related_expenses",
+        help_text="Optional specific fee item this expense relates to.",
+    )
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     amount = models.DecimalField(max_digits=12, decimal_places=2)

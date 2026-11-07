@@ -37,16 +37,29 @@ class VendorSerializer(serializers.ModelSerializer):
 class ExpenseSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True, allow_null=True)
     vendor_name = serializers.CharField(source="vendor.name", read_only=True, allow_null=True)
+    paid_from_account_name = serializers.CharField(
+        source="paid_from_account.name", read_only=True, allow_null=True
+    )
+    related_fee_category_name = serializers.CharField(
+        source="related_fee_category.name", read_only=True, allow_null=True
+    )
+    related_fee_item_name = serializers.CharField(
+        source="related_fee_item.name", read_only=True, allow_null=True
+    )
 
     class Meta:
         model = Expense
         fields = [
             "id", "category", "category_name", "vendor", "vendor_name",
+            "paid_from_account", "paid_from_account_name",
+            "related_fee_category", "related_fee_category_name",
+            "related_fee_item", "related_fee_item_name",
             "title", "description", "amount", "expense_date", "payment_method",
             "reference_number", "paid_to", "academic_year", "term",
             "created_at", "updated_at",
         ]
         read_only_fields = ["id", "created_at", "updated_at"]
+
 
 
 class BillPaymentSerializer(serializers.ModelSerializer):
@@ -88,7 +101,15 @@ class ExpenseCategoryViewSet(SchoolScopedMixin, viewsets.ModelViewSet):
 
     def get_queryset(self):
         school = self.get_school()
-        return ExpenseCategory.objects.filter(school=school) if school else ExpenseCategory.objects.none()
+        if not school:
+            return ExpenseCategory.objects.none()
+        # Starter kit categories for every school
+        from apps.finance.seed_defaults import ensure_school_finance_defaults
+        ensure_school_finance_defaults(school)
+        return ExpenseCategory.objects.filter(school=school)
+
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         serializer.save(school=self.get_school())
@@ -112,7 +133,12 @@ class ExpenseViewSet(SchoolScopedMixin, viewsets.ModelViewSet):
         school = self.get_school()
         if not school:
             return Expense.objects.none()
-        qs = Expense.objects.filter(school=school).select_related("category", "vendor")
+        from apps.finance.seed_defaults import ensure_school_finance_defaults
+        ensure_school_finance_defaults(school)
+        qs = Expense.objects.filter(school=school).select_related(
+            "category", "vendor", "paid_from_account",
+            "related_fee_category", "related_fee_item",
+        )
         year = self.request.query_params.get("academic_year")
         term = self.request.query_params.get("term")
         if year:
@@ -379,3 +405,104 @@ class StudentFeeStatementView(APIView):
             },
             "generated_at": date.today().isoformat(),
         })
+
+
+from rest_framework import status as http_status
+from .models import Account
+
+
+class AccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Account
+        fields = ["id", "code", "name", "account_type", "is_active"]
+        read_only_fields = ["id"]
+
+
+class AccountViewSet(SchoolScopedMixin, viewsets.ModelViewSet):
+    """Cash / bank / income accounts for the school."""
+    serializer_class = AccountSerializer
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_queryset(self):
+        school = self.get_school()
+        if not school:
+            return Account.objects.none()
+        from apps.finance.seed_defaults import ensure_school_cash_accounts
+        ensure_school_cash_accounts(school)
+        qs = Account.objects.filter(school=school, is_active=True)
+        t = self.request.query_params.get("type")
+        if t:
+            qs = qs.filter(account_type=t.upper())
+        return qs.order_by("code")
+
+    def perform_create(self, serializer):
+        serializer.save(school=self.get_school())
+
+
+class AccountBalancesView(APIView):
+    """
+    Simple position per asset account:
+      inflows ≈ school-fee payments + income receipts tagged to method
+      outflows = expenses paid_from that account
+    Enough for the owner to see which pot is thinning.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = _school(request)
+        if not school:
+            return Response({"detail": "No school"}, status=400)
+        from apps.finance.seed_defaults import ensure_school_finance_defaults
+        ensure_school_finance_defaults(school)
+
+        accounts = list(Account.objects.filter(school=school, is_active=True).order_by("code"))
+        rows = []
+        for acc in accounts:
+            out = (
+                Expense.objects.filter(school=school, paid_from_account=acc)
+                .aggregate(t=Sum("amount"))["t"]
+                or Decimal("0")
+            )
+            # Rough inflow: cash ledger IN for matching description, else 0 for now
+            inflow = (
+                CashLedgerEntry.objects.filter(
+                    school=school,
+                    direction=CashLedgerEntry.Direction.IN,
+                    account_id=getattr(acc, "id", None),
+                ).aggregate(t=Sum("amount"))["t"]
+                if hasattr(CashLedgerEntry, "account_id")
+                else Decimal("0")
+            )
+            # Fallback: attribute fee collections to Bank/Cash/Mpesa by payment_method
+            if float(inflow or 0) == 0 and acc.account_type == Account.AccountType.ASSET:
+                method_map = {
+                    "1000": ["CASH"],
+                    "1010": ["BANK", "BANK_TRANSFER", "CHEQUE"],
+                    "1020": ["MPESA", "M-PESA", "MOBILE"],
+                }
+                methods = method_map.get(acc.code, [])
+                if methods:
+                    from django.db.models import Q
+                    q = Q()
+                    for mth in methods:
+                        q |= Q(payment_method__iexact=mth) | Q(payment_method__icontains=mth)
+                    inflow = (
+                        Payment.objects.filter(
+                            Q(school=school) | Q(invoice__school=school) | Q(invoice__student__school=school)
+                        )
+                        .exclude(payment_method="TRANSFER")
+                        .filter(q)
+                        .aggregate(t=Sum("amount"))["t"]
+                        or Decimal("0")
+                    )
+            bal = Decimal(str(inflow or 0)) - Decimal(str(out or 0))
+            rows.append({
+                "id": str(acc.id),
+                "code": acc.code,
+                "name": acc.name,
+                "account_type": acc.account_type,
+                "inflow": float(inflow or 0),
+                "outflow": float(out or 0),
+                "balance": float(bal),
+            })
+        return Response({"accounts": rows})

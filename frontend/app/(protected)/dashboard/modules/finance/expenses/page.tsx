@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { FinanceNavLinks } from "../components/FinanceNav";
@@ -44,6 +44,8 @@ const emptyForm = {
   paid_to: "",
   reference_number: "",
   description: "",
+  paid_from_account: "",
+  related_fee_category: "",
 };
 
 export default function ExpensesPage() {
@@ -85,9 +87,55 @@ export default function ExpensesPage() {
     },
   });
 
-  const save = async () => {
-    if (!form.title.trim() || !form.amount) {
-      toast.error("Title and amount required");
+  const accountsQ = useQuery({
+    queryKey: ["finance-accounts", schoolId],
+    enabled: !!schoolId,
+    queryFn: async () => {
+      const res = await api.get("/finance/accounts/", {
+        headers,
+        params: { type: "ASSET" },
+      });
+      return asList(res.data);
+    },
+  });
+
+  const balancesQ = useQuery({
+    queryKey: ["account-balances", schoolId],
+    enabled: !!schoolId,
+    queryFn: async () => {
+      const res = await api.get("/finance/account-balances/", { headers });
+      return res.data?.accounts || [];
+    },
+  });
+
+  const feeCatsQ = useQuery({
+    queryKey: ["fee-categories", schoolId],
+    enabled: !!schoolId,
+    queryFn: async () => {
+      const res = await api.get("/finance/categories/", { headers });
+      return asList(res.data);
+    },
+  });
+
+  const rows = expensesQ.data || [];
+  const cats = catsQ.data || [];
+  const vendors = vendorsQ.data || [];
+  const accounts = accountsQ.data || [];
+  const feeCats = feeCatsQ.data || [];
+  const balances = balancesQ.data || [];
+
+  const total = useMemo(
+    () => rows.reduce((s: number, r: any) => s + Number(r.amount || 0), 0),
+    [rows]
+  );
+
+  const saveExpense = async () => {
+    if (!form.title.trim() || !form.amount || Number(form.amount) <= 0) {
+      toast.error("Title and amount are required");
+      return;
+    }
+    if (!form.paid_from_account) {
+      toast.error("Select which account the money is paid from");
       return;
     }
     setSaving(true);
@@ -101,42 +149,47 @@ export default function ExpensesPage() {
           payment_method: form.payment_method,
           category: form.category || null,
           vendor: form.vendor || null,
-          paid_to: form.paid_to,
-          reference_number: form.reference_number,
-          description: form.description,
+          paid_to: form.paid_to || "",
+          reference_number: form.reference_number || "",
+          description: form.description || "",
+          paid_from_account: form.paid_from_account || null,
+          related_fee_category: form.related_fee_category || null,
         },
         { headers }
       );
       toast.success("Expense recorded");
       setOpen(false);
       setForm(emptyForm);
-      qc.invalidateQueries({ queryKey: ["expenses"] });
-      qc.invalidateQueries({ queryKey: ["owner-standing"] });
+      void qc.invalidateQueries({ queryKey: ["expenses"] });
+      void qc.invalidateQueries({ queryKey: ["account-balances"] });
     } catch (e: any) {
-      toast.error(e?.response?.data?.detail || "Failed to save expense");
+      toast.error(e?.response?.data?.detail || "Could not save expense");
     } finally {
       setSaving(false);
     }
   };
 
-  const saveCategory = async () => {
+  const addCategory = async () => {
     if (!newCat.trim()) return;
+    setSaving(true);
     try {
-      await api.post("/finance/expense-categories/", { name: newCat.trim() }, { headers });
-      toast.success("Category created");
+      await api.post(
+        "/finance/expense-categories/",
+        { name: newCat.trim(), description: "" },
+        { headers }
+      );
+      toast.success("Category added");
       setNewCat("");
-      setCatOpen(false);
-      qc.invalidateQueries({ queryKey: ["expense-categories"] });
-    } catch {
-      toast.error("Could not create category");
+      void qc.invalidateQueries({ queryKey: ["expense-categories"] });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Could not add category");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const rows = expensesQ.data || [];
-  const total = rows.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-6xl mx-auto">
+    <div className="space-y-5 p-4 md:p-6">
       <FinanceNavLinks />
       <div className="flex flex-wrap items-center gap-3">
         <Button asChild variant="outline" size="sm">
@@ -148,7 +201,9 @@ export default function ExpensesPage() {
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
             <Wallet className="h-6 w-6 text-emerald-700" /> Expenses
           </h1>
-          <p className="text-sm text-muted-foreground">Operating spend for the school</p>
+          <p className="text-sm text-muted-foreground">
+            Operating spend drawn from cash, bank or M-Pesa — linked to fee groups when relevant
+          </p>
         </div>
         <Button type="button" variant="outline" onClick={() => setCatOpen(true)}>
           Categories
@@ -162,16 +217,45 @@ export default function ExpensesPage() {
         </Button>
       </div>
 
+      {/* Account positions */}
       <div className="grid sm:grid-cols-3 gap-3">
+        {(balances.length ? balances : accounts).slice(0, 6).map((a: any) => {
+          const bal = a.balance != null ? Number(a.balance) : null;
+          return (
+            <Card key={a.id || a.code} className="border-slate-200">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">
+                  {a.code ? `${a.code} · ` : ""}
+                  {a.name}
+                </p>
+                <p
+                  className={`text-xl font-bold tabular-nums ${
+                    bal != null && bal < 0 ? "text-rose-700" : "text-slate-900"
+                  }`}
+                >
+                  {bal != null
+                    ? `${currency} ${bal.toLocaleString()}`
+                    : "—"}
+                </p>
+                {a.inflow != null && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    In {Number(a.inflow).toLocaleString()} · Out{" "}
+                    {Number(a.outflow || 0).toLocaleString()}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })}
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Entries</p>
+            <p className="text-xs text-muted-foreground">Expense entries</p>
             <p className="text-2xl font-bold">{rows.length}</p>
           </CardContent>
         </Card>
-        <Card className="sm:col-span-2 border-rose-100">
+        <Card className="border-rose-100">
           <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">Total recorded</p>
+            <p className="text-xs text-muted-foreground">Total expenses recorded</p>
             <p className="text-2xl font-bold text-rose-800">
               {currency} {total.toLocaleString()}
             </p>
@@ -185,38 +269,47 @@ export default function ExpensesPage() {
         </CardHeader>
         <CardContent className="p-0">
           {expensesQ.isLoading ? (
-            <p className="p-6 text-sm text-muted-foreground">Loading…</p>
+            <p className="p-6 text-sm text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </p>
           ) : rows.length === 0 ? (
             <div className="p-10 text-center space-y-2">
               <p className="font-medium">No expenses yet</p>
               <p className="text-sm text-muted-foreground">
-                Record utilities, salaries, supplies and other school costs.
+                Starter categories are ready (salaries, utilities, transport…). Record spend and
+                choose the account money is taken from.
               </p>
-              <Button type="button" className="mt-2 bg-emerald-600 text-white" onClick={() => setOpen(true)}>
+              <Button
+                type="button"
+                className="mt-2 bg-emerald-600 text-white"
+                onClick={() => setOpen(true)}
+              >
                 Record first expense
               </Button>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs uppercase tracking-wide text-slate-500 border-b bg-white">
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">Title</th>
-                    <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4">Method</th>
-                    <th className="py-3 px-4 text-right">Amount</th>
+                <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2">Date</th>
+                    <th className="px-3 py-2">Title</th>
+                    <th className="px-3 py-2">Category</th>
+                    <th className="px-3 py-2">Paid from</th>
+                    <th className="px-3 py-2">Fee group</th>
+                    <th className="px-3 py-2 text-right">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r: any) => (
-                    <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/80">
-                      <td className="py-3 px-4 whitespace-nowrap">{r.expense_date}</td>
-                      <td className="py-3 px-4 font-medium">{r.title}</td>
-                      <td className="py-3 px-4 text-muted-foreground">{r.category_name || "—"}</td>
-                      <td className="py-3 px-4">{r.payment_method}</td>
-                      <td className="py-3 px-4 text-right font-semibold tabular-nums">
-                        {Number(r.amount || 0).toLocaleString()}
+                    <tr key={r.id} className="border-t">
+                      <td className="px-3 py-2 whitespace-nowrap">{r.expense_date}</td>
+                      <td className="px-3 py-2 font-medium">{r.title}</td>
+                      <td className="px-3 py-2">{r.category_name || "—"}</td>
+                      <td className="px-3 py-2">{r.paid_from_account_name || "—"}</td>
+                      <td className="px-3 py-2">{r.related_fee_category_name || "—"}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold text-rose-800">
+                        {currency} {Number(r.amount || 0).toLocaleString()}
                       </td>
                     </tr>
                   ))}
@@ -227,48 +320,52 @@ export default function ExpensesPage() {
         </CardContent>
       </Card>
 
+      {/* Record expense */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Record expense</DialogTitle>
           </DialogHeader>
-          <div className="grid sm:grid-cols-2 gap-3 py-2">
-            <div className="sm:col-span-2">
+          <div className="space-y-3">
+            <div>
               <Label>Title *</Label>
               <Input
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="e.g. Electricity — March"
+                placeholder="e.g. October teaching salaries"
               />
             </div>
-            <div>
-              <Label>Amount *</Label>
-              <Input
-                type="number"
-                value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: e.target.value })}
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Amount *</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={form.amount}
+                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Date *</Label>
+                <Input
+                  type="date"
+                  value={form.expense_date}
+                  onChange={(e) => setForm({ ...form, expense_date: e.target.value })}
+                />
+              </div>
             </div>
             <div>
-              <Label>Date</Label>
-              <Input
-                type="date"
-                value={form.expense_date}
-                onChange={(e) => setForm({ ...form, expense_date: e.target.value })}
-              />
-            </div>
-            <div>
-              <Label>Category</Label>
+              <Label>Expense category</Label>
               <Select
                 value={form.category || "none"}
                 onValueChange={(v) => setForm({ ...form, category: v === "none" ? "" : v })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select" />
+                  <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Uncategorised</SelectItem>
-                  {(catsQ.data || []).map((c: any) => (
+                  <SelectItem value="none">—</SelectItem>
+                  {cats.map((c: any) => (
                     <SelectItem key={c.id} value={String(c.id)}>
                       {c.name}
                     </SelectItem>
@@ -277,57 +374,109 @@ export default function ExpensesPage() {
               </Select>
             </div>
             <div>
-              <Label>Payment method</Label>
+              <Label>Paid from account *</Label>
               <Select
-                value={form.payment_method}
-                onValueChange={(v) => setForm({ ...form, payment_method: v })}
+                value={form.paid_from_account || "none"}
+                onValueChange={(v) =>
+                  setForm({ ...form, paid_from_account: v === "none" ? "" : v })
+                }
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Cash / Bank / M-Pesa" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="CASH">Cash</SelectItem>
-                  <SelectItem value="BANK">Bank</SelectItem>
-                  <SelectItem value="MPESA">M-Pesa</SelectItem>
-                  <SelectItem value="CHEQUE">Cheque</SelectItem>
-                  <SelectItem value="OTHER">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Vendor</Label>
-              <Select
-                value={form.vendor || "none"}
-                onValueChange={(v) => setForm({ ...form, vendor: v === "none" ? "" : v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Optional" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {(vendorsQ.data || []).map((v: any) => (
-                    <SelectItem key={v.id} value={String(v.id)}>
-                      {v.name}
+                  <SelectItem value="none">Select account</SelectItem>
+                  {accounts.map((a: any) => (
+                    <SelectItem key={a.id} value={String(a.id)}>
+                      {a.code} · {a.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                This reduces the selected pot so the dashboard shows what is left.
+              </p>
+            </div>
+            <div>
+              <Label>Related fee group (optional)</Label>
+              <Select
+                value={form.related_fee_category || "none"}
+                onValueChange={(v) =>
+                  setForm({ ...form, related_fee_category: v === "none" ? "" : v })
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="e.g. Transport, Tuition" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {feeCats.map((c: any) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Use when the cost is funded by a fee line (fuel → Transport, food → Meals).
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Payment method</Label>
+                <Select
+                  value={form.payment_method}
+                  onValueChange={(v) => setForm({ ...form, payment_method: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CASH">Cash</SelectItem>
+                    <SelectItem value="BANK">Bank</SelectItem>
+                    <SelectItem value="MPESA">M-Pesa</SelectItem>
+                    <SelectItem value="CHEQUE">Cheque</SelectItem>
+                    <SelectItem value="OTHER">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Vendor</Label>
+                <Select
+                  value={form.vendor || "none"}
+                  onValueChange={(v) => setForm({ ...form, vendor: v === "none" ? "" : v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Optional" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">—</SelectItem>
+                    {vendors.map((v: any) => (
+                      <SelectItem key={v.id} value={String(v.id)}>
+                        {v.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <Label>Paid to</Label>
               <Input
                 value={form.paid_to}
                 onChange={(e) => setForm({ ...form, paid_to: e.target.value })}
+                placeholder="Payee if no vendor"
               />
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <Label>Reference</Label>
               <Input
                 value={form.reference_number}
                 onChange={(e) => setForm({ ...form, reference_number: e.target.value })}
+                placeholder="Receipt / cheque no."
               />
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <Label>Notes</Label>
               <Textarea
                 value={form.description}
@@ -342,9 +491,9 @@ export default function ExpensesPage() {
             </Button>
             <Button
               type="button"
+              className="bg-emerald-600 text-white"
               disabled={saving}
-              onClick={save}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={saveExpense}
             >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save expense"}
             </Button>
@@ -352,38 +501,35 @@ export default function ExpensesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Categories */}
       <Dialog open={catOpen} onOpenChange={setCatOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Expense categories</DialogTitle>
           </DialogHeader>
-          <ul className="text-sm space-y-1 max-h-40 overflow-y-auto border rounded-lg p-2">
-            {(catsQ.data || []).length === 0 ? (
-              <li className="text-muted-foreground px-1">No categories yet</li>
-            ) : (
-              (catsQ.data || []).map((c: any) => (
-                <li key={c.id} className="px-1 py-1 border-b border-slate-50 last:border-0">
-                  {c.name}
-                </li>
-              ))
-            )}
+          <p className="text-sm text-muted-foreground">
+            Starter kit is created automatically. Add more below if needed.
+          </p>
+          <ul className="text-sm divide-y rounded-lg border max-h-60 overflow-y-auto">
+            {cats.map((c: any) => (
+              <li key={c.id} className="px-3 py-2">
+                <span className="font-medium">{c.name}</span>
+                {c.description ? (
+                  <span className="block text-xs text-muted-foreground">{c.description}</span>
+                ) : null}
+              </li>
+            ))}
           </ul>
-          <div>
-            <Label>New category</Label>
+          <div className="flex gap-2">
             <Input
               value={newCat}
               onChange={(e) => setNewCat(e.target.value)}
-              placeholder="e.g. Utilities, Salaries, Food"
+              placeholder="New category name"
             />
+            <Button type="button" disabled={saving} onClick={addCategory}>
+              Add
+            </Button>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setCatOpen(false)}>
-              Close
-            </Button>
-            <Button type="button" onClick={saveCategory} className="bg-emerald-600 text-white">
-              Add category
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
