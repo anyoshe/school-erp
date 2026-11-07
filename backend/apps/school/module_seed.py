@@ -39,3 +39,27 @@ def seed_default_modules():
     except (OperationalError, ProgrammingError):
         # The database/table may not exist yet during early migrate/check flows.
         return
+
+
+
+CORE_MODULE_CODES = (
+    "admissions",
+    "students",
+    "finance",
+    "academics",
+    "attendance",
+    "staff",
+    "reports",
+)
+
+
+def ensure_school_core_modules(school):
+    """Attach core ERP modules to a school if missing."""
+    seed_default_modules()
+    try:
+        for code in CORE_MODULE_CODES:
+            mod = Module.objects.filter(code=code).first()
+            if mod and not school.modules.filter(pk=mod.pk).exists():
+                school.modules.add(mod)
+    except (OperationalError, ProgrammingError):
+        return

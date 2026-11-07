@@ -80,6 +80,14 @@ class SchoolSessionSerializer(serializers.ModelSerializer):
     Includes modules for the sidebar — excludes heavy grade_levels tree.
     """
     modules = ModuleSerializer(many=True, read_only=True)
+
+    def to_representation(self, instance):
+        try:
+            from apps.school.module_seed import ensure_school_core_modules
+            ensure_school_core_modules(instance)
+        except Exception:
+            pass
+        return super().to_representation(instance)
     owner = serializers.UUIDField(source="owner.id", read_only=True)
     logo = serializers.SerializerMethodField()
 
@@ -108,6 +116,14 @@ class SchoolSessionSerializer(serializers.ModelSerializer):
 
 
 class SchoolSerializer(serializers.ModelSerializer):
+    def to_representation(self, instance):
+        try:
+            from apps.school.module_seed import ensure_school_core_modules
+            ensure_school_core_modules(instance)
+        except Exception:
+            pass
+        return super().to_representation(instance)
+
 
     modules = ModuleSerializer(many=True, read_only=True)
     grade_levels = GradeLevelSerializer(many=True, read_only=True) 

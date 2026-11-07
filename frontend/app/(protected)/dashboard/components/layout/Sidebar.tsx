@@ -88,8 +88,26 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
   }, [pathname]);
 
   const enabledModules = currentSchool?.modules || [];
+
+  // Core modules always visible even if not toggled on for the school
+  // (schools can still manage extras under Settings → Modules)
+  const CORE_MODULE_CODES = [
+    "admissions",
+    "students",
+    "finance",
+    "academics",
+    "attendance",
+    "staff",
+    "reports",
+  ];
+
 // Build unique items by code first (already deduplicated)
 const uniqueModuleItems = new Map<string, MenuItem>();
+
+for (const code of CORE_MODULE_CODES) {
+  const item = MODULE_CONFIG[code];
+  if (item) uniqueModuleItems.set(code, item);
+}
 
 for (const m of enabledModules) {
   if (!m.code) continue;
