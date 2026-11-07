@@ -96,12 +96,14 @@ def asset_account_for_payment_method(school, payment_method: str):
     """Map CASH / BANK / MPESA → asset Account row."""
     from apps.finance.models import Account
     ensure_school_cash_accounts(school)
-    method = (payment_method or "CASH").upper().replace(" ", "").replace("_", "")
-    if method in ("MPESA", "MPESA", "MOBILE", "MOBILEMONEY") or "MPESA" in method or "M-PESA" in (payment_method or "").upper():
+    raw = (payment_method or "CASH").upper()
+    method = raw.replace(" ", "").replace("_", "").replace("-", "")
+    if "MPESA" in method or "MOBILE" in method:
         code = "1020"
-    elif method in ("BANK", "BANKTRANSFER", "CHEQUE", "CHECK", "EFT", "RTGS"):
+    elif method in ("BANK", "BANKTRANSFER", "CHEQUE", "CHECK", "EFT", "RTGS") or "BANK" in method:
         code = "1010"
     else:
+        # CASH and unknown → cash on hand
         code = "1000"
     acc = Account.objects.filter(school=school, code=code).first()
     if not acc:

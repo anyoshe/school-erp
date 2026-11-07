@@ -17,6 +17,12 @@ def _d(v) -> Decimal:
     return Decimal(str(v or 0))
 
 
+def _sid(source_id) -> str:
+    if source_id is None:
+        return ""
+    return str(source_id)
+
+
 def _account(school, code: str):
     from apps.finance.seed_defaults import ensure_school_cash_accounts
     from apps.finance.models import Account
@@ -24,23 +30,43 @@ def _account(school, code: str):
     return Account.objects.filter(school=school, code=code).first()
 
 
+def _school_from_payment(payment):
+    school = getattr(payment, "school", None)
+    if school is not None:
+        return school
+    inv = getattr(payment, "invoice", None)
+    if inv is None and getattr(payment, "invoice_id", None):
+        from apps.finance.models import Invoice
+        inv = Invoice.objects.select_related("school", "student", "student__school").filter(pk=payment.invoice_id).first()
+    if inv is not None:
+        school = getattr(inv, "school", None)
+        if school is not None:
+            return school
+        student = getattr(inv, "student", None)
+        if student is not None:
+            return getattr(student, "school", None)
+    return None
+
+
 def _already_posted(source_type: str, source_id) -> bool:
     from apps.finance.models import JournalEntry
-    if not source_id:
+    sid = _sid(source_id)
+    if not sid:
         return False
-    return JournalEntry.objects.filter(source_type=source_type, source_id=str(source_id)).exists()
+    return JournalEntry.objects.filter(source_type=source_type, source_id=sid).exists()
 
 
 @transaction.atomic
 def post_journal(school, entry_date, memo, lines, source_type="", source_id=None):
     """
-    lines: list of {account, debit=0, credit=0, memo=""}
+    lines: list of {account, debit=0, credit=0, memo="", reference=""}
     Must balance.
     """
-    from apps.finance.models import JournalEntry, JournalLine, CashLedgerEntry
+    from apps.finance.models import JournalEntry, JournalLine, CashLedgerEntry, Account
 
-    if source_id and _already_posted(source_type, source_id):
-        return JournalEntry.objects.filter(source_type=source_type, source_id=str(source_id)).first()
+    sid = _sid(source_id)
+    if sid and _already_posted(source_type, sid):
+        return JournalEntry.objects.filter(source_type=source_type, source_id=sid).first()
 
     deb = sum(_d(x.get("debit")) for x in lines)
     cre = sum(_d(x.get("credit")) for x in lines)
@@ -54,7 +80,7 @@ def post_journal(school, entry_date, memo, lines, source_type="", source_id=None
         entry_date=entry_date or timezone.now().date(),
         memo=(memo or "")[:255],
         source_type=source_type or "",
-        source_id=str(source_id) if source_id is not None else "",
+        source_id=sid,
     )
     for row in lines:
         acc = row.get("account")
@@ -70,8 +96,6 @@ def post_journal(school, entry_date, memo, lines, source_type="", source_id=None
             credit=c,
             memo=(row.get("memo") or "")[:255],
         )
-        # Mirror cash movements on asset accounts into CashLedgerEntry
-        from apps.finance.models import Account
         if acc.account_type == Account.AccountType.ASSET and (d > 0 or c > 0):
             CashLedgerEntry.objects.create(
                 school=school,
@@ -82,104 +106,135 @@ def post_journal(school, entry_date, memo, lines, source_type="", source_id=None
                 description=(memo or "")[:255],
                 reference_number=(row.get("reference") or "")[:100],
                 source_type=source_type or "",
-                source_id=str(source_id) if source_id is not None else "",
+                source_id=sid,
             )
     return entry
 
 
-def post_fee_payment(payment) -> None:
-    """Dr cash pot, Cr school fee income."""
+def post_fee_payment(payment) -> bool:
+    """Dr cash pot, Cr school fee income. Returns True if posted (or already existed)."""
     from apps.finance.seed_defaults import asset_account_for_payment_method
-    from apps.finance.models import Account
 
-    if (payment.payment_method or "").upper() in ("WAIVER", "SCHOLARSHIP", "TRANSFER"):
-        return  # non-cash
+    method = (payment.payment_method or "CASH").upper()
+    if method in ("WAIVER", "SCHOLARSHIP", "TRANSFER"):
+        return False
 
-    school = payment.school or getattr(getattr(payment, "invoice", None), "school", None)
-    if not school and getattr(payment, "invoice", None):
-        school = getattr(getattr(payment.invoice, "student", None), "school", None)
+    school = _school_from_payment(payment)
     if not school:
-        return
+        raise ValueError(f"payment {getattr(payment, 'pk', None)}: no school")
+
     amount = _d(payment.amount)
     if amount <= 0:
-        return
+        return False
+
+    if _already_posted("payment", payment.pk):
+        return True
 
     asset = asset_account_for_payment_method(school, payment.payment_method)
     income = _account(school, "4000")
     if not asset or not income:
-        return
+        raise ValueError(f"payment {payment.pk}: missing asset/income accounts for school {school.id}")
 
     inv_no = getattr(getattr(payment, "invoice", None), "invoice_number", "") or ""
     student = getattr(getattr(payment, "invoice", None), "student", None)
     name = ""
     if student:
         name = f"{getattr(student, 'first_name', '')} {getattr(student, 'last_name', '')}".strip()
-    memo = f"Fee payment {payment.receipt_number or payment.id} · {inv_no} · {name}".strip(" ·")
+    memo = f"Fee payment {payment.receipt_number or payment.pk} · {inv_no} · {name}".strip(" ·")
 
     post_journal(
         school,
         payment.payment_date or timezone.now().date(),
         memo,
         [
-            {"account": asset, "debit": amount, "credit": 0, "reference": payment.reference_number or payment.receipt_number or ""},
+            {
+                "account": asset,
+                "debit": amount,
+                "credit": 0,
+                "reference": payment.reference_number or payment.receipt_number or "",
+            },
             {"account": income, "debit": 0, "credit": amount},
         ],
         source_type="payment",
-        source_id=str(payment.pk),
+        source_id=payment.pk,
     )
+    return True
 
 
-def post_expense(expense) -> None:
+def post_expense(expense) -> bool:
     """Dr expense GL, Cr paid-from asset."""
     school = expense.school
     amount = _d(expense.amount)
     if not school or amount <= 0:
-        return
+        return False
+    if _already_posted("expense", expense.pk):
+        return True
+
     asset = expense.paid_from_account
     if not asset:
         from apps.finance.seed_defaults import asset_account_for_payment_method
         asset = asset_account_for_payment_method(school, expense.payment_method)
-    # Prefer salaries GL when category name suggests payroll
-    exp_gl = _account(school, "5100")
+
     cat_name = (getattr(getattr(expense, "category", None), "name", "") or "").lower()
-    if "salar" not in cat_name and "wage" not in cat_name and "payroll" not in cat_name:
+    if any(k in cat_name for k in ("salar", "wage", "payroll", "nssf", "nhif")):
+        exp_gl = _account(school, "5100")
+    else:
         exp_gl = _account(school, "5000")
     if not asset or not exp_gl:
-        return
+        raise ValueError(f"expense {expense.pk}: missing accounts")
+
     post_journal(
         school,
         expense.expense_date,
         f"Expense: {expense.title}",
         [
             {"account": exp_gl, "debit": amount, "credit": 0},
-            {"account": asset, "debit": 0, "credit": amount, "reference": expense.reference_number or ""},
+            {
+                "account": asset,
+                "debit": 0,
+                "credit": amount,
+                "reference": expense.reference_number or "",
+            },
         ],
         source_type="expense",
-        source_id=expense.id,
+        source_id=expense.pk,
     )
+    return True
 
 
-def post_income_receipt(receipt) -> None:
+def post_income_receipt(receipt) -> bool:
     """Dr cash, Cr admission/interview income."""
     school = receipt.school
     amount = _d(receipt.amount)
     if not school or amount <= 0:
-        return
+        return False
+    if _already_posted("income_receipt", receipt.pk):
+        return True
+
     from apps.finance.seed_defaults import asset_account_for_payment_method
     asset = asset_account_for_payment_method(school, getattr(receipt, "payment_method", "CASH"))
     src = (getattr(receipt, "source", "") or "").upper()
     code = "4010" if src == "ADMISSION" else "4020" if src == "INTERVIEW" else "4090"
     income = _account(school, code) or _account(school, "4090")
     if not asset or not income:
-        return
+        raise ValueError(f"income_receipt {receipt.pk}: missing accounts")
+
+    paid_at = getattr(receipt, "paid_at", None)
+    entry_date = paid_at.date() if paid_at else timezone.now().date()
     post_journal(
         school,
-        getattr(receipt, "paid_at", None).date() if getattr(receipt, "paid_at", None) else timezone.now().date(),
+        entry_date,
         f"Income receipt {src}",
         [
-            {"account": asset, "debit": amount, "credit": 0, "reference": getattr(receipt, "reference_number", "") or ""},
+            {
+                "account": asset,
+                "debit": amount,
+                "credit": 0,
+                "reference": getattr(receipt, "reference_number", "") or "",
+            },
             {"account": income, "debit": 0, "credit": amount},
         ],
         source_type="income_receipt",
-        source_id=receipt.id,
+        source_id=receipt.pk,
     )
+    return True
