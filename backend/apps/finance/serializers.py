@@ -535,6 +535,7 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
     lines = serializers.SerializerMethodField()
     payments = serializers.SerializerMethodField()
     balance = serializers.SerializerMethodField()
+    unallocated_paid = serializers.SerializerMethodField()
     current_total_due = serializers.ReadOnlyField()
     payment_plan = serializers.SerializerMethodField()
 
@@ -544,7 +545,7 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
             "id", "student", "student_name", "term", "academic_year",
             "invoice_number", "amount_due", "amount_paid", "balance",
             "due_date", "generated_at", "is_paid", "paid_at",
-            "payments", "lines", "current_total_due", "late_fee_applied",
+            "payments", "lines", "unallocated_paid", "current_total_due", "late_fee_applied",
             "installment_number", "payment_plan",
         ]
 
@@ -573,18 +574,39 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
         except Exception:
             return float(getattr(obj, "balance", 0) or 0)
 
+    def _line_allocation_totals(self, obj):
+        lines = list(obj.lines.all())
+        allocated_by_line = {str(line.id): Decimal("0") for line in lines}
+        for payment in obj.payments.all():
+            allocations = payment.line_allocations
+            if not isinstance(allocations, list):
+                continue
+            for allocation in allocations:
+                if not isinstance(allocation, dict):
+                    continue
+                line_id = str(allocation.get("line_id") or allocation.get("id") or "")
+                if line_id not in allocated_by_line:
+                    continue
+                allocated_by_line[line_id] += Decimal(str(allocation.get("amount") or 0))
+        return lines, allocated_by_line
+
     def get_lines(self, obj):
+        lines, allocated_by_line = self._line_allocation_totals(obj)
         out = []
-        for ln in obj.lines.all():
+        for ln in lines:
+            amount = Decimal(str(ln.amount or 0))
+            paid_amount = allocated_by_line[str(ln.id)]
             out.append({
                 "id": str(ln.id),
                 "description": ln.description or (
                     getattr(getattr(ln, "item", None), "name", None) or "Fee item"
                 ),
-                "amount": float(ln.amount or 0),
+                "amount": float(amount),
                 "original_amount": float(getattr(ln, "original_amount", None) or ln.amount or 0),
                 "is_waived": bool(getattr(ln, "is_waived", False)),
                 "discount_amount": float(getattr(ln, "discount_amount", None) or 0),
+                "paid_amount": float(paid_amount),
+                "remaining_balance": float(max(Decimal("0"), amount - paid_amount)),
             })
         return out
 
@@ -598,9 +620,15 @@ class InvoiceDetailSerializer(serializers.ModelSerializer):
                 "reference_number": p.reference_number or getattr(p, "receipt_number", "") or "",
                 "paid_at": (p.paid_at.isoformat() if p.paid_at else None),
                 "payment_date": str(p.payment_date) if getattr(p, "payment_date", None) else None,
+                "line_allocations": p.line_allocations if isinstance(p.line_allocations, list) else [],
                 "paid_by": None,
             })
         return out
+
+    def get_unallocated_paid(self, obj):
+        _, allocated_by_line = self._line_allocation_totals(obj)
+        allocated_total = sum(allocated_by_line.values(), Decimal("0"))
+        return float(max(Decimal("0"), Decimal(str(obj.amount_paid or 0)) - allocated_total))
 
     def get_payment_plan(self, obj):
         plan = getattr(obj, "payment_plan", None)
@@ -813,9 +841,19 @@ class PaymentCreateUpdateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"line_allocations": "Must be a list of line allocations."})
             total_alloc = Decimal("0")
             cleaned = []
+            invoice_lines = {
+                str(line.id): line
+                for line in (invoice.lines.all() if invoice else [])
+            }
+            allocated_by_line = {}
             for row in allocs:
                 if not isinstance(row, dict):
                     continue
+                line_id = str(row.get("line_id") or row.get("id") or "")
+                if line_id not in invoice_lines:
+                    raise serializers.ValidationError(
+                        {"line_allocations": "Each allocation must reference a fee item on this invoice."}
+                    )
                 try:
                     a = Decimal(str(row.get("amount") or 0))
                 except Exception:
@@ -824,13 +862,38 @@ class PaymentCreateUpdateSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({"line_allocations": "Amounts cannot be negative."})
                 if a == 0:
                     continue
+                allocated_by_line[line_id] = allocated_by_line.get(line_id, Decimal("0")) + a
                 cleaned.append({
-                    "line_id": str(row.get("line_id") or row.get("id") or ""),
+                    "line_id": line_id,
                     "description": str(row.get("description") or "Fee item")[:200],
                     "category": str(row.get("category") or "")[:100],
                     "amount": float(a),
                 })
                 total_alloc += a
+            previously_allocated = {}
+            for payment in invoice.payments.all():
+                if self.instance and payment.pk == self.instance.pk:
+                    continue
+                for row in (payment.line_allocations or []):
+                    if isinstance(row, dict):
+                        line_id = str(row.get("line_id") or row.get("id") or "")
+                        try:
+                            previous_amount = Decimal(str(row.get("amount") or 0))
+                        except Exception:
+                            previous_amount = Decimal("0")
+                        previously_allocated[line_id] = (
+                            previously_allocated.get(line_id, Decimal("0")) + previous_amount
+                        )
+            for line_id, line_amount in allocated_by_line.items():
+                remaining = max(
+                    Decimal("0"),
+                    Decimal(str(invoice_lines[line_id].amount or 0))
+                    - previously_allocated.get(line_id, Decimal("0")),
+                )
+                if line_amount > remaining:
+                    raise serializers.ValidationError(
+                        {"line_allocations": f"Allocation exceeds the remaining balance for {invoice_lines[line_id].description} ({remaining})."}
+                    )
             pay_amt = Decimal(str(amount))
             if abs(total_alloc - pay_amt) > Decimal("0.05"):
                 raise serializers.ValidationError(

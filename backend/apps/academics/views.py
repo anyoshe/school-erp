@@ -951,7 +951,7 @@ class SubjectTeacherViewSet(viewsets.ModelViewSet):
             year = AcademicYear.objects.filter(school=school, is_active=True).first()
 
         mapped = (
-            GradeLevelSubject.objects.filter(grade_level=grade, is_active=True)
+            GradeLevelSubject.objects.filter(grade_level=grade)
             .select_related("subject")
             .order_by("subject__name")
         )

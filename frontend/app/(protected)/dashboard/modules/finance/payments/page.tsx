@@ -32,12 +32,64 @@ type Invoice = {
   academic_year?: string;
 };
 
-function asList(data: unknown): any[] {
-  if (Array.isArray(data)) return data;
-  if (data && typeof data === "object") {
-    const o = data as any;
-    if (Array.isArray(o.results)) return o.results;
-    if (Array.isArray(o.data)) return o.data;
+type InvoiceLine = {
+  id: string;
+  description: string;
+  category?: string;
+  amount: number;
+  paid_amount: number;
+  remaining_balance: number;
+};
+
+type InvoicePayment = {
+  id: string;
+  amount: number;
+  payment_method: string;
+  payment_date?: string | null;
+  line_allocations: Array<{
+    line_id?: string;
+    description?: string;
+    amount: number;
+  }>;
+};
+
+type InvoiceDetailResponse = {
+  balance?: number;
+  unallocated_paid?: number;
+  lines?: Array<{
+    id: string | number;
+    description?: string;
+    category_name?: string;
+    category?: string;
+    amount?: number;
+    paid_amount?: number;
+    remaining_balance?: number;
+  }>;
+  payments?: Array<{
+    id: string;
+    amount: number;
+    payment_method: string;
+    payment_date?: string | null;
+    line_allocations?: InvoicePayment["line_allocations"];
+  }>;
+};
+
+type PaymentListItem = {
+  id: string;
+  amount: number;
+  payment_date?: string | null;
+  paid_at?: string | null;
+  payment_method: string;
+  receipt_number?: string;
+  reference_number?: string;
+};
+
+function asList<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[];
+  if (data !== null && typeof data === "object") {
+    const o = data as { results?: unknown; data?: unknown };
+    if (Array.isArray(o.results)) return o.results as T[];
+    if (Array.isArray(o.data)) return o.data as T[];
   }
   return [];
 }
@@ -49,7 +101,7 @@ export default function PaymentsPage() {
   const headers = schoolId ? { "X-School-ID": String(schoolId) } : undefined;
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [payments, setPayments] = useState<any[]>([]);
+  const [payments, setPayments] = useState<PaymentListItem[]>([]);
   const [loadingInv, setLoadingInv] = useState(true);
   const [loadingPay, setLoadingPay] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -64,11 +116,12 @@ export default function PaymentsPage() {
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [referenceNumber, setReferenceNumber] = useState("");
   const [notes, setNotes] = useState("");
-  const [invoiceLines, setInvoiceLines] = useState<
-    Array<{ id: string; description: string; category?: string; amount: number }>
-  >([]);
+  const [invoiceLines, setInvoiceLines] = useState<InvoiceLine[]>([]);
+  const [invoicePayments, setInvoicePayments] = useState<InvoicePayment[]>([]);
+  const [unallocatedPaid, setUnallocatedPaid] = useState(0);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const [loadingLines, setLoadingLines] = useState(false);
+  const [lineLoadError, setLineLoadError] = useState("");
 
   const loadInvoices = useCallback(async () => {
     if (!schoolId) {
@@ -82,8 +135,8 @@ export default function PaymentsPage() {
         headers,
         params: { unpaid: "1" },
       });
-      const list = asList(res.data).filter(
-        (inv: Invoice) => Number(inv.balance ?? 0) > 0 || !inv.is_paid
+      const list = asList<Invoice>(res.data).filter(
+        (inv) => Number(inv.balance ?? 0) > 0 || !inv.is_paid
       );
       setInvoices(list);
     } catch (e) {
@@ -107,7 +160,7 @@ export default function PaymentsPage() {
         headers,
         params: { limit: 30 },
       });
-      setPayments(asList(res.data));
+      setPayments(asList<PaymentListItem>(res.data));
     } catch (e) {
       console.error(e);
       setPayments([]);
@@ -135,7 +188,10 @@ export default function PaymentsPage() {
   const onSelectInvoice = async (id: string) => {
     setSelectedInvoice(id);
     setInvoiceLines([]);
+    setInvoicePayments([]);
+    setUnallocatedPaid(0);
     setAllocations({});
+    setLineLoadError("");
     const inv = invoices.find((i) => String(i.id) === String(id));
     if (inv) {
       const bal = Number(
@@ -148,18 +204,40 @@ export default function PaymentsPage() {
     setLoadingLines(true);
     try {
       const res = await api.get(`/finance/invoices/${id}/`, { headers });
-      const lines = Array.isArray(res.data?.lines) ? res.data.lines : [];
-      const mapped = lines.map((ln: any) => ({
+      const detail = res.data as InvoiceDetailResponse;
+      const lines = Array.isArray(detail?.lines) ? detail.lines : [];
+      const mapped = lines.map((ln) => ({
         id: String(ln.id),
         description: ln.description || "Fee item",
         category: ln.category_name || ln.category || "",
         amount: Number(ln.amount || 0),
+        paid_amount: Number(ln.paid_amount || 0),
+        remaining_balance: Number(
+          ln.remaining_balance ??
+            Math.max(0, Number(ln.amount || 0) - Number(ln.paid_amount || 0))
+        ),
       }));
       setInvoiceLines(mapped);
-      // Default: empty allocations — user fills, or "Apply full balance" buttons
+      setInvoicePayments(
+        Array.isArray(detail?.payments)
+          ? detail.payments.map((payment) => ({
+              ...payment,
+              line_allocations: Array.isArray(payment.line_allocations)
+                ? payment.line_allocations
+                : [],
+            }))
+          : []
+      );
+      setUnallocatedPaid(Number(detail?.unallocated_paid || 0));
+      const currentBalance = Number(detail?.balance);
+      if (Number.isFinite(currentBalance)) {
+        setPaymentAmount(currentBalance > 0 ? String(currentBalance) : "");
+      }
     } catch (e) {
-      console.warn("Could not load invoice lines", e);
+      console.error("Could not load invoice payment details", e);
+      setLineLoadError("Could not load this invoice's fee-item balances. Try selecting it again.");
       setInvoiceLines([]);
+      toast.error("Could not load invoice fee-item balances");
     } finally {
       setLoadingLines(false);
     }
@@ -169,18 +247,29 @@ export default function PaymentsPage() {
     (s, v) => s + (Number(v) || 0),
     0
   );
+  const overallocatedLines = invoiceLines.filter(
+    (line) =>
+      Math.round((Number(allocations[line.id]) || 0) * 100) >
+      Math.round(line.remaining_balance * 100)
+  );
 
   const applyProportional = () => {
     const amt = Number(paymentAmount) || 0;
     if (amt <= 0 || invoiceLines.length === 0) return;
-    const billTotal = invoiceLines.reduce((s, l) => s + l.amount, 0) || 1;
+    const remainingTotal = invoiceLines.reduce((s, l) => s + l.remaining_balance, 0);
+    if (remainingTotal <= 0) return;
+    const amountToAllocate = Math.min(amt, remainingTotal);
     const next: Record<string, string> = {};
-    let remaining = amt;
+    let remaining = amountToAllocate;
     invoiceLines.forEach((ln, i) => {
       if (i === invoiceLines.length - 1) {
-        next[ln.id] = String(Math.round(remaining * 100) / 100);
+        const share = Math.min(ln.remaining_balance, remaining);
+        next[ln.id] = String(Math.round(share * 100) / 100);
       } else {
-        const share = Math.round((ln.amount / billTotal) * amt * 100) / 100;
+        const share = Math.min(
+          ln.remaining_balance,
+          Math.round((ln.remaining_balance / remainingTotal) * amountToAllocate * 100) / 100
+        );
         next[ln.id] = String(share);
         remaining -= share;
       }
@@ -192,8 +281,11 @@ export default function PaymentsPage() {
     const amt = Number(paymentAmount) || 0;
     if (amt <= 0 || invoiceLines.length === 0) return;
     const next: Record<string, string> = {};
-    invoiceLines.forEach((ln, i) => {
-      next[ln.id] = i === 0 ? String(amt) : "0";
+    let remaining = amt;
+    invoiceLines.forEach((ln) => {
+      const amount = Math.min(ln.remaining_balance, remaining);
+      next[ln.id] = String(Math.round(amount * 100) / 100);
+      remaining -= amount;
     });
     setAllocations(next);
   };
@@ -214,6 +306,10 @@ export default function PaymentsPage() {
       toast.error("Enter a valid amount");
       return;
     }
+    if (lineLoadError) {
+      toast.error("Reload the invoice fee-item balances before recording payment.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -226,11 +322,18 @@ export default function PaymentsPage() {
         }))
         .filter((r) => r.amount > 0);
 
-      if (line_allocations.length > 0) {
+      if (invoiceLines.length > 0) {
         const sum = line_allocations.reduce((s, r) => s + r.amount, 0);
         if (Math.abs(sum - amt) > 0.05) {
           toast.error(
             `Allocation total (${sum.toLocaleString()}) must equal payment (${amt.toLocaleString()}).`
+          );
+          setSubmitting(false);
+          return;
+        }
+        if (overallocatedLines.length > 0) {
+          toast.error(
+            `Allocation exceeds the remaining balance for ${overallocatedLines[0].description}.`
           );
           setSubmitting(false);
           return;
@@ -258,25 +361,43 @@ export default function PaymentsPage() {
       setReferenceNumber("");
       setNotes("");
       setInvoiceLines([]);
+      setInvoicePayments([]);
+      setUnallocatedPaid(0);
       setAllocations({});
+      setLineLoadError("");
       setPaymentDate(new Date().toISOString().slice(0, 10));
       void loadInvoices();
       void loadPayments();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      const d = err?.response?.data;
+      const responseData = (err as { response?: { data?: unknown } })?.response?.data;
       let msg = "Failed to record payment";
-      if (typeof d === "string") msg = d;
-      else if (d?.detail) msg = String(d.detail);
-      else if (d?.amount) msg = Array.isArray(d.amount) ? d.amount[0] : String(d.amount);
-      else if (d?.payment_date)
-        msg = Array.isArray(d.payment_date) ? d.payment_date[0] : String(d.payment_date);
-      else if (d && typeof d === "object") msg = JSON.stringify(d);
+      if (typeof responseData === "string") {
+        msg = responseData;
+      } else if (responseData !== null && typeof responseData === "object") {
+        const data = responseData as Record<string, unknown>;
+        for (const field of ["detail", "amount", "payment_date", "line_allocations"]) {
+          const value = data[field];
+          if (typeof value === "string") {
+            msg = value;
+            break;
+          }
+          if (Array.isArray(value) && value.length > 0) {
+            msg = String(value[0]);
+            break;
+          }
+        }
+        if (msg === "Failed to record payment") msg = JSON.stringify(responseData);
+      }
       toast.error(msg);
     } finally {
       setSubmitting(false);
     }
   };
+
+  const priorPayments = [...invoicePayments].sort((a, b) =>
+    (a.payment_date || "").localeCompare(b.payment_date || "")
+  );
 
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-5xl mx-auto">
@@ -368,11 +489,49 @@ export default function PaymentsPage() {
                 </div>
               </div>
               <p className="text-xs text-muted-foreground">
-                Optional but recommended. Allocation total must equal the payment amount.
-                Receipt will show how this payment was applied.
+                Review previous allocations and remaining balances, then allocate the full payment.
+                Receipts will show how this payment was applied.
               </p>
+              {priorPayments.length > 0 && (
+                <div className="rounded-lg border bg-white p-2 space-y-2">
+                  <p className="text-xs font-semibold">Previous payments (oldest first)</p>
+                  {priorPayments.map((payment) => (
+                    <div key={payment.id} className="border-t pt-1.5 text-xs">
+                      <p className="font-medium">
+                        {payment.payment_date || "Date unavailable"} · {payment.payment_method} ·{" "}
+                        {Number(payment.amount || 0).toLocaleString()}
+                      </p>
+                      {payment.line_allocations.length > 0 ? (
+                        <p className="text-muted-foreground">
+                          {payment.line_allocations
+                            .map(
+                              (allocation) =>
+                                `${allocation.description || "Fee item"}: ${Number(
+                                  allocation.amount || 0
+                                ).toLocaleString()}`
+                            )
+                            .join(" · ")}
+                        </p>
+                      ) : (
+                        <p className="text-amber-700">
+                          No fee-item allocation was recorded for this payment.
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {unallocatedPaid > 0 && (
+                <p className="rounded-md bg-amber-50 p-2 text-xs text-amber-800">
+                  {unallocatedPaid.toLocaleString()} of previous payments has no recorded
+                  fee-item allocation. Item balances below only subtract payments with a
+                  recorded allocation.
+                </p>
+              )}
               {loadingLines ? (
                 <p className="text-xs text-muted-foreground">Loading fee items…</p>
+              ) : lineLoadError ? (
+                <p className="text-xs text-destructive">{lineLoadError}</p>
               ) : invoiceLines.length === 0 ? (
                 <p className="text-xs text-muted-foreground">No line items on this invoice.</p>
               ) : (
@@ -380,20 +539,23 @@ export default function PaymentsPage() {
                   {invoiceLines.map((ln) => (
                     <li
                       key={ln.id}
-                      className="grid grid-cols-[1fr_100px_110px] gap-2 items-center text-sm bg-white rounded-lg border px-2 py-1.5"
+                      className="grid grid-cols-[1fr_110px] gap-2 items-center text-sm bg-white rounded-lg border px-2 py-1.5"
                     >
                       <span>
                         {ln.description}
                         {ln.category ? (
                           <span className="text-xs text-muted-foreground"> · {ln.category}</span>
                         ) : null}
-                      </span>
-                      <span className="text-xs text-muted-foreground text-right tabular-nums">
-                        billed {ln.amount.toLocaleString()}
+                        <span className="block text-xs text-muted-foreground tabular-nums">
+                          Billed {ln.amount.toLocaleString()} · previously allocated{" "}
+                          {ln.paid_amount.toLocaleString()} · remaining{" "}
+                          {ln.remaining_balance.toLocaleString()}
+                        </span>
                       </span>
                       <Input
                         type="number"
                         min="0"
+                        max={ln.remaining_balance}
                         step="0.01"
                         className="h-8"
                         placeholder="0"
@@ -402,6 +564,12 @@ export default function PaymentsPage() {
                           setAllocations((prev) => ({ ...prev, [ln.id]: e.target.value }))
                         }
                       />
+                      {Math.round((Number(allocations[ln.id]) || 0) * 100) >
+                        Math.round(ln.remaining_balance * 100) && (
+                        <span className="col-span-2 text-xs text-destructive">
+                          Allocation exceeds this item&apos;s remaining balance.
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -409,7 +577,7 @@ export default function PaymentsPage() {
               {invoiceLines.length > 0 && (
                 <p
                   className={`text-xs font-medium ${
-                    Math.abs(allocTotal - Number(paymentAmount || 0)) < 0.05 || allocTotal === 0
+                    Math.abs(allocTotal - Number(paymentAmount || 0)) < 0.05
                       ? "text-emerald-700"
                       : "text-amber-700"
                   }`}
@@ -462,7 +630,12 @@ export default function PaymentsPage() {
           <div className="sm:col-span-2 flex justify-end">
             <Button
               type="button"
-              disabled={submitting}
+              disabled={
+                submitting ||
+                loadingLines ||
+                Boolean(lineLoadError) ||
+                overallocatedLines.length > 0
+              }
               className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[160px]"
               onClick={handleRecordPayment}
             >
@@ -499,7 +672,7 @@ export default function PaymentsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {payments.map((p: any) => (
+                  {payments.map((p) => (
                     <tr key={p.id} className="border-b border-slate-100">
                       <td className="py-2 px-4">
                         {p.payment_date ||
