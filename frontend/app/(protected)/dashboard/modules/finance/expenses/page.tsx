@@ -369,7 +369,7 @@ export default function ExpensesPage() {
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-60 overflow-y-auto">
                   <SelectItem value="none">—</SelectItem>
                   {cats.map((c: any) => (
                     <SelectItem key={c.id} value={String(c.id)}>
@@ -390,7 +390,7 @@ export default function ExpensesPage() {
                 <SelectTrigger>
                   <SelectValue placeholder="Cash / Bank / M-Pesa" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-60 overflow-y-auto">
                   <SelectItem value="none">Select account</SelectItem>
                   {accounts.map((a: any) => (
                     <SelectItem key={a.id} value={String(a.id)}>
@@ -414,7 +414,7 @@ export default function ExpensesPage() {
                 <SelectTrigger>
                   <SelectValue placeholder="e.g. Transport, Tuition" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-60 overflow-y-auto">
                   <SelectItem value="none">None</SelectItem>
                   {feeCats.map((c: any) => (
                     <SelectItem key={c.id} value={String(c.id)}>
@@ -437,7 +437,7 @@ export default function ExpensesPage() {
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-60 overflow-y-auto">
                     <SelectItem value="CASH">Cash</SelectItem>
                     <SelectItem value="BANK">Bank</SelectItem>
                     <SelectItem value="MPESA">M-Pesa</SelectItem>
@@ -455,7 +455,7 @@ export default function ExpensesPage() {
                   <SelectTrigger>
                     <SelectValue placeholder="Optional" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="max-h-60 overflow-y-auto">
                     <SelectItem value="none">—</SelectItem>
                     {vendors.map((v: any) => (
                       <SelectItem key={v.id} value={String(v.id)}>
@@ -491,17 +491,30 @@ export default function ExpensesPage() {
               />
             </div>
           </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+          <DialogFooter className="gap-2 sm:gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-w-[8.5rem] h-10"
+              disabled={saving}
+              onClick={() => setOpen(false)}
+            >
               Cancel
             </Button>
             <Button
               type="button"
-              className="bg-emerald-600 text-white"
+              className="min-w-[8.5rem] h-10 bg-emerald-600 hover:bg-emerald-700 text-white"
               disabled={saving}
               onClick={saveExpense}
             >
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save expense"}
+              {saving ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                  Saving…
+                </span>
+              ) : (
+                "Save expense"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
