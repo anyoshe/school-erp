@@ -6,7 +6,7 @@ import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import { toast } from "sonner";
 import {
   BookOpen, CalendarRange, Layers, GraduationCap, Plus, Sparkles,
-  CheckCircle2, Circle, ChevronRight, Users, Loader2,
+  CheckCircle2, Circle, ChevronRight, Users, Loader2, ClipboardList,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,9 +29,10 @@ import {
   type AcademicYear, type GradeLevel, type CurriculumTemplate, type Term,
   type ClassRegisterStudent, type Subject, type GradeSubject,
   fetchTeachers, syncTeachersFromUsers, fetchTeacherCoverage, assignSubjectTeacher, removeSubjectTeacher,
+  fetchAssessments, createAssessment, fetchMarksheet, saveMarksheet, fetchClassResults,
 } from "./services";
 
-type Tab = "overview" | "years" | "classes" | "subjects" | "teachers" | "promotion";
+type Tab = "overview" | "years" | "classes" | "subjects" | "teachers" | "assessments" | "promotion";
 
 export default function AcademicsPage() {
   const { currentSchool } = useCurrentSchool();
@@ -75,6 +76,7 @@ export default function AcademicsPage() {
     { id: "classes", label: "Classes", icon: Layers },
     { id: "subjects", label: "Subjects", icon: BookOpen },
     { id: "teachers", label: "Teachers", icon: Users },
+    { id: "assessments", label: "Assessments", icon: ClipboardList },
     { id: "promotion", label: "Promotion", icon: GraduationCap },
   ];
 
@@ -187,6 +189,15 @@ export default function AcademicsPage() {
         <TeachersPanel
           grades={grades}
           years={years}
+          loading={gradesQ.isLoading || yearsQ.isLoading}
+        />
+      )}
+
+      {tab === "assessments" && (
+        <AssessmentsPanel
+          grades={grades}
+          years={years}
+          subjects={subjects}
           loading={gradesQ.isLoading || yearsQ.isLoading}
         />
       )}
@@ -1987,6 +1998,469 @@ function TeachersPanel({
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+
+function AssessmentsPanel({
+  grades,
+  years,
+  subjects,
+  loading,
+}: {
+  grades: GradeLevel[];
+  years: AcademicYear[];
+  subjects: Subject[];
+  loading: boolean;
+}) {
+  const [list, setList] = useState<any[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [yearId, setYearId] = useState<number | "">("");
+  const [gradeId, setGradeId] = useState<number | "">("");
+  const [termId, setTermId] = useState<number | "">("");
+  const [openCreate, setOpenCreate] = useState(false);
+  const [form, setForm] = useState({
+    name: "CAT 1",
+    kind: "CAT",
+    subject: "" as string | number | "",
+    max_score: "100",
+    assessment_date: "",
+  });
+  const [sheetId, setSheetId] = useState<string | null>(null);
+  const [sheetRows, setSheetRows] = useState<any[]>([]);
+  const [sheetMeta, setSheetMeta] = useState<any>(null);
+  const [scores, setScores] = useState<Record<string, string>>({});
+  const [absent, setAbsent] = useState<Record<string, boolean>>({});
+  const [results, setResults] = useState<any[] | null>(null);
+
+  const activeYear = years.find((y) => y.is_active) || years[0];
+  const yearObj = years.find((y) => y.id === yearId) || activeYear;
+  const terms = yearObj?.terms || [];
+
+  useEffect(() => {
+    if (activeYear && yearId === "") setYearId(activeYear.id);
+  }, [activeYear, yearId]);
+
+  const load = async () => {
+    setBusy(true);
+    try {
+      const data = await fetchAssessments({
+        academic_year: yearId ? Number(yearId) : undefined,
+        grade_level: gradeId ? Number(gradeId) : undefined,
+        term: termId ? Number(termId) : undefined,
+      });
+      setList(data);
+    } catch {
+      toast.error("Could not load assessments");
+      setList([]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yearId, gradeId, termId]);
+
+  const openSheet = async (id: string) => {
+    setBusy(true);
+    try {
+      const data = await fetchMarksheet(id);
+      setSheetId(id);
+      setSheetMeta(data.assessment);
+      setSheetRows(data.rows || []);
+      const sc: Record<string, string> = {};
+      const ab: Record<string, boolean> = {};
+      (data.rows || []).forEach((r: any) => {
+        sc[r.student] = r.score != null ? String(r.score) : "";
+        ab[r.student] = !!r.is_absent;
+      });
+      setScores(sc);
+      setAbsent(ab);
+    } catch {
+      toast.error("Could not open marksheet");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveSheet = async () => {
+    if (!sheetId) return;
+    setBusy(true);
+    try {
+      const marks = sheetRows.map((r) => ({
+        student: r.student,
+        score: absent[r.student]
+          ? null
+          : scores[r.student] === "" || scores[r.student] == null
+            ? null
+            : Number(scores[r.student]),
+        is_absent: !!absent[r.student],
+        remarks: r.remarks || "",
+      }));
+      const res = await saveMarksheet(sheetId, marks);
+      toast.success(`Saved ${res.saved} mark(s)`);
+      await openSheet(sheetId);
+      load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const create = async () => {
+    if (!yearId || !gradeId || !form.subject || !form.name.trim()) {
+      toast.message("Year, grade, subject and name are required");
+      return;
+    }
+    setBusy(true);
+    try {
+      const a = await createAssessment({
+        name: form.name.trim(),
+        kind: form.kind,
+        academic_year: Number(yearId),
+        term: termId || null,
+        grade_level: Number(gradeId),
+        subject: form.subject,
+        max_score: form.max_score || 100,
+        assessment_date: form.assessment_date || null,
+      });
+      toast.success("Assessment created");
+      setOpenCreate(false);
+      await load();
+      if (a?.id) openSheet(a.id);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Create failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const loadResults = async () => {
+    if (!gradeId) {
+      toast.message("Select a grade for class results");
+      return;
+    }
+    setBusy(true);
+    try {
+      const data = await fetchClassResults({
+        grade_level: Number(gradeId),
+        academic_year: yearId ? Number(yearId) : undefined,
+        term: termId ? Number(termId) : undefined,
+      });
+      setResults(data.results || []);
+    } catch {
+      toast.error("Could not load results");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const gradeSubjects = subjects; // filter client-side optional
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap justify-between gap-3">
+        <p className="text-sm text-muted-foreground max-w-2xl">
+          Create CATs, midterms and end-of-term assessments, enter marks by class, and view simple
+          averages. Grades use A (80+) · B (70+) · C (60+) · D (50+) · E.
+        </p>
+        <Button className="bg-primary" onClick={() => setOpenCreate(true)} disabled={!gradeId}>
+          <Plus className="h-4 w-4 mr-1" /> New assessment
+        </Button>
+      </div>
+
+      <div className="grid sm:grid-cols-3 gap-3 max-w-3xl">
+        <div>
+          <Label>Year</Label>
+          <select
+            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
+            value={yearId === "" ? "" : String(yearId)}
+            onChange={(e) => {
+              setYearId(e.target.value ? Number(e.target.value) : "");
+              setTermId("");
+            }}
+          >
+            {years.map((y) => (
+              <option key={y.id} value={y.id}>
+                {y.name}
+                {y.is_active ? " (active)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label>Term (optional)</Label>
+          <select
+            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
+            value={termId === "" ? "" : String(termId)}
+            onChange={(e) => setTermId(e.target.value ? Number(e.target.value) : "")}
+          >
+            <option value="">All terms</option>
+            {terms.map((tm) => (
+              <option key={tm.id} value={tm.id}>
+                {tm.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label>Grade</Label>
+          <select
+            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
+            value={gradeId === "" ? "" : String(gradeId)}
+            onChange={(e) => setGradeId(e.target.value ? Number(e.target.value) : "")}
+          >
+            <option value="">All grades</option>
+            {grades
+              .slice()
+              .sort((a, b) => a.order - b.order)
+              .map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+          </select>
+        </div>
+      </div>
+
+      {(loading || busy) && !sheetId ? (
+        <div className="flex justify-center py-10 text-muted-foreground gap-2">
+          <Loader2 className="h-5 w-5 animate-spin" /> Loading…
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2">Assessment</th>
+                <th className="px-3 py-2">Class</th>
+                <th className="px-3 py-2">Subject</th>
+                <th className="px-3 py-2">Max</th>
+                <th className="px-3 py-2">Entered</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                    No assessments yet. Select a grade and create one.
+                  </td>
+                </tr>
+              ) : (
+                list.map((a) => (
+                  <tr key={a.id} className="border-t">
+                    <td className="px-3 py-2 font-medium">
+                      {a.name}
+                      <span className="ml-2 text-xs text-muted-foreground">{a.kind}</span>
+                    </td>
+                    <td className="px-3 py-2">{a.grade_name}</td>
+                    <td className="px-3 py-2">{a.subject_name}</td>
+                    <td className="px-3 py-2">{a.max_score}</td>
+                    <td className="px-3 py-2">
+                      {a.entered_count ?? 0}/{a.marks_count ?? 0}
+                    </td>
+                    <td className="px-3 py-2">
+                      <Button size="sm" variant="secondary" onClick={() => openSheet(a.id)}>
+                        Enter marks
+                      </Button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" onClick={loadResults} disabled={!gradeId}>
+          Class averages
+        </Button>
+      </div>
+      {results && (
+        <div className="overflow-x-auto rounded-xl border">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2">#</th>
+                <th className="px-3 py-2">Adm</th>
+                <th className="px-3 py-2">Name</th>
+                <th className="px-3 py-2">Average %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {results.map((r, i) => (
+                <tr key={r.student_id} className="border-t">
+                  <td className="px-3 py-2">{i + 1}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{r.admission_number}</td>
+                  <td className="px-3 py-2 font-medium">{r.name}</td>
+                  <td className="px-3 py-2">{r.average != null ? r.average : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Dialog open={openCreate} onOpenChange={setOpenCreate}>
+        <DialogContent className="rounded-2xl sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>New assessment</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Name</Label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Type</Label>
+              <select
+                className="w-full h-10 rounded-md border px-3 text-sm"
+                value={form.kind}
+                onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
+              >
+                <option value="CAT">CAT / Continuous</option>
+                <option value="MIDTERM">Midterm</option>
+                <option value="END_TERM">End of term</option>
+                <option value="PROJECT">Project</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+            <div>
+              <Label>Subject</Label>
+              <select
+                className="w-full h-10 rounded-md border px-3 text-sm"
+                value={String(form.subject || "")}
+                onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
+              >
+                <option value="">Select…</option>
+                {gradeSubjects.map((s) => (
+                  <option key={String(s.id)} value={String(s.id)}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label>Max score</Label>
+                <Input
+                  value={form.max_score}
+                  onChange={(e) => setForm((f) => ({ ...f, max_score: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Date</Label>
+                <Input
+                  type="date"
+                  value={form.assessment_date}
+                  onChange={(e) => setForm((f) => ({ ...f, assessment_date: e.target.value }))}
+                />
+              </div>
+            </div>
+            {!gradeId && (
+              <p className="text-xs text-amber-700">Select a grade in the filters first.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenCreate(false)}>
+              Cancel
+            </Button>
+            <Button className="bg-primary" onClick={create} disabled={busy || !gradeId}>
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!sheetId} onOpenChange={(v) => !v && setSheetId(null)}>
+        <DialogContent className="rounded-2xl sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Marksheet — {sheetMeta?.name} · {sheetMeta?.subject_name} · {sheetMeta?.grade_name}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Max score: {sheetMeta?.max_score}. Leave blank if not entered. Tick absent if the
+            learner missed the paper.
+          </p>
+          <div className="overflow-x-auto rounded-xl border">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-2 py-2">Adm</th>
+                  <th className="px-2 py-2">Name</th>
+                  <th className="px-2 py-2">Score</th>
+                  <th className="px-2 py-2">Absent</th>
+                  <th className="px-2 py-2">Grade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sheetRows.map((r) => {
+                  const max = Number(sheetMeta?.max_score || 100);
+                  const raw = scores[r.student];
+                  const pct =
+                    !absent[r.student] && raw !== "" && raw != null
+                      ? (Number(raw) / max) * 100
+                      : null;
+                  let letter = "—";
+                  if (pct != null && !Number.isNaN(pct)) {
+                    if (pct >= 80) letter = "A";
+                    else if (pct >= 70) letter = "B";
+                    else if (pct >= 60) letter = "C";
+                    else if (pct >= 50) letter = "D";
+                    else letter = "E";
+                  }
+                  return (
+                    <tr key={r.student} className="border-t">
+                      <td className="px-2 py-1.5 font-mono text-xs">{r.admission_number}</td>
+                      <td className="px-2 py-1.5 font-medium">{r.student_name}</td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          className="h-8 w-24"
+                          type="number"
+                          disabled={!!absent[r.student]}
+                          value={scores[r.student] ?? ""}
+                          onChange={(e) =>
+                            setScores((s) => ({ ...s, [r.student]: e.target.value }))
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <input
+                          type="checkbox"
+                          checked={!!absent[r.student]}
+                          onChange={(e) =>
+                            setAbsent((a) => ({ ...a, [r.student]: e.target.checked }))
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-1.5 font-semibold">{letter}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSheetId(null)}>
+              Close
+            </Button>
+            <Button className="bg-primary" onClick={saveSheet} disabled={busy}>
+              {busy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              Save marks
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

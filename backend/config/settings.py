@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     "apps.academics.apps.AcademicsConfig",
     "apps.finance",
     "apps.attendance",
+    "apps.assessments",
     "apps.library",
     "apps.admissions",
     "apps.reports",

@@ -31,6 +31,7 @@ urlpatterns = [
 
     # 6. Academic Flow (attendance → academics)
     path('api/attendance/', include('apps.attendance.urls')),
+    path('api/assessments/', include('apps.assessments.urls')),
     
 
     # 7. Supporting modules (alphabetical)

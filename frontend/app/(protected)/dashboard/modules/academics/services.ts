@@ -423,3 +423,83 @@ export async function assignSubjectTeacher(payload: {
 export async function removeSubjectTeacher(id: number | string) {
   await api.delete(`/academics/subject-teachers/${id}/`);
 }
+
+// —— Assessments (A6) ——
+export type AssessmentItem = {
+  id: string;
+  name: string;
+  kind: string;
+  academic_year: number;
+  academic_year_name?: string;
+  term?: number | null;
+  term_name?: string;
+  grade_level: number;
+  grade_name?: string;
+  subject: number | string;
+  subject_name?: string;
+  section?: number | null;
+  max_score: string | number;
+  assessment_date?: string | null;
+  is_published?: boolean;
+  marks_count?: number;
+  entered_count?: number;
+};
+
+export type MarkRow = {
+  id?: string | null;
+  student: string;
+  student_name?: string;
+  admission_number?: string;
+  score: number | string | null;
+  is_absent?: boolean;
+  remarks?: string;
+  percentage?: number | null;
+  grade_letter?: string | null;
+};
+
+export async function fetchAssessments(params?: {
+  academic_year?: number;
+  grade_level?: number;
+  term?: number;
+}) {
+  const { data } = await api.get("/assessments/assessments/", { params });
+  const list = data.results ?? data;
+  return (Array.isArray(list) ? list : []) as AssessmentItem[];
+}
+
+export async function createAssessment(payload: Record<string, unknown>) {
+  const { data } = await api.post("/assessments/assessments/", payload);
+  return data as AssessmentItem;
+}
+
+export async function fetchMarksheet(assessmentId: string) {
+  const { data } = await api.get(`/assessments/assessments/${assessmentId}/marksheet/`);
+  return data as { assessment: AssessmentItem; rows: MarkRow[]; max_score: string };
+}
+
+export async function saveMarksheet(
+  assessmentId: string,
+  marks: { student: string; score?: number | null; is_absent?: boolean; remarks?: string }[]
+) {
+  const { data } = await api.post(`/assessments/assessments/${assessmentId}/marksheet/`, {
+    marks,
+  });
+  return data as { saved: number; errors: unknown[] };
+}
+
+export async function fetchClassResults(params: {
+  grade_level: number;
+  academic_year?: number;
+  term?: number;
+}) {
+  const { data } = await api.get("/assessments/class-results/", { params });
+  return data as {
+    results: {
+      student_id: string;
+      name: string;
+      admission_number: string;
+      average: number | null;
+      scores: { assessment: string; subject: string; percentage: number; grade_letter: string }[];
+    }[];
+  };
+}
