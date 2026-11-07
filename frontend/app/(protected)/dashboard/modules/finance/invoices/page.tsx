@@ -166,19 +166,35 @@ export default function InvoicesPage() {
 
   const printInvoice = () => {
     if (!selectedInvoice || !printRef.current) {
-      toast.error("Nothing to print");
+      toast.error("Nothing to print — open an invoice first");
       return;
     }
-    const html = printRef.current.outerHTML;
-    const w = window.open("", "_blank", "noopener,noreferrer,width=900,height=1000");
+    // Clone node so we print a standalone document (Dialog portals can blank print)
+    const clone = printRef.current.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll("script").forEach((n) => n.remove());
+    const html = clone.outerHTML;
+    const title = String(selectedInvoice.invoice_number || "Invoice").replace(/[<>]/g, "");
+    // Do not use noopener — it can yield a blank window where document.write is blocked
+    const w = window.open("", "_blank", "width=900,height=1000");
     if (!w) {
       toast.error("Allow pop-ups to print");
       return;
     }
-    w.document.write(`<!DOCTYPE html><html><head><title>${selectedInvoice.invoice_number}</title>
+    w.document.open();
+    w.document.write(`<!DOCTYPE html><html><head>
+<meta charset="utf-8"/>
+<title>${title}</title>
 <style>${INVOICE_PRINT_CSS}</style>
-<script>window.onload=function(){window.print();}</script>
-</head><body>${html}</body></html>`);
+</head><body>
+${html}
+<script>
+  window.onload = function () {
+    setTimeout(function () {
+      try { window.focus(); window.print(); } catch (e) {}
+    }, 250);
+  };
+</script>
+</body></html>`);
     w.document.close();
   };
 
