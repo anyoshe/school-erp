@@ -873,3 +873,129 @@ class GradeLevelSubjectViewSet(viewsets.ModelViewSet):
         replace = str(request.data.get("replace", "")).lower() in ("1", "true", "yes")
         created = map_subjects_for_grade(grade, replace=replace)
         return Response({"created": created, "grade": grade.name})
+
+
+
+class SubjectTeacherViewSet(viewsets.ModelViewSet):
+    """Assign teachers to subject + grade for an academic year."""
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_serializer_class(self):
+        from .serializers import SubjectTeacherSerializer, SubjectTeacherCreateUpdateSerializer
+        if self.action in ("create", "update", "partial_update"):
+            return SubjectTeacherCreateUpdateSerializer
+        return SubjectTeacherSerializer
+
+    def get_queryset(self):
+        from .models import SubjectTeacher
+        qs = (
+            SubjectTeacher.objects.filter(school_id__in=accessible_school_ids(self.request))
+            .select_related(
+                "subject",
+                "grade_level",
+                "stream",
+                "teacher",
+                "teacher__user",
+                "academic_year",
+            )
+        )
+        year = self.request.query_params.get("academic_year")
+        grade = self.request.query_params.get("grade_level")
+        subject = self.request.query_params.get("subject")
+        teacher = self.request.query_params.get("teacher")
+        active = self.request.query_params.get("is_active")
+        if year:
+            qs = qs.filter(academic_year_id=year)
+        if grade:
+            qs = qs.filter(grade_level_id=grade)
+        if subject:
+            qs = qs.filter(subject_id=subject)
+        if teacher:
+            qs = qs.filter(teacher_id=teacher)
+        if active is not None and active != "":
+            qs = qs.filter(is_active=str(active).lower() in ("1", "true", "yes"))
+        return qs.order_by("grade_level__order", "subject__name")
+
+    def perform_create(self, serializer):
+        school = selected_school(self.request)
+        serializer.save(school=school)
+
+    def perform_update(self, serializer):
+        school = selected_school(self.request)
+        serializer.save(school=school)
+
+    @action(detail=False, methods=["get"], url_path="coverage")
+    def coverage(self, request):
+        """
+        Matrix for a grade + year: each mapped subject and assigned teacher(s).
+        GET ?grade_level=&academic_year=
+        """
+        from .models import SubjectTeacher, GradeLevelSubject, GradeLevel, AcademicYear
+
+        school = selected_school(request)
+        grade_id = request.query_params.get("grade_level")
+        year_id = request.query_params.get("academic_year")
+        if not grade_id:
+            return Response({"detail": "grade_level is required"}, status=400)
+
+        grade = GradeLevel.objects.filter(pk=grade_id).first()
+        if not grade:
+            return Response({"detail": "Grade not found"}, status=404)
+
+        year = None
+        if year_id:
+            year = AcademicYear.objects.filter(pk=year_id, school=school).first()
+        if not year:
+            year = AcademicYear.objects.filter(school=school, is_active=True).first()
+
+        mapped = (
+            GradeLevelSubject.objects.filter(grade_level=grade, is_active=True)
+            .select_related("subject")
+            .order_by("subject__name")
+        )
+        assign_qs = SubjectTeacher.objects.filter(
+            school=school, grade_level=grade, is_active=True
+        ).select_related("teacher", "teacher__user", "subject")
+        if year:
+            assign_qs = assign_qs.filter(academic_year=year)
+
+        by_subject = {}
+        for a in assign_qs:
+            by_subject.setdefault(a.subject_id, []).append(a)
+
+        from .serializers import SubjectTeacherSerializer
+
+        rows = []
+        assigned_count = 0
+        for m in mapped:
+            assigns = by_subject.get(m.subject_id, [])
+            if assigns:
+                assigned_count += 1
+            rows.append({
+                "subject_id": str(m.subject_id) if not isinstance(m.subject_id, int) else m.subject_id,
+                "subject": m.subject_id,
+                "subject_name": m.subject.name,
+                "is_compulsory": m.is_compulsory,
+                "assignments": SubjectTeacherSerializer(assigns, many=True).data,
+                "assigned": bool(assigns),
+            })
+
+        unmapped_assigned = [
+            a for sid, alist in by_subject.items()
+            if sid not in {m.subject_id for m in mapped}
+            for a in alist
+        ]
+
+        return Response({
+            "grade": {"id": grade.id, "name": grade.name},
+            "academic_year": (
+                {"id": year.id, "name": year.name} if year else None
+            ),
+            "total_subjects": len(rows),
+            "assigned_subjects": assigned_count,
+            "unassigned_subjects": len(rows) - assigned_count,
+            "rows": rows,
+            "extra_assignments": SubjectTeacherSerializer(unmapped_assigned, many=True).data,
+        })

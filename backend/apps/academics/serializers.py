@@ -1,6 +1,7 @@
 # apps/academics/serializers.py
 from rest_framework import serializers
 from .models import (
+    SubjectTeacher,
     Curriculum, GradeLevel, Department, AcademicYear, Term,
     Section, Stream, Subject, SubjectGroup, GradeLevelSubject,
 )
@@ -227,3 +228,56 @@ class GradeRequirementSerializer(serializers.ModelSerializer):
             "is_active",
         ]
         read_only_fields = ["id"]
+
+
+class SubjectTeacherSerializer(serializers.ModelSerializer):
+    subject_name = serializers.CharField(source="subject.name", read_only=True)
+    grade_name = serializers.CharField(source="grade_level.name", read_only=True)
+    teacher_name = serializers.SerializerMethodField()
+    teacher_email = serializers.EmailField(source="teacher.user.email", read_only=True)
+    academic_year_name = serializers.CharField(source="academic_year.name", read_only=True)
+    stream_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = SubjectTeacher
+        fields = [
+            "id",
+            "school",
+            "subject",
+            "subject_name",
+            "grade_level",
+            "grade_name",
+            "stream",
+            "stream_name",
+            "teacher",
+            "teacher_name",
+            "teacher_email",
+            "academic_year",
+            "academic_year_name",
+            "is_active",
+        ]
+        read_only_fields = ["school"]
+
+    def get_teacher_name(self, obj):
+        u = getattr(obj.teacher, "user", None)
+        if not u:
+            return str(obj.teacher_id)
+        name = f"{getattr(u, 'first_name', '') or ''} {getattr(u, 'last_name', '') or ''}".strip()
+        return name or getattr(u, "email", "") or str(obj.teacher_id)
+
+    def get_stream_name(self, obj):
+        return obj.stream.name if obj.stream_id else None
+
+
+class SubjectTeacherCreateUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SubjectTeacher
+        fields = [
+            "id",
+            "subject",
+            "grade_level",
+            "stream",
+            "teacher",
+            "academic_year",
+            "is_active",
+        ]

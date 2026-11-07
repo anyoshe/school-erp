@@ -28,9 +28,10 @@ import {
   fetchCurriculumTemplates, adoptCurriculumTemplate,
   type AcademicYear, type GradeLevel, type CurriculumTemplate, type Term,
   type ClassRegisterStudent, type Subject, type GradeSubject,
+  fetchTeachers, syncTeachersFromUsers, fetchTeacherCoverage, assignSubjectTeacher, removeSubjectTeacher,
 } from "./services";
 
-type Tab = "overview" | "years" | "classes" | "subjects" | "promotion";
+type Tab = "overview" | "years" | "classes" | "subjects" | "teachers" | "promotion";
 
 export default function AcademicsPage() {
   const { currentSchool } = useCurrentSchool();
@@ -73,6 +74,7 @@ export default function AcademicsPage() {
     { id: "years", label: "Years & Terms", icon: CalendarRange },
     { id: "classes", label: "Classes", icon: Layers },
     { id: "subjects", label: "Subjects", icon: BookOpen },
+    { id: "teachers", label: "Teachers", icon: Users },
     { id: "promotion", label: "Promotion", icon: GraduationCap },
   ];
 
@@ -178,6 +180,14 @@ export default function AcademicsPage() {
             qc.invalidateQueries({ queryKey: ["subjects"] });
             qc.invalidateQueries({ queryKey: ["grade-levels"] });
           }}
+        />
+      )}
+
+      {tab === "teachers" && (
+        <TeachersPanel
+          grades={grades}
+          years={years}
+          loading={gradesQ.isLoading || yearsQ.isLoading}
         />
       )}
 
@@ -1664,3 +1674,320 @@ function Empty({ hint }: { hint: string }) {
     </div>
   );
 }
+
+
+function TeachersPanel({
+  grades,
+  years,
+  loading,
+}: {
+  grades: GradeLevel[];
+  years: AcademicYear[];
+  loading: boolean;
+}) {
+  const [gradeId, setGradeId] = useState<number | "">("");
+  const [yearId, setYearId] = useState<number | "">("");
+  const [teachers, setTeachers] = useState<
+    { id: string; full_name?: string; user_email?: string }[]
+  >([]);
+  const [coverage, setCoverage] = useState<{
+    total_subjects: number;
+    assigned_subjects: number;
+    unassigned_subjects: number;
+    rows: {
+      subject: number | string;
+      subject_name: string;
+      is_compulsory?: boolean;
+      assigned: boolean;
+      assignments: {
+        id: number | string;
+        teacher_name?: string;
+        teacher_email?: string;
+        teacher: string;
+      }[];
+    }[];
+    academic_year: { id: number; name: string } | null;
+  } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [pick, setPick] = useState<Record<string, string>>({});
+
+  const sortedGrades = useMemo(
+    () => grades.slice().sort((a, b) => a.order - b.order),
+    [grades]
+  );
+  const activeYear = years.find((y) => y.is_active) || years[0];
+
+  useEffect(() => {
+    if (activeYear && yearId === "") setYearId(activeYear.id);
+  }, [activeYear, yearId]);
+
+  const loadTeachers = async () => {
+    try {
+      let list = await fetchTeachers();
+      if (!list.length) {
+        const synced = await syncTeachersFromUsers();
+        list = synced.teachers || [];
+        if (synced.created) {
+          toast.success(`Linked ${synced.created} teacher account(s)`);
+        }
+      }
+      setTeachers(list);
+    } catch {
+      setTeachers([]);
+    }
+  };
+
+  const loadCoverage = async () => {
+    if (!gradeId) {
+      setCoverage(null);
+      return;
+    }
+    setBusy(true);
+    try {
+      const data = await fetchTeacherCoverage({
+        grade_level: Number(gradeId),
+        academic_year: yearId ? Number(yearId) : undefined,
+      });
+      setCoverage(data);
+    } catch {
+      toast.error("Could not load teacher coverage");
+      setCoverage(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTeachers();
+  }, []);
+
+  useEffect(() => {
+    loadCoverage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gradeId, yearId]);
+
+  const assign = async (subjectId: number | string) => {
+    const teacher = pick[String(subjectId)];
+    const y = yearId || activeYear?.id;
+    if (!teacher || !gradeId || !y) {
+      toast.message("Select a teacher and ensure an academic year is active");
+      return;
+    }
+    setBusy(true);
+    try {
+      await assignSubjectTeacher({
+        subject: subjectId,
+        grade_level: Number(gradeId),
+        teacher,
+        academic_year: Number(y),
+        is_active: true,
+      });
+      toast.success("Teacher assigned");
+      await loadCoverage();
+    } catch (err: any) {
+      const d = err?.response?.data;
+      toast.error(
+        typeof d === "string"
+          ? d
+          : d?.detail || d?.non_field_errors?.[0] || "Assignment failed"
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (id: number | string) => {
+    if (!confirm("Remove this teacher assignment?")) return;
+    setBusy(true);
+    try {
+      await removeSubjectTeacher(id);
+      toast.success("Assignment removed");
+      await loadCoverage();
+    } catch {
+      toast.error("Could not remove assignment");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap justify-between gap-3 items-start">
+        <p className="text-sm text-muted-foreground max-w-2xl">
+          Assign teachers to subjects for each class. Unassigned subjects show here so you can
+          fill gaps before timetable and marks entry.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            try {
+              const r = await syncTeachersFromUsers();
+              setTeachers(r.teachers || []);
+              toast.success(
+                r.created
+                  ? `Created ${r.created} staff profile(s) from teacher users`
+                  : "Teacher list up to date"
+              );
+            } catch {
+              toast.error("Could not sync teachers — add staff under HR or create teacher users");
+            }
+          }}
+        >
+          Sync teacher users
+        </Button>
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-3 max-w-xl">
+        <div>
+          <Label>Academic year</Label>
+          <select
+            className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={yearId === "" ? "" : String(yearId)}
+            onChange={(e) => setYearId(e.target.value ? Number(e.target.value) : "")}
+          >
+            <option value="">Select year…</option>
+            {years.map((y) => (
+              <option key={y.id} value={y.id}>
+                {y.name}
+                {y.is_active ? " (active)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label>Grade / class</Label>
+          <select
+            className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={gradeId === "" ? "" : String(gradeId)}
+            onChange={(e) => setGradeId(e.target.value ? Number(e.target.value) : "")}
+          >
+            <option value="">Select class…</option>
+            {sortedGrades.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {!teachers.length && (
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
+          No teacher staff profiles yet. Use <strong>Sync teacher users</strong> if accounts
+          with role Teacher exist, or create staff under Human Resources.
+        </p>
+      )}
+
+      {loading || busy ? (
+        <div className="flex justify-center py-12 text-muted-foreground gap-2">
+          <Loader2 className="h-5 w-5 animate-spin" /> Loading…
+        </div>
+      ) : !gradeId ? (
+        <p className="text-sm text-muted-foreground text-center py-12">
+          Choose a grade to see subject coverage and assign teachers.
+        </p>
+      ) : coverage ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap gap-2 text-sm">
+            <Badge variant="secondary">
+              {coverage.assigned_subjects}/{coverage.total_subjects} subjects covered
+            </Badge>
+            {coverage.unassigned_subjects > 0 && (
+              <Badge variant="outline" className="border-amber-300 text-amber-800">
+                {coverage.unassigned_subjects} unassigned
+              </Badge>
+            )}
+            {coverage.academic_year && (
+              <Badge variant="outline">Year {coverage.academic_year.name}</Badge>
+            )}
+          </div>
+          <div className="overflow-x-auto rounded-xl border">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Subject</th>
+                  <th className="px-3 py-2">Assigned teacher(s)</th>
+                  <th className="px-3 py-2">Assign</th>
+                </tr>
+              </thead>
+              <tbody>
+                {coverage.rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="px-3 py-8 text-center text-muted-foreground">
+                      No subjects mapped to this grade. Map subjects under the Subjects tab
+                      first.
+                    </td>
+                  </tr>
+                ) : (
+                  coverage.rows.map((row) => (
+                    <tr key={String(row.subject)} className="border-t align-top">
+                      <td className="px-3 py-2 font-medium">
+                        {row.subject_name}
+                        {row.is_compulsory === false && (
+                          <span className="ml-1 text-xs text-muted-foreground">(optional)</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {row.assignments?.length ? (
+                          <ul className="space-y-1">
+                            {row.assignments.map((a) => (
+                              <li key={String(a.id)} className="flex items-center gap-2">
+                                <span>
+                                  {a.teacher_name || a.teacher_email || a.teacher}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="text-xs text-red-600 hover:underline"
+                                  onClick={() => remove(a.id)}
+                                >
+                                  Remove
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <span className="text-amber-700 text-xs">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <select
+                            className="h-9 rounded-md border border-input bg-background px-2 text-sm min-w-[10rem]"
+                            value={pick[String(row.subject)] || ""}
+                            onChange={(e) =>
+                              setPick((p) => ({
+                                ...p,
+                                [String(row.subject)]: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Teacher…</option>
+                            {teachers.map((tch) => (
+                              <option key={tch.id} value={tch.id}>
+                                {tch.full_name || tch.user_email || tch.id}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={!pick[String(row.subject)]}
+                            onClick={() => assign(row.subject)}
+                          >
+                            Assign
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+

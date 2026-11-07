@@ -344,3 +344,82 @@ export async function assignStudentsToSection(payload: {
     only_unassigned: boolean;
   };
 }
+
+export type StaffMember = {
+  id: string;
+  full_name?: string;
+  user_email?: string;
+  role?: string;
+};
+
+export type SubjectTeacherAssignment = {
+  id: number | string;
+  subject: number | string;
+  subject_name?: string;
+  grade_level: number;
+  grade_name?: string;
+  teacher: string;
+  teacher_name?: string;
+  teacher_email?: string;
+  academic_year: number;
+  academic_year_name?: string;
+  is_active?: boolean;
+};
+
+export type CoverageRow = {
+  subject: number | string;
+  subject_name: string;
+  is_compulsory?: boolean;
+  assigned: boolean;
+  assignments: SubjectTeacherAssignment[];
+};
+
+export async function fetchTeachers(): Promise<StaffMember[]> {
+  const { data } = await api.get("/staff/staff/", { params: { role: "TEACHER" } });
+  const list = data.results ?? data;
+  return (Array.isArray(list) ? list : []) as StaffMember[];
+}
+
+export async function syncTeachersFromUsers() {
+  const { data } = await api.post("/staff/staff/sync-teachers/");
+  return data as { created: number; existing: number; teachers: StaffMember[] };
+}
+
+export async function fetchSubjectTeachers(params: {
+  academic_year?: number;
+  grade_level?: number;
+}) {
+  const { data } = await api.get("/academics/subject-teachers/", { params });
+  const list = data.results ?? data;
+  return (Array.isArray(list) ? list : []) as SubjectTeacherAssignment[];
+}
+
+export async function fetchTeacherCoverage(params: {
+  grade_level: number;
+  academic_year?: number;
+}) {
+  const { data } = await api.get("/academics/subject-teachers/coverage/", { params });
+  return data as {
+    grade: { id: number; name: string };
+    academic_year: { id: number; name: string } | null;
+    total_subjects: number;
+    assigned_subjects: number;
+    unassigned_subjects: number;
+    rows: CoverageRow[];
+  };
+}
+
+export async function assignSubjectTeacher(payload: {
+  subject: number | string;
+  grade_level: number;
+  teacher: string;
+  academic_year: number;
+  is_active?: boolean;
+}) {
+  const { data } = await api.post("/academics/subject-teachers/", payload);
+  return data as SubjectTeacherAssignment;
+}
+
+export async function removeSubjectTeacher(id: number | string) {
+  await api.delete(`/academics/subject-teachers/${id}/`);
+}
