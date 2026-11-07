@@ -572,6 +572,13 @@ class Payment(models.Model):
                     student.save(update_fields=["status"])
             except Exception:
                 pass
+
+            # Double-entry: Dr Cash/Bank/M-Pesa, Cr Fee income
+            try:
+                from apps.finance.ledger import post_fee_payment
+                post_fee_payment(self)
+            except Exception as exc:
+                print(f"[ledger] post_fee_payment failed: {exc}")
 class LateFeeRule(models.Model):
 
     school = models.ForeignKey(School, on_delete=models.CASCADE)
@@ -821,21 +828,64 @@ class BillPayment(models.Model):
 
 
 class CashLedgerEntry(models.Model):
-    """Simple cash/bank movement log for school standing."""
+    """Cash/bank movement log linked to an asset account (double-entry companion)."""
     class Direction(models.TextChoices):
         IN = "IN", "Inflow"
         OUT = "OUT", "Outflow"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="cash_ledger")
+    account = models.ForeignKey(
+        "Account",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="ledger_entries",
+        help_text="Asset account affected (Cash / Bank / M-Pesa).",
+    )
     direction = models.CharField(max_length=3, choices=Direction.choices)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     entry_date = models.DateField()
     description = models.CharField(max_length=255)
     reference_number = models.CharField(max_length=100, blank=True)
     source_type = models.CharField(max_length=40, blank=True)
-    source_id = models.UUIDField(null=True, blank=True)
+    source_id = models.CharField(max_length=64, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-entry_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["school", "source_type", "source_id"]),
+        ]
+
+
+class JournalEntry(models.Model):
+    """Balanced double-entry header (debits == credits)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="journal_entries")
+    entry_date = models.DateField()
+    memo = models.CharField(max_length=255)
+    source_type = models.CharField(max_length=40, blank=True, db_index=True)
+    source_id = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-entry_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["school", "source_type", "source_id"]),
+        ]
+
+    def __str__(self):
+        return f"{self.entry_date} {self.memo}"
+
+
+class JournalLine(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    entry = models.ForeignKey(JournalEntry, on_delete=models.CASCADE, related_name="lines")
+    account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name="journal_lines")
+    debit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    credit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    memo = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["id"]

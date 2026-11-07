@@ -150,16 +150,11 @@ class ExpenseViewSet(SchoolScopedMixin, viewsets.ModelViewSet):
     def perform_create(self, serializer):
         school = self.get_school()
         exp = serializer.save(school=school, created_by=self.request.user)
-        CashLedgerEntry.objects.create(
-            school=school,
-            direction=CashLedgerEntry.Direction.OUT,
-            amount=exp.amount,
-            entry_date=exp.expense_date,
-            description=f"Expense: {exp.title}",
-            reference_number=exp.reference_number or "",
-            source_type="expense",
-            source_id=exp.id,
-        )
+        try:
+            from apps.finance.ledger import post_expense
+            post_expense(exp)
+        except Exception as exc:
+            print(f"[ledger] post_expense failed: {exc}")
 
     def perform_destroy(self, instance):
         CashLedgerEntry.objects.filter(source_type="expense", source_id=instance.id).delete()
@@ -440,69 +435,41 @@ class AccountViewSet(SchoolScopedMixin, viewsets.ModelViewSet):
 
 
 class AccountBalancesView(APIView):
-    """
-    Simple position per asset account:
-      inflows ≈ school-fee payments + income receipts tagged to method
-      outflows = expenses paid_from that account
-    Enough for the owner to see which pot is thinning.
-    """
+    """Account balances from double-entry journal lines."""
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
+def get(self, request):
         school = _school(request)
         if not school:
             return Response({"detail": "No school"}, status=400)
         from apps.finance.seed_defaults import ensure_school_finance_defaults
+        from apps.finance.models import Account, JournalLine
+        from django.db.models import Sum, Q
         ensure_school_finance_defaults(school)
 
         accounts = list(Account.objects.filter(school=school, is_active=True).order_by("code"))
         rows = []
         for acc in accounts:
-            out = (
-                Expense.objects.filter(school=school, paid_from_account=acc)
-                .aggregate(t=Sum("amount"))["t"]
-                or Decimal("0")
+            agg = JournalLine.objects.filter(account=acc).aggregate(
+                d=Sum("debit"), c=Sum("credit")
             )
-            # Rough inflow: cash ledger IN for matching description, else 0 for now
-            inflow = (
-                CashLedgerEntry.objects.filter(
-                    school=school,
-                    direction=CashLedgerEntry.Direction.IN,
-                    account_id=getattr(acc, "id", None),
-                ).aggregate(t=Sum("amount"))["t"]
-                if hasattr(CashLedgerEntry, "account_id")
-                else Decimal("0")
-            )
-            # Fallback: attribute fee collections to Bank/Cash/Mpesa by payment_method
-            if float(inflow or 0) == 0 and acc.account_type == Account.AccountType.ASSET:
-                method_map = {
-                    "1000": ["CASH"],
-                    "1010": ["BANK", "BANK_TRANSFER", "CHEQUE"],
-                    "1020": ["MPESA", "M-PESA", "MOBILE"],
-                }
-                methods = method_map.get(acc.code, [])
-                if methods:
-                    from django.db.models import Q
-                    q = Q()
-                    for mth in methods:
-                        q |= Q(payment_method__iexact=mth) | Q(payment_method__icontains=mth)
-                    inflow = (
-                        Payment.objects.filter(
-                            Q(school=school) | Q(invoice__school=school) | Q(invoice__student__school=school)
-                        )
-                        .exclude(payment_method="TRANSFER")
-                        .filter(q)
-                        .aggregate(t=Sum("amount"))["t"]
-                        or Decimal("0")
-                    )
-            bal = Decimal(str(inflow or 0)) - Decimal(str(out or 0))
+            deb = Decimal(str(agg["d"] or 0))
+            cre = Decimal(str(agg["c"] or 0))
+            # Asset/expense: debit-normal; Income/liability: credit-normal
+            if acc.account_type in (Account.AccountType.ASSET, Account.AccountType.EXPENSE):
+                bal = deb - cre
+                inflow, outflow = float(deb), float(cre)
+            else:
+                bal = cre - deb
+                inflow, outflow = float(cre), float(deb)
             rows.append({
                 "id": str(acc.id),
                 "code": acc.code,
                 "name": acc.name,
                 "account_type": acc.account_type,
-                "inflow": float(inflow or 0),
-                "outflow": float(out or 0),
+                "inflow": inflow,
+                "outflow": outflow,
                 "balance": float(bal),
             })
         return Response({"accounts": rows})
+

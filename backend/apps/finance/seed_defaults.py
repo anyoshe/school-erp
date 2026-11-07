@@ -34,6 +34,18 @@ DEFAULT_ASSET_ACCOUNTS = [
     ("1020", "M-Pesa / mobile money"),
 ]
 
+DEFAULT_INCOME_ACCOUNTS = [
+    ("4000", "School fee income"),
+    ("4010", "Admission / registration income"),
+    ("4020", "Interview / assessment income"),
+    ("4090", "Other income"),
+]
+
+DEFAULT_EXPENSE_GL_ACCOUNTS = [
+    ("5000", "Operating expenses"),
+    ("5100", "Staff salaries"),
+]
+
 
 def ensure_school_expense_categories(school):
     from apps.finance.models import ExpenseCategory
@@ -52,13 +64,18 @@ def ensure_school_expense_categories(school):
 def ensure_school_cash_accounts(school):
     from apps.finance.models import Account
     created = 0
-    for code, name in DEFAULT_ASSET_ACCOUNTS:
+    specs = (
+        [(c, n, Account.AccountType.ASSET) for c, n in DEFAULT_ASSET_ACCOUNTS]
+        + [(c, n, Account.AccountType.INCOME) for c, n in DEFAULT_INCOME_ACCOUNTS]
+        + [(c, n, Account.AccountType.EXPENSE) for c, n in DEFAULT_EXPENSE_GL_ACCOUNTS]
+    )
+    for code, name, atype in specs:
         _, was = Account.objects.get_or_create(
             school=school,
             code=code,
             defaults={
                 "name": name,
-                "account_type": Account.AccountType.ASSET,
+                "account_type": atype,
                 "is_active": True,
             },
         )
@@ -68,8 +85,25 @@ def ensure_school_cash_accounts(school):
 
 
 def ensure_school_finance_defaults(school):
-    """Seed expense categories + cash/bank/M-Pesa accounts."""
+    """Seed expense categories + chart of accounts (cash + income + expense)."""
     return {
         "categories": ensure_school_expense_categories(school),
         "accounts": ensure_school_cash_accounts(school),
     }
+
+
+def asset_account_for_payment_method(school, payment_method: str):
+    """Map CASH / BANK / MPESA → asset Account row."""
+    from apps.finance.models import Account
+    ensure_school_cash_accounts(school)
+    method = (payment_method or "CASH").upper().replace(" ", "").replace("_", "")
+    if method in ("MPESA", "MPESA", "MOBILE", "MOBILEMONEY") or "MPESA" in method or "M-PESA" in (payment_method or "").upper():
+        code = "1020"
+    elif method in ("BANK", "BANKTRANSFER", "CHEQUE", "CHECK", "EFT", "RTGS"):
+        code = "1010"
+    else:
+        code = "1000"
+    acc = Account.objects.filter(school=school, code=code).first()
+    if not acc:
+        acc = Account.objects.filter(school=school, account_type=Account.AccountType.ASSET).first()
+    return acc
