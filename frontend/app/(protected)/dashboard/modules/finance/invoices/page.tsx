@@ -3,7 +3,7 @@
 import { FinanceNavLinks } from "../components/FinanceNav";
 import Link from "next/link";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,9 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import api from "@/utils/api";
-import { Loader2, Search, Download, Eye, ArrowLeft } from "lucide-react";
+import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
+import { resolveMediaUrl, stripLogoBackground } from "@/utils/media";
+import { Loader2, Search, Download, Eye, ArrowLeft, Printer } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -40,17 +42,87 @@ type Invoice = {
 };
 
 type InvoiceDetail = Invoice & {
-  payments: Array<{
+  payments?: Array<{
     id: string;
     amount: number;
     payment_method: string;
-    reference_number: string;
-    paid_at: string;
-    paid_by: string | null;
+    reference_number?: string;
+    paid_at?: string;
+    payment_date?: string;
+    paid_by?: string | null;
   }>;
+  lines?: Array<{
+    id?: string;
+    description?: string;
+    amount?: number;
+    original_amount?: number;
+    is_waived?: boolean;
+    discount_amount?: number;
+  }>;
+  student?: Invoice["student"] & { admission_number?: string };
 };
 
+const INVOICE_PRINT_CSS = `
+  * { box-sizing: border-box; }
+  .inv {
+    width: 100%;
+    max-width: 180mm;
+    margin: 0 auto;
+    padding: 12mm 12mm;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: #0f172a;
+    font-size: 10pt;
+    line-height: 1.35;
+  }
+  .inv-logo-wrap { display: flex; justify-content: center; margin-bottom: 8px; }
+  .inv-logo { width: 88px; height: 88px; object-fit: contain; background: transparent; }
+  .inv-logo-fallback {
+    width: 80px; height: 80px; border-radius: 12px; background: #f0fdfa;
+    border: 1px solid #99f6e4; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; color: #0f766e; font-size: 26px;
+  }
+  .inv-school { text-align: center; font-size: 15pt; font-weight: 700; margin: 0 0 2px; }
+  .inv-contact { text-align: center; font-size: 8.5pt; color: #64748b; margin: 0; }
+  .inv-rule { border: none; border-top: 2px solid #0f766e; margin: 10px 0 8px; }
+  .inv-title { text-align: center; font-size: 12pt; font-weight: 700; letter-spacing: 0.14em; color: #0f766e; margin: 0 0 12px; }
+  .inv-meta {
+    display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; row-gap: 8px;
+    margin-bottom: 14px;
+  }
+  .inv-meta .lbl { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b; margin: 0 0 1px; }
+  .inv-meta .val { font-size: 9.5pt; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+  .inv-status {
+    display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 8pt; font-weight: 700;
+    letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .inv-status.paid { background: #d1fae5; color: #065f46; }
+  .inv-status.unpaid { background: #fef3c7; color: #92400e; }
+  .inv-status.overdue { background: #fee2e2; color: #991b1b; }
+  .inv-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 9.5pt; }
+  .inv-table th {
+    font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.04em; color: #64748b;
+    border-bottom: 1px solid #94a3b8; padding: 5px 4px; text-align: left; font-weight: 600;
+  }
+  .inv-table th.num, .inv-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .inv-table td { padding: 5px 4px; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  .inv-totals { margin-left: auto; width: 100%; max-width: 240px; margin-bottom: 12px; }
+  .inv-totals .row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; font-size: 9.5pt; }
+  .inv-totals .row.grand { border-top: 2px solid #0f766e; margin-top: 4px; padding-top: 6px; font-weight: 700; font-size: 11pt; }
+  .inv-totals .bal { color: #b45309; }
+  .inv-totals .ok { color: #047857; }
+  .inv-foot { text-align: center; font-size: 8pt; color: #64748b; margin-top: 16px; }
+  @media print {
+    body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .inv { max-width: none; padding: 10mm; }
+  }
+`;
+
 export default function InvoicesPage() {
+  const { currentSchool } = useCurrentSchool();
+  const currency = currentSchool?.currency_symbol || currentSchool?.currency || "KES";
+  const printRef = useRef<HTMLDivElement>(null);
+  const [logoSrc, setLogoSrc] = useState<string | null>(null);
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDetail | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -69,6 +141,47 @@ export default function InvoicesPage() {
   useEffect(() => {
     fetchInvoices();
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const raw =
+      (currentSchool as any)?.logo_url ||
+      (currentSchool?.logo ? resolveMediaUrl(currentSchool.logo as any) : null);
+    if (!raw) {
+      setLogoSrc(null);
+      return;
+    }
+    (async () => {
+      try {
+        const cleaned = await stripLogoBackground(String(raw));
+        if (!cancelled) setLogoSrc(cleaned || String(raw));
+      } catch {
+        if (!cancelled) setLogoSrc(String(raw));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSchool?.id, (currentSchool as any)?.logo, (currentSchool as any)?.logo_url]);
+
+  const printInvoice = () => {
+    if (!selectedInvoice || !printRef.current) {
+      toast.error("Nothing to print");
+      return;
+    }
+    const html = printRef.current.outerHTML;
+    const w = window.open("", "_blank", "noopener,noreferrer,width=900,height=1000");
+    if (!w) {
+      toast.error("Allow pop-ups to print");
+      return;
+    }
+    w.document.write(`<!DOCTYPE html><html><head><title>${selectedInvoice.invoice_number}</title>
+<style>${INVOICE_PRINT_CSS}</style>
+<script>window.onload=function(){window.print();}</script>
+</head><body>${html}</body></html>`);
+    w.document.close();
+  };
+
 
   const fetchInvoices = async () => {
     setLoading(true);
@@ -383,8 +496,8 @@ export default function InvoicesPage() {
         </CardContent>
       </Card>
 
-      {/* Invoice Details Modal */}
 
+      {/* Invoice Details Modal — printable document */}
       <Dialog
         open={detailOpen}
         onOpenChange={(open) => {
@@ -392,8 +505,8 @@ export default function InvoicesPage() {
           else setDetailOpen(true);
         }}
       >
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader className="print:hidden">
             <DialogTitle className="flex items-center justify-between gap-2 pr-6">
               <span>
                 {selectedInvoice
@@ -402,20 +515,9 @@ export default function InvoicesPage() {
                     ? "Loading invoice…"
                     : "Invoice details"}
               </span>
-              {selectedInvoice && (
-                selectedInvoice.is_paid ? (
-                  <Badge className="bg-secondary-100 text-secondary-700">Paid</Badge>
-                ) : (
-                  <Badge variant="destructive">Unpaid</Badge>
-                )
-              )}
             </DialogTitle>
             <DialogDescription>
-              {selectedInvoice
-                ? `${selectedInvoice.student?.first_name || ""} ${selectedInvoice.student?.last_name || ""}`.trim()
-                : detailLoading
-                  ? "Fetching full bill and payments…"
-                  : detailError || "Select an invoice from the list."}
+              Preview matches print. Includes school logo, fee lines, payments, and balance.
             </DialogDescription>
           </DialogHeader>
 
@@ -431,148 +533,232 @@ export default function InvoicesPage() {
           )}
 
           {!detailLoading && selectedInvoice && (
-            <div className="space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
-                <div className="space-y-2 rounded-lg border bg-slate-50/80 p-3">
-                  <h4 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">
-                    Invoice info
-                  </h4>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Term / Year</span>
-                    <span className="font-medium text-right">
-                      {selectedInvoice.term} {selectedInvoice.academic_year}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Generated</span>
-                    <span className="font-medium">
-                      {new Date(selectedInvoice.generated_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Due date</span>
-                    <span className="font-medium">
-                      {new Date(selectedInvoice.due_date).toLocaleDateString()}
-                    </span>
-                  </div>
-                  {selectedInvoice.installment_number ? (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">Installment</span>
-                      <span className="font-medium">#{selectedInvoice.installment_number}</span>
-                    </div>
-                  ) : null}
-                  {selectedInvoice.payment_plan ? (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">Payment plan</span>
-                      <span className="font-medium text-right">
-                        {selectedInvoice.payment_plan.name}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="space-y-2 rounded-lg border bg-slate-50/80 p-3">
-                  <h4 className="font-semibold text-xs uppercase tracking-wide text-muted-foreground">
-                    Amounts
-                  </h4>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Amount due</span>
-                    <span className="font-medium">
-                      KES {Number(selectedInvoice.amount_due).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-2">
-                    <span className="text-muted-foreground">Amount paid</span>
-                    <span className="font-medium text-emerald-700">
-                      KES {Number(selectedInvoice.amount_paid).toLocaleString()}
-                    </span>
-                  </div>
-                  {Number(selectedInvoice.late_fee_applied) > 0 && (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">Late fee</span>
-                      <span className="font-medium text-red-600">
-                        KES {Number(selectedInvoice.late_fee_applied).toLocaleString()}
-                      </span>
+            <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+              <style dangerouslySetInnerHTML={{ __html: INVOICE_PRINT_CSS }} />
+              <div className="inv" ref={printRef}>
+                <div className="inv-logo-wrap">
+                  {logoSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoSrc} alt="" className="inv-logo" />
+                  ) : (
+                    <div className="inv-logo-fallback">
+                      {(currentSchool?.name || "S").charAt(0).toUpperCase()}
                     </div>
                   )}
-                  <div className="border-t pt-2 mt-1 flex justify-between font-bold">
-                    <span>Balance</span>
-                    <span
-                      className={
-                        Number(selectedInvoice.balance) > 0 ? "text-amber-700" : "text-emerald-700"
-                      }
-                    >
-                      KES {Number(selectedInvoice.balance).toLocaleString()}
-                    </span>
-                  </div>
                 </div>
-              </div>
+                <p className="inv-school">{currentSchool?.name || "School"}</p>
+                <p className="inv-contact">
+                  {[
+                    (currentSchool as any)?.physical_address || (currentSchool as any)?.address,
+                    (currentSchool as any)?.phone || (currentSchool as any)?.contact_phone,
+                    (currentSchool as any)?.email || (currentSchool as any)?.contact_email,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ") || "Official fee invoice"}
+                </p>
+                <hr className="inv-rule" />
+                <p className="inv-title">FEE INVOICE</p>
 
-              {Array.isArray((selectedInvoice as any).lines) &&
-                (selectedInvoice as any).lines.length > 0 && (
-                  <div>
-                    <h4 className="font-semibold mb-2 text-sm">Fee lines</h4>
-                    <ul className="divide-y rounded-lg border text-sm">
-                      {(selectedInvoice as any).lines.map((ln: any) => (
-                        <li
-                          key={ln.id || ln.description}
-                          className="flex justify-between gap-2 px-3 py-2"
-                        >
-                          <span className="truncate">{ln.description || ln.item_name || "Item"}</span>
-                          <span className="tabular-nums shrink-0">
-                            KES {Number(ln.amount || 0).toLocaleString()}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-              {selectedInvoice.payments && selectedInvoice.payments.length > 0 && (
-                <div>
-                  <h4 className="font-semibold mb-2 text-sm">Payment history</h4>
-                  <div className="space-y-2">
-                    {selectedInvoice.payments.map((payment) => (
-                      <div
-                        key={payment.id}
-                        className="flex justify-between items-start bg-slate-50 border p-3 rounded-lg text-sm"
-                      >
+                {(() => {
+                  const inv = selectedInvoice;
+                  const due = Number(inv.amount_due || 0) + Number(inv.late_fee_applied || 0);
+                  const paid = Number(inv.amount_paid || 0);
+                  const bal = Number(inv.balance ?? Math.max(0, due - paid));
+                  const overdue =
+                    !inv.is_paid && inv.due_date && new Date(inv.due_date) < new Date();
+                  const statusClass = inv.is_paid
+                    ? "paid"
+                    : overdue
+                      ? "overdue"
+                      : "unpaid";
+                  const statusLabel = inv.is_paid
+                    ? "Paid"
+                    : overdue
+                      ? "Overdue"
+                      : "Pending";
+                  const studentName = `${inv.student?.first_name || ""} ${inv.student?.last_name || ""}`.trim();
+                  const lines =
+                    Array.isArray(inv.lines) && inv.lines.length > 0
+                      ? inv.lines
+                      : [
+                          {
+                            description: `School fees · ${inv.term || ""} ${inv.academic_year || ""}`.trim(),
+                            amount: Number(inv.amount_due || 0),
+                          },
+                        ];
+                  return (
+                    <>
+                      <div className="inv-meta">
                         <div>
-                          <p className="font-medium">{payment.payment_method}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {payment.paid_at
-                              ? new Date(payment.paid_at).toLocaleDateString()
-                              : "—"}
-                            {payment.reference_number ? ` · ${payment.reference_number}` : ""}
+                          <p className="lbl">Invoice number</p>
+                          <p className="val">{inv.invoice_number}</p>
+                        </div>
+                        <div>
+                          <p className="lbl">Status</p>
+                          <p className="val">
+                            <span className={`inv-status ${statusClass}`}>{statusLabel}</span>
                           </p>
                         </div>
-                        <p className="font-semibold text-emerald-700 tabular-nums">
-                          +KES {Number(payment.amount).toLocaleString()}
-                        </p>
+                        <div>
+                          <p className="lbl">Student</p>
+                          <p className="val">{studentName || "—"}</p>
+                        </div>
+                        <div>
+                          <p className="lbl">Admission no.</p>
+                          <p className="val">
+                            {(inv.student as any)?.admission_number || "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="lbl">Period</p>
+                          <p className="val">
+                            {inv.term || "—"} · {inv.academic_year || "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="lbl">Due date</p>
+                          <p className="val">
+                            {inv.due_date
+                              ? new Date(inv.due_date).toLocaleDateString()
+                              : "—"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="lbl">Issued</p>
+                          <p className="val">
+                            {inv.generated_at
+                              ? new Date(inv.generated_at).toLocaleDateString()
+                              : "—"}
+                          </p>
+                        </div>
+                        {inv.payment_plan?.name ? (
+                          <div>
+                            <p className="lbl">Payment plan</p>
+                            <p className="val">{inv.payment_plan.name}</p>
+                          </div>
+                        ) : null}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
-              {(!selectedInvoice.payments || selectedInvoice.payments.length === 0) && (
-                <p className="text-sm text-muted-foreground">No payments recorded on this invoice yet.</p>
-              )}
+                      <table className="inv-table">
+                        <thead>
+                          <tr>
+                            <th>Description</th>
+                            <th className="num">Amount ({currency})</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lines.map((ln: any, i: number) => (
+                            <tr key={ln.id || i}>
+                              <td>
+                                {ln.description || "Fee item"}
+                                {ln.is_waived ? " (waived)" : ""}
+                                {Number(ln.discount_amount || 0) > 0
+                                  ? ` (discount ${Number(ln.discount_amount).toLocaleString()})`
+                                  : ""}
+                              </td>
+                              <td className="num">
+                                {Number(ln.amount || 0).toLocaleString()}
+                              </td>
+                            </tr>
+                          ))}
+                          {Number(inv.late_fee_applied) > 0 && (
+                            <tr>
+                              <td>Late fee</td>
+                              <td className="num">
+                                {Number(inv.late_fee_applied).toLocaleString()}
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+
+                      <div className="inv-totals">
+                        <div className="row">
+                          <span>Total billed</span>
+                          <span>
+                            {currency} {due.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="row">
+                          <span>Amount paid</span>
+                          <span className="ok">
+                            {currency} {paid.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className={`row grand ${bal > 0 ? "bal" : "ok"}`}>
+                          <span>Balance due</span>
+                          <span>
+                            {currency} {bal.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
+
+                      {inv.payments && inv.payments.length > 0 && (
+                        <>
+                          <p
+                            style={{
+                              fontWeight: 700,
+                              fontSize: "9pt",
+                              textAlign: "left",
+                              margin: "8px 0 6px",
+                              color: "#0f766e",
+                            }}
+                          >
+                            PAYMENTS RECEIVED
+                          </p>
+                          <table className="inv-table">
+                            <thead>
+                              <tr>
+                                <th>Date</th>
+                                <th>Method</th>
+                                <th>Reference</th>
+                                <th className="num">Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {inv.payments.map((pay) => (
+                                <tr key={pay.id}>
+                                  <td>
+                                    {pay.payment_date ||
+                                      (pay.paid_at
+                                        ? new Date(pay.paid_at).toLocaleDateString()
+                                        : "—")}
+                                  </td>
+                                  <td>{pay.payment_method || "—"}</td>
+                                  <td>{pay.reference_number || "—"}</td>
+                                  <td className="num">
+                                    {Number(pay.amount || 0).toLocaleString()}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </>
+                      )}
+
+                      <p className="inv-foot">
+                        Please quote invoice <strong>{inv.invoice_number}</strong> when making
+                        payment. This is a computer-generated invoice.
+                      </p>
+                    </>
+                  );
+                })()}
+              </div>
             </div>
           )}
 
-          <DialogFooter className="gap-2 sm:gap-2">
+          <DialogFooter className="gap-2 sm:gap-2 print:hidden">
             <Button type="button" variant="outline" className="min-w-[7rem]" onClick={closeDetail}>
               Close
             </Button>
             <Button
               type="button"
-              className="min-w-[7rem]"
-              disabled={!selectedInvoice}
-              onClick={() => window.print()}
+              className="min-w-[7rem] bg-teal-700 hover:bg-teal-800"
+              disabled={!selectedInvoice || detailLoading}
+              onClick={printInvoice}
             >
-              <Download className="h-4 w-4 mr-2" />
-              Print
+              <Printer className="h-4 w-4 mr-2" />
+              Print invoice
             </Button>
           </DialogFooter>
         </DialogContent>
