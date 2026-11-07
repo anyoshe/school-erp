@@ -287,6 +287,48 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
     return out
 
 
+
+def _cash_positions_for_schools(school_ids):
+    """Cash / Bank / M-Pesa balances from journal (asset accounts)."""
+    from decimal import Decimal
+    from django.db.models import Sum as DjSum
+    from apps.school.models import School
+    from apps.finance.seed_defaults import ensure_school_finance_defaults
+    from apps.finance.models import Account, JournalLine
+
+    rows = []
+    total = Decimal("0")
+    for sid in school_ids or []:
+        school = School.objects.filter(pk=sid).first()
+        if not school:
+            continue
+        try:
+            ensure_school_finance_defaults(school)
+        except Exception:
+            pass
+        for acc in Account.objects.filter(
+            school=school,
+            account_type=Account.AccountType.ASSET,
+            is_active=True,
+        ).order_by("code"):
+            agg = JournalLine.objects.filter(account=acc).aggregate(
+                d=DjSum("debit"), c=DjSum("credit")
+            )
+            deb = Decimal(str(agg["d"] or 0))
+            cre = Decimal(str(agg["c"] or 0))
+            bal = deb - cre
+            total += bal
+            rows.append({
+                "id": str(acc.id),
+                "code": acc.code,
+                "name": acc.name,
+                "balance": float(bal),
+                "inflow": float(deb),
+                "outflow": float(cre),
+            })
+    return {"accounts": rows, "totalCash": float(total)}
+
+
 def _build_finance_dashboard_summary(request):
     school_ids = _resolve_school_ids(request)
     today = timezone.now().date()
@@ -820,6 +862,7 @@ def _build_finance_dashboard_summary(request):
         "detectedTerm": detected_term,
         "detectedYear": detected_year,
         "feeGroupBreakdown": fee_group_values,
+        "cashPositions": _cash_positions_for_schools(list(school_ids)),
     }
 
 

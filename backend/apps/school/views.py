@@ -33,6 +33,15 @@ class ModuleViewSet(ModelViewSet):
         return Module.objects.all()
 
 
+
+def _cash_positions_for_school(school):
+    try:
+        from apps.finance.views import _cash_positions_for_schools
+        return _cash_positions_for_schools([school.id])
+    except Exception as exc:
+        print(f"[pulse] cash positions: {exc}")
+        return {"accounts": [], "totalCash": 0.0}
+
 class SchoolViewSet(ModelViewSet):
     """
     Manage schools with multi-tenancy enforcement.
@@ -347,6 +356,7 @@ class SchoolViewSet(ModelViewSet):
                 "collected_total": f"{(collected_fees_total + admission_total + interview_total):.2f}",
                 "collection_rate": round(collection_rate, 1),
                 "overdue_balance": f"{overdue_balance:.2f}",
+                "cash_positions": _cash_positions_for_school(school),
             }
         except Exception as exc:
             print(f"[pulse] finance breakdown failed: {exc}")

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
   Users, DollarSign, GraduationCap, TrendingUp, AlertTriangle,
-  ChevronRight, CalendarRange, BookOpen, Sparkles, ClipboardList,
+  ChevronRight, CalendarRange, BookOpen, Sparkles, ClipboardList, Wallet,
 } from "lucide-react";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -78,7 +78,7 @@ export default function DashboardHome() {
       </div>
 
       {/* Colorful KPI row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         <Kpi
           label="Active students"
           value={pulseQ.isLoading ? "…" : String(pulse?.students?.active ?? 0)}
@@ -109,6 +109,27 @@ export default function DashboardHome() {
           sub={`${currency} ${Number(pulse?.finance?.overdue_balance || 0).toLocaleString()} overdue balance`}
           icon={TrendingUp}
           tone="coral"
+          onClick={() => router.push("/dashboard/modules/finance")}
+        />
+        <Kpi
+          label="Cash & bank"
+          value={
+            pulseQ.isLoading
+              ? "…"
+              : `${currency} ${Number(pulse?.finance?.cash_positions?.totalCash || 0).toLocaleString()}`
+          }
+          sub={
+            pulseQ.isLoading
+              ? "Loading…"
+              : (pulse?.finance?.cash_positions?.accounts || [])
+                  .map(
+                    (a: any) =>
+                      `${(a.name || a.code || "").split(" ")[0]} ${Number(a.balance || 0).toLocaleString()}`
+                  )
+                  .join(" · ") || "Cash · Bank · M-Pesa"
+          }
+          icon={Wallet}
+          tone="teal"
           onClick={() => router.push("/dashboard/modules/finance")}
         />
         <Kpi
@@ -146,6 +167,17 @@ export default function DashboardHome() {
               Open Finance to switch term
             </a>
           </p>
+          <div className="grid grid-cols-3 gap-2 mb-4">
+            {(pulse?.finance?.cash_positions?.accounts || []).map((a: any) => (
+              <div key={a.code || a.id} className="rounded-lg border border-emerald-100 bg-emerald-50/50 px-2 py-2 text-center">
+                <p className="text-[10px] text-emerald-900/70 truncate">{a.name}</p>
+                <p className="text-sm font-bold tabular-nums text-emerald-900">
+                  {currency} {Number(a.balance || 0).toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
+
           <div className="grid sm:grid-cols-3 gap-3">
             {[
               {

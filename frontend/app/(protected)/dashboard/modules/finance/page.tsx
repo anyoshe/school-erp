@@ -122,6 +122,7 @@ export default function FinanceDashboard() {
   const [availableYears, setAvailableYears] = useState<string[]>([]);
   const [yearCollected, setYearCollected] = useState(0);
   const [allTimeCollected, setAllTimeCollected] = useState(0);
+  const [cashPositions, setCashPositions] = useState<{ accounts: any[]; totalCash: number }>({ accounts: [], totalCash: 0 });
 
   const fetchDashboardData = useCallback(async () => {
     const params: Record<string, string> = {};
@@ -135,6 +136,7 @@ export default function FinanceDashboard() {
         const { at, data } = JSON.parse(raw);
         if (Date.now() - at < 45_000 && data?.stats) {
           setStats(data.stats);
+      if (data.cashPositions) setCashPositions(data.cashPositions);
           setRevenueByPeriod(data.revenueByPeriod || revenueByPeriod);
           setDetectedTerm(data.detectedTerm || "Term 1");
           setDetectedYear(data.detectedYear || new Date().getFullYear().toString());
@@ -142,6 +144,7 @@ export default function FinanceDashboard() {
           setAvailableYears(data.availableYears || []);
           setYearCollected(Number(data.stats?.yearCollected || data.revenueByPeriod?.year || 0));
           setAllTimeCollected(Number(data.stats?.allTimeCollected || data.revenueByPeriod?.all || 0));
+      if (data.cashPositions) setCashPositions(data.cashPositions);
           setFeeItemTotals(data.feeGroupBreakdown || []);
           setLoading(false);
         }
@@ -156,6 +159,7 @@ export default function FinanceDashboard() {
       });
       const data = response.data;
       setStats(data.stats);
+      if (data.cashPositions) setCashPositions(data.cashPositions);
       setRevenueByPeriod(data.revenueByPeriod);
       setDetectedTerm(data.detectedTerm || "Term 1");
       setDetectedYear(data.detectedYear || new Date().getFullYear().toString());
@@ -163,6 +167,7 @@ export default function FinanceDashboard() {
       setAvailableYears(data.availableYears || []);
       setYearCollected(Number(data.stats?.yearCollected || data.revenueByPeriod?.year || 0));
       setAllTimeCollected(Number(data.stats?.allTimeCollected || data.revenueByPeriod?.all || 0));
+      if (data.cashPositions) setCashPositions(data.cashPositions);
       setFeeItemTotals(data.feeGroupBreakdown || []);
       try {
         sessionStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data }));
@@ -267,6 +272,51 @@ export default function FinanceDashboard() {
               </p>
             </div>
           </div>
+        </div>
+      </div>
+
+
+      {/* Cash on hand — where the money sits right now */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900">Cash position</h2>
+            <p className="text-xs text-muted-foreground">
+              What is in cash, bank and M-Pesa after collections and expenses
+            </p>
+          </div>
+          <p className="text-lg font-bold tabular-nums text-emerald-800">
+            {loading ? "…" : `${currency} ${Number(cashPositions.totalCash || 0).toLocaleString()}`}
+            <span className="ml-1 text-xs font-normal text-muted-foreground">total</span>
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {(cashPositions.accounts?.length
+            ? cashPositions.accounts
+            : [
+                { code: "1000", name: "Cash on hand", balance: 0 },
+                { code: "1010", name: "Bank account", balance: 0 },
+                { code: "1020", name: "M-Pesa / mobile money", balance: 0 },
+              ]
+          ).map((a: any) => (
+            <div
+              key={a.code || a.id}
+              className="rounded-xl border border-emerald-100 bg-emerald-50/40 px-3 py-3"
+            >
+              <p className="text-[11px] font-medium text-emerald-900/70">
+                {a.code ? `${a.code} · ` : ""}
+                {a.name}
+              </p>
+              <p className="text-xl font-bold tabular-nums text-emerald-900 mt-0.5">
+                {loading ? "…" : `${currency} ${Number(a.balance || 0).toLocaleString()}`}
+              </p>
+              {a.inflow != null && (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  In {Number(a.inflow || 0).toLocaleString()} · Out {Number(a.outflow || 0).toLocaleString()}
+                </p>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
