@@ -1,6 +1,7 @@
 "use client";
 
 import { FinanceNavLinks } from "../components/FinanceNav";
+import Link from "next/link";
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import api from "@/utils/api";
-import { Loader2, Search, Download, Eye, X } from "lucide-react";
+import { Loader2, Search, Download, Eye, ArrowLeft } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -174,11 +175,21 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      <div>
-        <h1 className="text-3xl font-bold">Invoices Management</h1>
-        <p className="text-muted-foreground mt-2">
-          Track, view, and manage student billing records
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Button variant="ghost" size="sm" className="h-8 px-2 -ml-2" asChild>
+              <Link href="/dashboard/modules/finance" className="inline-flex items-center gap-1.5 text-slate-700">
+                <ArrowLeft className="h-4 w-4" />
+                Finance
+              </Link>
+            </Button>
+          </div>
+          <h1 className="text-3xl font-bold">Invoices Management</h1>
+          <p className="text-muted-foreground mt-2">
+            Track, view, and manage student billing records
+          </p>
+        </div>
       </div>
 
       {/* Stats Cards */}
