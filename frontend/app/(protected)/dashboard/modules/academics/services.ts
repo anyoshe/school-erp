@@ -273,3 +273,56 @@ export async function mapDefaultSubjectsForGrade(gradeLevelId: number, replace =
   });
   return data as { created: number; grade: string };
 }
+
+export async function rolloverAcademicYear(
+  yearId: number,
+  opts?: { name?: string; activate?: boolean }
+) {
+  const { data } = await api.post(`/academics/academic-years/${yearId}/rollover/`, {
+    name: opts?.name,
+    activate: opts?.activate !== false,
+  });
+  return data as {
+    created: boolean;
+    previous_year: AcademicYear;
+    academic_year: AcademicYear;
+  };
+}
+
+export async function promoteClass(payload: {
+  grade_level_id: number;
+  academic_year_id: number;
+  action?: "PROMOTE" | "REPEAT" | "GRADUATE";
+  target_grade_id?: number;
+  carry_fees?: boolean;
+  carry_term?: string;
+}) {
+  const { data } = await api.post("/students/promote-class/", payload);
+  return data as {
+    source_grade: string;
+    processed: number;
+    errors: { student_id: string; error: string }[];
+    results: {
+      student_id: string;
+      action: string;
+      grade?: string;
+      arrears_amount?: string;
+      arrears_invoice?: string;
+    }[];
+  };
+}
+
+export async function fetchStudentsByGrade(gradeLevelId: number) {
+  const { data } = await api.get("/students/", {
+    params: { current_class: gradeLevelId, page_size: 500 },
+  });
+  const list = data.results ?? data;
+  return (Array.isArray(list) ? list : []) as {
+    id: string;
+    admission_number?: string;
+    first_name?: string;
+    last_name?: string;
+    status?: string;
+    current_class?: { id: number; name: string } | number;
+  }[];
+}

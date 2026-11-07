@@ -434,6 +434,84 @@ class StudentViewSet(viewsets.ModelViewSet):
 
         return Response({"results": results, "errors": errors, "count": len(results)})
 
+    @action(detail=False, methods=["post"], url_path="promote-class")
+    def promote_class(self, request):
+        """
+        Promote / repeat / graduate every active student in a grade.
+        Body: {
+          grade_level_id, academic_year_id,
+          action?: PROMOTE|REPEAT|GRADUATE,
+          target_grade_id?: optional override,
+          carry_fees?: true,
+          carry_term?: "Term 1"
+        }
+        """
+        from apps.academics.models import AcademicYear, GradeLevel
+        from .promotion import promote_student
+
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "School context required"}, status=400)
+
+        grade_id = request.data.get("grade_level_id") or request.data.get("grade_level")
+        year_id = request.data.get("academic_year_id")
+        action = (request.data.get("action") or "PROMOTE").upper()
+        carry_fees = request.data.get("carry_fees", True) is not False
+        carry_term = request.data.get("carry_term") or "Term 1"
+        target_grade_id = request.data.get("target_grade_id")
+
+        if not grade_id:
+            return Response({"detail": "grade_level_id required"}, status=400)
+        if not year_id:
+            return Response({"detail": "academic_year_id required"}, status=400)
+
+        try:
+            year = AcademicYear.objects.get(id=year_id, school=school)
+        except AcademicYear.DoesNotExist:
+            return Response({"detail": "Academic year not found"}, status=404)
+        try:
+            source_grade = GradeLevel.objects.get(id=grade_id, school=school)
+        except GradeLevel.DoesNotExist:
+            return Response({"detail": "Source grade not found"}, status=404)
+
+        target_grade = None
+        if target_grade_id:
+            try:
+                target_grade = GradeLevel.objects.get(id=target_grade_id, school=school)
+            except GradeLevel.DoesNotExist:
+                return Response({"detail": "Target grade not found"}, status=404)
+
+        students = (
+            self.get_queryset()
+            .filter(current_class=source_grade)
+            .exclude(status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED"])
+        )
+        results = []
+        errors = []
+        for student in students:
+            try:
+                results.append(
+                    promote_student(
+                        student,
+                        academic_year=year,
+                        action=action,
+                        target_grade=target_grade,
+                        carry_fees=carry_fees,
+                        carry_term_label=carry_term,
+                        user=request.user,
+                    )
+                )
+            except Exception as e:
+                errors.append({"student_id": str(student.id), "error": str(e)})
+
+        return Response({
+            "source_grade": source_grade.name,
+            "processed": len(results),
+            "errors": errors,
+            "results": results,
+        })
+
+
     @action(detail=False, methods=["post"], url_path="carry-term-balances")
     def carry_term_balances(self, request):
         """

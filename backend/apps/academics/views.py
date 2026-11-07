@@ -472,6 +472,62 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
             "terms": TermSerializer(year.terms.all(), many=True).data,
         })
 
+    @action(detail=True, methods=["post"])
+    def rollover(self, request, pk=None):
+        """
+        Create the next academic year from this one, seed Term 1–3,
+        optionally activate it (default true) and deactivate this year.
+        Body: { "name"?: "2027", "activate"?: true }
+        """
+        from datetime import timedelta
+        from apps.academics.calendar import ensure_default_terms
+        from apps.academics.models import AcademicYear
+
+        year = self.get_object()
+        school = year.school
+        try:
+            next_name = str(int(str(year.name).strip()[:4]) + 1)
+        except Exception:
+            next_name = request.data.get("name") or f"{year.name}-next"
+        next_name = request.data.get("name") or next_name
+
+        span = (year.end_date - year.start_date).days if year.start_date and year.end_date else 364
+        if span < 30:
+            span = 364
+        start = year.end_date + timedelta(days=1) if year.end_date else year.start_date
+        end = start + timedelta(days=span)
+
+        new_year, created = AcademicYear.objects.get_or_create(
+            school=school,
+            name=str(next_name),
+            defaults={
+                "start_date": start,
+                "end_date": end,
+                "is_active": False,
+            },
+        )
+        if not created and not new_year.terms.exists():
+            ensure_default_terms(new_year)
+        elif created:
+            ensure_default_terms(new_year)
+
+        activate = request.data.get("activate", True) is not False
+        if activate:
+            AcademicYear.objects.filter(school=school, is_active=True).update(is_active=False)
+            new_year.is_active = True
+            new_year.save(update_fields=["is_active"])
+            # Prefer Term 1 as current
+            from apps.academics.calendar import set_current_term
+            t1 = new_year.terms.order_by("order").first()
+            if t1:
+                set_current_term(t1)
+
+        return Response({
+            "created": created,
+            "previous_year": AcademicYearSerializer(year).data,
+            "academic_year": AcademicYearSerializer(new_year).data,
+        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
 
 class TermViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
