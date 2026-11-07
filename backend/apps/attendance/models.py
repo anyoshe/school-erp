@@ -96,3 +96,42 @@ class StudentAttendance(models.Model):
 
     def __str__(self):
         return f"{self.student_id} {self.date} {self.status}"
+
+
+class AttendanceAlert(models.Model):
+    """Log of WhatsApp/SMS alerts sent for attendance events."""
+
+    class Channel(models.TextChoices):
+        WHATSAPP = "WHATSAPP", "WhatsApp"
+        SMS = "SMS", "SMS"
+        LOG = "LOG", "Log only"
+
+    class Outcome(models.TextChoices):
+        SENT = "SENT", "Sent"
+        FAILED = "FAILED", "Failed"
+        SKIPPED = "SKIPPED", "Skipped"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="attendance_alerts")
+    student = models.ForeignKey(
+        "students.Student",
+        on_delete=models.CASCADE,
+        related_name="attendance_alerts",
+    )
+    attendance = models.ForeignKey(
+        StudentAttendance,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="alerts",
+    )
+    date = models.DateField()
+    channel = models.CharField(max_length=12, choices=Channel.choices, default=Channel.WHATSAPP)
+    phone = models.CharField(max_length=32, blank=True)
+    message = models.TextField(blank=True)
+    outcome = models.CharField(max_length=12, choices=Outcome.choices, default=Outcome.SKIPPED)
+    detail = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]

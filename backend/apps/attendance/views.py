@@ -191,6 +191,7 @@ class ClassAttendanceSheetView(APIView):
         valid = {c.value for c in StudentAttendance.Status}
         saved = 0
         errors = []
+        notify_results = []
         for row in marks:
             sid = row.get("student_id") or row.get("student")
             st = (row.get("status") or "").upper()
@@ -201,7 +202,7 @@ class ClassAttendanceSheetView(APIView):
             if not student:
                 errors.append({"student_id": sid, "error": "student not found"})
                 continue
-            obj, _ = StudentAttendance.objects.update_or_create(
+            obj, created = StudentAttendance.objects.update_or_create(
                 school=school,
                 student=student,
                 date=day,
@@ -215,8 +216,56 @@ class ClassAttendanceSheetView(APIView):
             )
             saved += 1
 
+            # WhatsApp parent immediately when marked ABSENT
+            if st == StudentAttendance.Status.ABSENT:
+                try:
+                    from apps.attendance.whatsapp import notify_absence
+                    from apps.attendance.models import AttendanceAlert
+
+                    prev = None if created else True
+                    # Avoid spamming if already absent today and alert already SENT
+                    already = AttendanceAlert.objects.filter(
+                        school=school,
+                        student=student,
+                        date=day,
+                        outcome="SENT",
+                    ).exists()
+                    if not already:
+                        res = notify_absence(
+                            student,
+                            school=school,
+                            date_str=str(day),
+                            grade_name=getattr(grade, "name", "") or "",
+                        )
+                        AttendanceAlert.objects.create(
+                            school=school,
+                            student=student,
+                            attendance=obj,
+                            date=day,
+                            channel="WHATSAPP",
+                            phone=res.get("phone") or "",
+                            message=res.get("message") or "",
+                            outcome="SENT" if res.get("ok") else (
+                                "SKIPPED" if not res.get("phone") else "FAILED"
+                            ),
+                            detail=(res.get("detail") or "")[:500],
+                        )
+                        notify_results.append({
+                            "student_id": str(student.id),
+                            "ok": res.get("ok"),
+                            "phone": res.get("phone"),
+                            "detail": res.get("detail"),
+                        })
+                except Exception as exc:
+                    errors.append({"student_id": sid, "error": f"notify: {exc}"})
+
         return Response(
-            {"date": day, "saved": saved, "errors": errors},
+            {
+                "date": day,
+                "saved": saved,
+                "errors": errors,
+                "notifications": notify_results,
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -246,5 +295,104 @@ class AttendanceSummaryView(APIView):
                 "late": by_status.get("LATE", 0),
                 "excused": by_status.get("EXCUSED", 0),
                 "total_marked": sum(by_status.values()),
+            }
+        )
+
+
+
+class AttendanceReportView(APIView):
+    """
+    GET ?from=&to=&grade_level=
+    Returns daily summary + absence list for the range.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import datetime, timedelta
+        from django.db.models import Count, Q
+
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+
+        today = date_cls.today()
+        try:
+            d_from = datetime.strptime(
+                request.query_params.get("from") or str(today), "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            d_from = today
+        try:
+            d_to = datetime.strptime(
+                request.query_params.get("to") or str(today), "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            d_to = today
+        if d_to < d_from:
+            d_from, d_to = d_to, d_from
+
+        grade_id = request.query_params.get("grade_level")
+        qs = StudentAttendance.objects.filter(
+            school=school, date__gte=d_from, date__lte=d_to
+        ).select_related("student", "grade_level", "section")
+        if grade_id:
+            qs = qs.filter(grade_level_id=grade_id)
+
+        daily = (
+            qs.values("date", "status")
+            .annotate(c=Count("id"))
+            .order_by("date")
+        )
+        by_day = {}
+        for row in daily:
+            key = str(row["date"])
+            by_day.setdefault(
+                key,
+                {"date": key, "PRESENT": 0, "ABSENT": 0, "LATE": 0, "EXCUSED": 0},
+            )
+            by_day[key][row["status"]] = row["c"]
+
+        absences = [
+            {
+                "date": str(a.date),
+                "student_id": str(a.student_id),
+                "admission_number": a.student.admission_number or "",
+                "name": f"{a.student.first_name or ''} {a.student.last_name or ''}".strip(),
+                "grade": a.grade_level.name if a.grade_level_id else "",
+                "section": a.section.name if a.section_id else "",
+                "status": a.status,
+                "notes": a.notes or "",
+            }
+            for a in qs.filter(status__in=["ABSENT", "LATE", "EXCUSED"]).order_by(
+                "-date", "student__last_name"
+            )[:500]
+        ]
+
+        totals = qs.values("status").annotate(c=Count("id"))
+        totals_map = {t["status"]: t["c"] for t in totals}
+
+        from apps.attendance.models import AttendanceAlert
+
+        alerts = AttendanceAlert.objects.filter(
+            school=school, date__gte=d_from, date__lte=d_to
+        ).count()
+        alerts_sent = AttendanceAlert.objects.filter(
+            school=school, date__gte=d_from, date__lte=d_to, outcome="SENT"
+        ).count()
+
+        return Response(
+            {
+                "from": str(d_from),
+                "to": str(d_to),
+                "totals": {
+                    "present": totals_map.get("PRESENT", 0),
+                    "absent": totals_map.get("ABSENT", 0),
+                    "late": totals_map.get("LATE", 0),
+                    "excused": totals_map.get("EXCUSED", 0),
+                },
+                "daily": list(by_day.values()),
+                "absences": absences,
+                "alerts": {"total": alerts, "sent": alerts_sent},
             }
         )

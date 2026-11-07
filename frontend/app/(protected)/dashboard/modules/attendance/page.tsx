@@ -14,6 +14,8 @@ import {
   Users,
   XCircle,
   ShieldCheck,
+  FileText,
+  MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,32 +46,21 @@ type Status = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
 
 const STATUS_META: Record<
   Status,
-  { label: string; className: string; icon: typeof CheckCircle2 }
+  { label: string; className: string }
 > = {
-  PRESENT: {
-    label: "Present",
-    className: "bg-emerald-600 text-white border-emerald-700",
-    icon: CheckCircle2,
-  },
-  ABSENT: {
-    label: "Absent",
-    className: "bg-red-600 text-white border-red-700",
-    icon: XCircle,
-  },
-  LATE: {
-    label: "Late",
-    className: "bg-amber-500 text-white border-amber-600",
-    icon: Clock,
-  },
-  EXCUSED: {
-    label: "Excused",
-    className: "bg-sky-600 text-white border-sky-700",
-    icon: ShieldCheck,
-  },
+  PRESENT: { label: "Present", className: "bg-emerald-600 text-white border-emerald-700" },
+  ABSENT: { label: "Absent", className: "bg-red-600 text-white border-red-700" },
+  LATE: { label: "Late", className: "bg-amber-500 text-white border-amber-600" },
+  EXCUSED: { label: "Excused", className: "bg-sky-600 text-white border-sky-700" },
 };
 
 function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysAgoISO(n: number) {
   const d = new Date();
+  d.setDate(d.getDate() - n);
   return d.toISOString().slice(0, 10);
 }
 
@@ -80,6 +71,7 @@ async function fetchGrades(): Promise<GradeLevel[]> {
 
 export default function AttendancePage() {
   const { currentSchool } = useCurrentSchool();
+  const [tab, setTab] = useState<"mark" | "reports">("mark");
   const [date, setDate] = useState(todayISO);
   const [gradeId, setGradeId] = useState<number | "">("");
   const [sectionId, setSectionId] = useState<number | "">("");
@@ -94,6 +86,10 @@ export default function AttendancePage() {
     EXCUSED: 0,
     UNMARKED: 0,
   });
+
+  const [reportFrom, setReportFrom] = useState(daysAgoISO(7));
+  const [reportTo, setReportTo] = useState(todayISO);
+  const [reportGrade, setReportGrade] = useState<number | "">("");
 
   const gradesQ = useQuery({
     queryKey: ["grade-levels", currentSchool?.id],
@@ -122,6 +118,36 @@ export default function AttendancePage() {
       };
     },
     enabled: !!currentSchool?.id,
+  });
+
+  const reportQ = useQuery({
+    queryKey: ["attendance-report", currentSchool?.id, reportFrom, reportTo, reportGrade],
+    queryFn: async () => {
+      const { data } = await api.get("/attendance/report/", {
+        params: {
+          from: reportFrom,
+          to: reportTo,
+          ...(reportGrade ? { grade_level: reportGrade } : {}),
+        },
+      });
+      return data as {
+        from: string;
+        to: string;
+        totals: { present: number; absent: number; late: number; excused: number };
+        daily: { date: string; PRESENT: number; ABSENT: number; LATE: number; EXCUSED: number }[];
+        absences: {
+          date: string;
+          admission_number: string;
+          name: string;
+          grade: string;
+          section: string;
+          status: string;
+          notes: string;
+        }[];
+        alerts: { total: number; sent: number };
+      };
+    },
+    enabled: !!currentSchool?.id && tab === "reports",
   });
 
   const loadSheet = useCallback(async () => {
@@ -162,12 +188,13 @@ export default function AttendancePage() {
   }, [date, gradeId, sectionId]);
 
   useEffect(() => {
+    if (tab !== "mark") return;
     if (gradeId) loadSheet();
     else {
       setRows([]);
       setMarks({});
     }
-  }, [gradeId, sectionId, date, loadSheet]);
+  }, [gradeId, sectionId, date, loadSheet, tab]);
 
   const setAll = (status: Status) => {
     const next: Record<string, Status> = {};
@@ -192,6 +219,7 @@ export default function AttendancePage() {
       toast.message("Mark at least one learner before saving");
       return;
     }
+    const absentCount = payloadMarks.filter((m) => m.status === "ABSENT").length;
     setSaving(true);
     try {
       const { data } = await api.post("/attendance/sheet/", {
@@ -200,7 +228,15 @@ export default function AttendancePage() {
         section: sectionId || undefined,
         marks: payloadMarks,
       });
-      toast.success(`Saved ${data.saved} attendance record(s)`);
+      const notes = data.notifications || [];
+      const sent = notes.filter((n: any) => n.ok).length;
+      const failed = notes.filter((n: any) => n.ok === false).length;
+      toast.success(
+        `Saved ${data.saved} record(s)` +
+          (absentCount
+            ? ` · WhatsApp alerts: ${sent} sent${failed ? `, ${failed} failed/skipped` : ""}`
+            : "")
+      );
       await loadSheet();
       summaryQ.refetch();
     } catch (err: any) {
@@ -211,208 +247,309 @@ export default function AttendancePage() {
   };
 
   const sum = summaryQ.data;
+  const report = reportQ.data;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-textPrimary tracking-tight">
-          Attendance Tracking
-        </h1>
-        <p className="text-textMuted mt-2">
-          Mark daily class attendance for {currentSchool?.name || "your school"}. Uses
-          grades and sections from Academic Management.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold text-textPrimary tracking-tight">
+            Attendance Tracking
+          </h1>
+          <p className="text-textMuted mt-2">
+            Mark class attendance for {currentSchool?.name || "your school"}. Absent learners
+            trigger a WhatsApp message to the parent/guardian when configured.
+          </p>
+        </div>
+        <div className="flex gap-1 rounded-xl border bg-white p-1">
+          <Button
+            size="sm"
+            variant={tab === "mark" ? "default" : "ghost"}
+            className={tab === "mark" ? "bg-primary" : ""}
+            onClick={() => setTab("mark")}
+          >
+            <Calendar className="h-4 w-4 mr-1" />
+            Mark
+          </Button>
+          <Button
+            size="sm"
+            variant={tab === "reports" ? "default" : "ghost"}
+            className={tab === "reports" ? "bg-primary" : ""}
+            onClick={() => setTab("reports")}
+          >
+            <FileText className="h-4 w-4 mr-1" />
+            Reports
+          </Button>
+        </div>
       </div>
 
-      {/* School-wide snapshot */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {[
-          { label: "Present today", value: sum?.present ?? "—", tone: "text-emerald-700" },
-          { label: "Absent", value: sum?.absent ?? "—", tone: "text-red-700" },
-          { label: "Late", value: sum?.late ?? "—", tone: "text-amber-700" },
-          { label: "Marked", value: sum?.total_marked ?? "—", tone: "text-primary" },
-        ].map((c) => (
-          <Card key={c.label} className="border-border rounded-2xl">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">{c.label}</p>
-              <p className={`text-2xl font-bold tabular-nums mt-1 ${c.tone}`}>
-                {summaryQ.isLoading ? "…" : c.value}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Card className="border-border rounded-2xl shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Calendar className="h-4 w-4" />
-            Class attendance sheet
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div>
-              <Label>Date</Label>
-              <Input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label>Grade / class</Label>
-              <select
-                className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
-                value={gradeId === "" ? "" : String(gradeId)}
-                onChange={(e) => {
-                  setGradeId(e.target.value ? Number(e.target.value) : "");
-                  setSectionId("");
-                }}
-              >
-                <option value="">Select class…</option>
-                {grades.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                    {g.student_count != null ? ` (${g.student_count})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <Label>Section (optional)</Label>
-              <select
-                className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
-                value={sectionId === "" ? "" : String(sectionId)}
-                onChange={(e) =>
-                  setSectionId(e.target.value ? Number(e.target.value) : "")
-                }
-                disabled={!sections.length}
-              >
-                <option value="">All sections</option>
-                {sections.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-end gap-2">
-              <Button
-                className="bg-primary flex-1"
-                disabled={!gradeId || saving || !dirtyCount}
-                onClick={save}
-              >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <Save className="h-4 w-4 mr-2" />
-                )}
-                Save ({dirtyCount})
-              </Button>
-            </div>
+      {tab === "mark" && (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: "Present (day)", value: sum?.present ?? "—", tone: "text-emerald-700" },
+              { label: "Absent", value: sum?.absent ?? "—", tone: "text-red-700" },
+              { label: "Late", value: sum?.late ?? "—", tone: "text-amber-700" },
+              { label: "Marked", value: sum?.total_marked ?? "—", tone: "text-primary" },
+            ].map((c) => (
+              <Card key={c.label} className="border-border rounded-2xl">
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground">{c.label}</p>
+                  <p className={`text-2xl font-bold tabular-nums mt-1 ${c.tone}`}>
+                    {summaryQ.isLoading ? "…" : c.value}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
 
-          {gradeId !== "" && (
-            <div className="flex flex-wrap gap-2 items-center">
-              <span className="text-xs text-muted-foreground mr-1">Mark all:</span>
-              {(Object.keys(STATUS_META) as Status[]).map((st) => (
-                <Button
-                  key={st}
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setAll(st)}
-                  disabled={!rows.length}
-                >
-                  {STATUS_META[st].label}
-                </Button>
-              ))}
-              <div className="flex flex-wrap gap-2 ml-auto text-xs">
-                <Badge variant="secondary">Present {counts.PRESENT}</Badge>
-                <Badge variant="secondary">Absent {counts.ABSENT}</Badge>
-                <Badge variant="secondary">Late {counts.LATE}</Badge>
-                <Badge variant="secondary">Excused {counts.EXCUSED}</Badge>
-                <Badge variant="outline">Unmarked {counts.UNMARKED}</Badge>
-              </div>
-            </div>
-          )}
-
-          {!gradeId ? (
-            <p className="text-sm text-muted-foreground text-center py-12">
-              Select a grade to load the class register and mark attendance.
-            </p>
-          ) : loadingSheet ? (
-            <div className="flex justify-center py-16 text-muted-foreground gap-2">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              Loading register…
-            </div>
-          ) : rows.length === 0 ? (
-            <div className="text-center py-12 space-y-2">
-              <Users className="h-10 w-10 mx-auto text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">
-                No learners in this class
-                {sectionId ? " / section" : ""}. Place students under Academics or
-                Students first.
+          <Card className="border-border rounded-2xl shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Calendar className="h-4 w-4" />
+                Class attendance sheet
+              </CardTitle>
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <MessageCircle className="h-3.5 w-3.5" />
+                Marking <strong>Absent</strong> notifies the primary guardian on WhatsApp (when
+                WHATSAPP_PROVIDER is configured on the server).
               </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 w-10">#</th>
-                    <th className="px-3 py-2">Adm #</th>
-                    <th className="px-3 py-2">Name</th>
-                    <th className="px-3 py-2">Section</th>
-                    <th className="px-3 py-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r, i) => {
-                    const current = marks[r.student_id];
-                    return (
-                      <tr key={r.student_id} className="border-t">
-                        <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
-                        <td className="px-3 py-2 font-mono text-xs">
-                          {r.admission_number || "—"}
-                        </td>
-                        <td className="px-3 py-2 font-medium">{r.full_name}</td>
-                        <td className="px-3 py-2">{r.section_name || "—"}</td>
-                        <td className="px-3 py-2">
-                          <div className="flex flex-wrap gap-1">
-                            {(Object.keys(STATUS_META) as Status[]).map((st) => {
-                              const active = current === st;
-                              const meta = STATUS_META[st];
-                              return (
-                                <button
-                                  key={st}
-                                  type="button"
-                                  onClick={() =>
-                                    setMarks((m) => ({ ...m, [r.student_id]: st }))
-                                  }
-                                  className={`text-[11px] px-2 py-1 rounded-md border transition-colors ${
-                                    active
-                                      ? meta.className
-                                      : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
-                                  }`}
-                                >
-                                  {meta.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </td>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                  <Label>Date</Label>
+                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Grade / class</Label>
+                  <select
+                    className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    value={gradeId === "" ? "" : String(gradeId)}
+                    onChange={(e) => {
+                      setGradeId(e.target.value ? Number(e.target.value) : "");
+                      setSectionId("");
+                    }}
+                  >
+                    <option value="">Select class…</option>
+                    {grades.map((g) => (
+                      <option key={g.id} value={g.id}>
+                        {g.name}
+                        {g.student_count != null ? ` (${g.student_count})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label>Section (optional)</Label>
+                  <select
+                    className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    value={sectionId === "" ? "" : String(sectionId)}
+                    onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : "")}
+                    disabled={!sections.length}
+                  >
+                    <option value="">All sections</option>
+                    {sections.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    className="bg-primary w-full"
+                    disabled={!gradeId || saving || !dirtyCount}
+                    onClick={save}
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                    Save ({dirtyCount})
+                  </Button>
+                </div>
+              </div>
+
+              {gradeId !== "" && (
+                <div className="flex flex-wrap gap-2 items-center">
+                  <span className="text-xs text-muted-foreground mr-1">Mark all:</span>
+                  {(Object.keys(STATUS_META) as Status[]).map((st) => (
+                    <Button key={st} type="button" size="sm" variant="outline" onClick={() => setAll(st)} disabled={!rows.length}>
+                      {STATUS_META[st].label}
+                    </Button>
+                  ))}
+                  <div className="flex flex-wrap gap-2 ml-auto text-xs">
+                    <Badge variant="secondary">Present {counts.PRESENT}</Badge>
+                    <Badge variant="secondary">Absent {counts.ABSENT}</Badge>
+                    <Badge variant="secondary">Late {counts.LATE}</Badge>
+                    <Badge variant="secondary">Excused {counts.EXCUSED}</Badge>
+                    <Badge variant="outline">Unmarked {counts.UNMARKED}</Badge>
+                  </div>
+                </div>
+              )}
+
+              {!gradeId ? (
+                <p className="text-sm text-muted-foreground text-center py-12">
+                  Select a grade to load the class register and mark attendance.
+                </p>
+              ) : loadingSheet ? (
+                <div className="flex justify-center py-16 text-muted-foreground gap-2">
+                  <Loader2 className="h-5 w-5 animate-spin" /> Loading register…
+                </div>
+              ) : rows.length === 0 ? (
+                <div className="text-center py-12 space-y-2">
+                  <Users className="h-10 w-10 mx-auto text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    No learners in this class{sectionId ? " / section" : ""}.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto rounded-xl border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 w-10">#</th>
+                        <th className="px-3 py-2">Adm #</th>
+                        <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Section</th>
+                        <th className="px-3 py-2">Status</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                    </thead>
+                    <tbody>
+                      {rows.map((r, i) => {
+                        const current = marks[r.student_id];
+                        return (
+                          <tr key={r.student_id} className="border-t">
+                            <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                            <td className="px-3 py-2 font-mono text-xs">{r.admission_number || "—"}</td>
+                            <td className="px-3 py-2 font-medium">{r.full_name}</td>
+                            <td className="px-3 py-2">{r.section_name || "—"}</td>
+                            <td className="px-3 py-2">
+                              <div className="flex flex-wrap gap-1">
+                                {(Object.keys(STATUS_META) as Status[]).map((st) => {
+                                  const active = current === st;
+                                  const meta = STATUS_META[st];
+                                  return (
+                                    <button
+                                      key={st}
+                                      type="button"
+                                      onClick={() => setMarks((m) => ({ ...m, [r.student_id]: st }))}
+                                      className={`text-[11px] px-2 py-1 rounded-md border transition-colors ${
+                                        active
+                                          ? meta.className
+                                          : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
+                                      }`}
+                                    >
+                                      {meta.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {tab === "reports" && (
+        <div className="space-y-4">
+          <Card className="border-border rounded-2xl">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Attendance report</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                  <Label>From</Label>
+                  <Input type="date" value={reportFrom} onChange={(e) => setReportFrom(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <Label>To</Label>
+                  <Input type="date" value={reportTo} onChange={(e) => setReportTo(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Grade (optional)</Label>
+                  <select
+                    className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
+                    value={reportGrade === "" ? "" : String(reportGrade)}
+                    onChange={(e) => setReportGrade(e.target.value ? Number(e.target.value) : "")}
+                  >
+                    <option value="">All grades</option>
+                    {grades.map((g) => (
+                      <option key={g.id} value={g.id}>{g.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <Button variant="outline" className="w-full" onClick={() => reportQ.refetch()} disabled={reportQ.isFetching}>
+                    {reportQ.isFetching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Refresh
+                  </Button>
+                </div>
+              </div>
+
+              {reportQ.isLoading ? (
+                <div className="py-12 flex justify-center"><Loader2 className="h-6 w-6 animate-spin" /></div>
+              ) : report ? (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <Card className="border-emerald-100 bg-emerald-50/40"><CardContent className="p-3"><p className="text-xs text-muted-foreground">Present</p><p className="text-xl font-bold text-emerald-800">{report.totals.present}</p></CardContent></Card>
+                    <Card className="border-red-100 bg-red-50/40"><CardContent className="p-3"><p className="text-xs text-muted-foreground">Absent</p><p className="text-xl font-bold text-red-800">{report.totals.absent}</p></CardContent></Card>
+                    <Card className="border-amber-100 bg-amber-50/40"><CardContent className="p-3"><p className="text-xs text-muted-foreground">Late</p><p className="text-xl font-bold text-amber-800">{report.totals.late}</p></CardContent></Card>
+                    <Card className="border-sky-100 bg-sky-50/40"><CardContent className="p-3"><p className="text-xs text-muted-foreground">Excused</p><p className="text-xl font-bold text-sky-800">{report.totals.excused}</p></CardContent></Card>
+                    <Card className="border-border"><CardContent className="p-3"><p className="text-xs text-muted-foreground">WhatsApp sent</p><p className="text-xl font-bold">{report.alerts?.sent ?? 0}<span className="text-sm font-normal text-muted-foreground">/{report.alerts?.total ?? 0}</span></p></CardContent></Card>
+                  </div>
+
+                  <div>
+                    <h3 className="text-sm font-semibold mb-2">Absences & late / excused</h3>
+                    <div className="overflow-x-auto rounded-xl border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+                          <tr>
+                            <th className="px-3 py-2">Date</th>
+                            <th className="px-3 py-2">Adm #</th>
+                            <th className="px-3 py-2">Name</th>
+                            <th className="px-3 py-2">Grade</th>
+                            <th className="px-3 py-2">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(report.absences || []).length === 0 ? (
+                            <tr>
+                              <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
+                                No absences in this range
+                              </td>
+                            </tr>
+                          ) : (
+                            report.absences.map((a, i) => (
+                              <tr key={`${a.date}-${a.admission_number}-${i}`} className="border-t">
+                                <td className="px-3 py-2 whitespace-nowrap">{a.date}</td>
+                                <td className="px-3 py-2 font-mono text-xs">{a.admission_number || "—"}</td>
+                                <td className="px-3 py-2 font-medium">{a.name}</td>
+                                <td className="px-3 py-2">{a.grade}{a.section ? ` · ${a.section}` : ""}</td>
+                                <td className="px-3 py-2">
+                                  <Badge variant="secondary" className="text-[10px]">{a.status}</Badge>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-8">Could not load report</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }

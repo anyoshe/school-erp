@@ -5,6 +5,7 @@ from .views import (
     StudentAttendanceViewSet,
     ClassAttendanceSheetView,
     AttendanceSummaryView,
+    AttendanceReportView,
 )
 
 router = DefaultRouter()
@@ -13,6 +14,7 @@ router.register(r"students", StudentAttendanceViewSet, basename="student-attenda
 
 urlpatterns = [
     path("sheet/", ClassAttendanceSheetView.as_view(), name="attendance-sheet"),
+    path("report/", AttendanceReportView.as_view(), name="attendance-report"),
     path("summary/", AttendanceSummaryView.as_view(), name="attendance-summary"),
     path("", include(router.urls)),
 ]
