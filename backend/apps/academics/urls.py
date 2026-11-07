@@ -15,6 +15,7 @@ from .views import (
     StreamViewSet,
     SubjectViewSet,
     GradeRequirementViewSet,
+    CurrentCalendarView,
 )
 
 router = DefaultRouter()
@@ -30,6 +31,7 @@ router.register(r'subjects', SubjectViewSet, basename='subject')
 router.register(r'grade-requirements', GradeRequirementViewSet, basename='grade-requirement')
 
 urlpatterns = [
+    path('current-calendar/', CurrentCalendarView.as_view(), name='current-calendar'),
     path('copy-template/', CopyCurriculumTemplateAPIView.as_view(), name='copy-curriculum-template'),
     path('public/schools/<str:school_id>/grade-levels/', PublicGradeLevelsView.as_view(), name='public-grade-levels'),
     path('public/schools/<str:school_id>/status/', SchoolAcademicStatusView.as_view(), name='school-academic-status'),

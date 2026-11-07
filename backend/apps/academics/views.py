@@ -423,6 +423,10 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
         AcademicYear.objects.filter(school=year.school, is_active=True).update(is_active=False)
         year.is_active = True
         year.save(update_fields=["is_active"])
+        if request.data.get("seed_terms") is not False:
+            from apps.academics.calendar import ensure_default_terms
+            if not year.terms.exists():
+                ensure_default_terms(year)
         return Response(AcademicYearSerializer(year).data)
 
     @action(detail=True, methods=["post"])
@@ -431,7 +435,20 @@ class AcademicYearViewSet(viewsets.ModelViewSet):
         ser = TermCreateUpdateSerializer(data={**request.data, "academic_year": year.pk})
         ser.is_valid(raise_exception=True)
         term = ser.save()
+        if request.data.get("is_current") or ser.validated_data.get("is_current"):
+            from apps.academics.calendar import set_current_term
+            set_current_term(term)
         return Response(TermSerializer(term).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="seed-terms")
+    def seed_terms(self, request, pk=None):
+        year = self.get_object()
+        from apps.academics.calendar import ensure_default_terms
+        created = ensure_default_terms(year)
+        return Response({
+            "created": len(created),
+            "terms": TermSerializer(year.terms.all(), many=True).data,
+        })
 
 
 class TermViewSet(viewsets.ModelViewSet):
@@ -451,6 +468,32 @@ class TermViewSet(viewsets.ModelViewSet):
         if year_id:
             qs = qs.filter(academic_year_id=year_id)
         return qs.order_by("order")
+
+    @action(detail=True, methods=["post"], url_path="set-current")
+    def set_current(self, request, pk=None):
+        term = self.get_object()
+        from apps.academics.calendar import set_current_term
+        set_current_term(term)
+        return Response(TermSerializer(term).data)
+
+
+class CurrentCalendarView(APIView):
+    """Active academic year + current term for the selected school (source of truth)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = selected_school(request)
+        from apps.academics.calendar import get_school_calendar
+        cal = get_school_calendar(school)
+        year = cal["academic_year"]
+        term = cal["term"]
+        return Response({
+            "year_label": cal["year_label"],
+            "term_label": cal["term_label"],
+            "academic_year": AcademicYearSerializer(year).data if year else None,
+            "current_term": TermSerializer(term).data if term else None,
+            "terms": TermSerializer(cal["terms"], many=True).data,
+        })
 
 
 class SectionViewSet(viewsets.ModelViewSet):

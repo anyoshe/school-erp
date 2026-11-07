@@ -10,113 +10,93 @@ def _detect_year_term(school):
     """
     Resolve the school's "current" finance year/term.
 
-    Priority (matches real money movement, not only calendar):
-      1. Most common term/year on invoices (billed activity)
-      2. Most common term/year on payments (collected activity)
-      3. Latest enrollment_term / enrollment_academic_year from admissions
-      4. Academic calendar term covering today
+    Priority:
+      1. Academics module — active year + current (or date-matching) term  [source of truth]
+      2. Most common term/year on invoices (billed activity)
+      3. Most common term/year on payments (collected activity)
+      4. Latest enrollment_term / enrollment_academic_year from admissions
       5. Fallback: calendar year + Term 1
     """
+    # 1) Academic calendar (Phase A1 source of truth)
+    try:
+        from apps.academics.calendar import get_school_calendar
+        cal = get_school_calendar(school)
+        if cal.get("academic_year") is not None:
+            return cal["year_label"], cal["term_label"]
+    except Exception as exc:
+        print(f"[finance] academics calendar: {exc}")
+
     year = str(timezone.now().year)
     term = "Term 1"
-    school_id = getattr(school, "id", school)
 
-    def _pick_mode(pairs):
-        """pairs: iterable of (year, term) → return most frequent non-empty."""
-        from collections import Counter
-        cleaned = []
-        for y, t in pairs:
-            y = str(y or "").strip()
-            t = str(t or "").strip()
-            if not y and not t:
-                continue
-            # Normalize term label to "Term N" when possible
-            tok = _normalize_term_token(t)
-            if tok.isdigit():
-                t = f"Term {tok}"
-            elif t and not t.lower().startswith("term"):
-                t = t
-            if y or t:
-                cleaned.append((y or year, t or term))
-        if not cleaned:
-            return None
-        (y, t), _ = Counter(cleaned).most_common(1)[0]
-        return y, t
+    def _norm_term(raw: str) -> str:
+        s = (raw or "").strip()
+        if not s:
+            return ""
+        low = s.lower().replace("_", " ")
+        for n, label in ((1, "Term 1"), (2, "Term 2"), (3, "Term 3")):
+            if f"term {n}" in low or low == f"t{n}" or low.startswith(f"t{n} "):
+                return label
+        return s
 
     try:
+        from collections import Counter
         from apps.finance.models import Invoice, Payment
-        from django.db.models import Q
+        school_id = getattr(school, "id", school)
 
-        inv_qs = Invoice.objects.filter(
-            Q(school_id=school_id) | Q(student__school_id=school_id)
+        inv_terms = (
+            Invoice.objects.filter(school_id=school_id)
+            .exclude(term__isnull=True)
+            .exclude(term="")
+            .values_list("academic_year", "term")
         )
-        # Prefer recent invoices
-        inv_pairs = list(
-            inv_qs.exclude(term="").exclude(term__isnull=True)
-            .order_by("-generated_at")
-            .values_list("academic_year", "term")[:200]
-        )
-        picked = _pick_mode(inv_pairs)
-        if picked:
-            return str(picked[0])[:9], picked[1]
+        c = Counter()
+        for y, t in inv_terms:
+            yl = (y or "").strip() or year
+            tl = _norm_term(t)
+            if tl:
+                c[(yl, tl)] += 1
+        if c:
+            (year, term), _ = c.most_common(1)[0]
+            return year, term
 
-        pay_qs = Payment.objects.filter(
-            Q(school_id=school_id)
-            | Q(invoice__school_id=school_id)
-            | Q(invoice__student__school_id=school_id)
-        ).exclude(payment_method="TRANSFER")
-        pay_pairs = list(
-            pay_qs.order_by("-payment_date", "-paid_at")
-            .values_list("academic_year", "term", "invoice__academic_year", "invoice__term")[:200]
+        pay_terms = (
+            Payment.objects.filter(school_id=school_id)
+            .exclude(term__isnull=True)
+            .exclude(term="")
+            .values_list("academic_year", "term")
         )
-        # Prefer payment.term/year, else invoice
-        flattened = []
-        for py, pt, iy, it in pay_pairs:
-            flattened.append((py or iy, pt or it))
-        picked = _pick_mode(flattened)
-        if picked:
-            return str(picked[0])[:9], picked[1]
-    except Exception:
-        pass
+        c = Counter()
+        for y, t in pay_terms:
+            yl = (y or "").strip() or year
+            tl = _norm_term(t)
+            if tl:
+                c[(yl, tl)] += 1
+        if c:
+            (year, term), _ = c.most_common(1)[0]
+            return year, term
+    except Exception as exc:
+        print(f"[finance] detect from invoices/payments: {exc}")
 
     try:
         from apps.admissions.models import Application
+        school_id = getattr(school, "id", school)
         app = (
             Application.objects.filter(school_id=school_id)
-            .exclude(enrollment_term="")
             .exclude(enrollment_term__isnull=True)
-            .order_by("-accepted_at", "-submitted_at", "-updated_at")
-            .values_list("enrollment_academic_year", "enrollment_term")
+            .exclude(enrollment_term="")
+            .order_by("-submitted_at")
             .first()
         )
         if app:
-            ay, et = app
-            tok = _normalize_term_token(et)
-            if tok.isdigit():
-                et = f"Term {tok}"
-            return str(ay or year)[:9], (et or term)
+            if app.enrollment_academic_year:
+                year = str(app.enrollment_academic_year).strip() or year
+            if app.enrollment_term:
+                term = _norm_term(app.enrollment_term) or term
+            return year, term
     except Exception:
         pass
 
-    try:
-        from apps.academics.models import AcademicYear, Term
-        from django.db.models import Q
-        ay = (
-            AcademicYear.objects.filter(Q(school_id=school_id), is_active=True).first()
-            or AcademicYear.objects.filter(Q(school_id=school_id)).order_by("-start_date").first()
-        )
-        if ay:
-            year = getattr(ay, "name", None) or str(getattr(ay, "start_date", "") or year)[:9]
-            year = str(year)[:9]
-            today = timezone.now().date()
-            t = (
-                Term.objects.filter(academic_year=ay, start_date__lte=today, end_date__gte=today).first()
-                or Term.objects.filter(academic_year=ay).order_by("order", "start_date").first()
-            )
-            if t:
-                term = t.name or term
-    except Exception:
-        pass
     return year, term
 
 

@@ -707,6 +707,12 @@ class Term(models.Model):
         default=1
     )
 
+    # System "current term" for dashboards, finance, enrollment defaults
+    is_current = models.BooleanField(
+        default=False,
+        help_text="When true, this is the school's current teaching term (within the active year).",
+    )
+
     class Meta:
 
         ordering = ["order"]
@@ -718,12 +724,8 @@ class Term(models.Model):
 
     def __str__(self):
 
-        return f"{self.academic_year.name} - {self.name}"
+        return f"{self.academic_year.name} — {self.name}"
 
-
-# =========================================================
-# GRADE ADMISSION REQUIREMENTS (CBC kit / materials lists)
-# =========================================================
 
 class GradeRequirement(models.Model):
     """

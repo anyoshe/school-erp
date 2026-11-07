@@ -18,6 +18,7 @@ export type Term = {
   start_date: string;
   end_date: string;
   order: number;
+  is_current?: boolean;
 };
 
 export type GradeLevel = {
@@ -73,8 +74,10 @@ export async function createAcademicYear(payload: {
   return data as AcademicYear;
 }
 
-export async function activateAcademicYear(id: number) {
-  const { data } = await api.post(`/academics/academic-years/${id}/activate/`);
+export async function activateAcademicYear(id: number, opts?: { seed_terms?: boolean }) {
+  const { data } = await api.post(`/academics/academic-years/${id}/activate/`, {
+    seed_terms: opts?.seed_terms !== false,
+  });
   return data as AcademicYear;
 }
 
@@ -146,4 +149,25 @@ export async function adoptCurriculumTemplate(templateId: number) {
     template_id: templateId,
   });
   return data;
+}
+
+export async function setCurrentTerm(termId: number) {
+  const { data } = await api.post(`/academics/terms/${termId}/set-current/`);
+  return data as Term;
+}
+
+export async function seedDefaultTerms(yearId: number) {
+  const { data } = await api.post(`/academics/academic-years/${yearId}/seed-terms/`);
+  return data;
+}
+
+export async function fetchCurrentCalendar() {
+  const { data } = await api.get("/academics/current-calendar/");
+  return data as {
+    year_label: string;
+    term_label: string;
+    academic_year: AcademicYear | null;
+    current_term: Term | null;
+    terms: Term[];
+  };
 }

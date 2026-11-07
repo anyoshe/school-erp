@@ -18,10 +18,11 @@ import {
 } from "@/components/ui/dialog";
 import {
   fetchAcademicYears, createAcademicYear, activateAcademicYear, addTerm,
+  setCurrentTerm, seedDefaultTerms, fetchCurrentCalendar,
   fetchGradeLevels, createGradeLevel, createSection,
   fetchSubjects, createSubject, fetchCurricula,
   fetchCurriculumTemplates, adoptCurriculumTemplate,
-  type AcademicYear, type GradeLevel, type CurriculumTemplate,
+  type AcademicYear, type GradeLevel, type CurriculumTemplate, type Term,
 } from "./services";
 
 type Tab = "overview" | "years" | "classes" | "subjects";
@@ -32,6 +33,7 @@ export default function AcademicsPage() {
   const [tab, setTab] = useState<Tab>("overview");
 
   const yearsQ = useQuery({ queryKey: ["academic-years"], queryFn: fetchAcademicYears });
+  const calendarQ = useQuery({ queryKey: ["current-calendar"], queryFn: fetchCurrentCalendar });
   const gradesQ = useQuery({ queryKey: ["grade-levels"], queryFn: fetchGradeLevels });
   const subjectsQ = useQuery({ queryKey: ["subjects"], queryFn: fetchSubjects });
   const curriculaQ = useQuery({ queryKey: ["curricula"], queryFn: fetchCurricula });
@@ -118,6 +120,24 @@ export default function AcademicsPage() {
       </div>
 
       {tab === "overview" && (
+        <>
+        <Card className="border-emerald-200 bg-emerald-50/40 rounded-2xl shadow-sm">
+          <CardContent className="p-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">System calendar</p>
+              <p className="text-lg font-bold text-emerald-950 mt-0.5">
+                {calendarQ.data?.year_label || "—"} · {calendarQ.data?.term_label || "No current term"}
+              </p>
+              <p className="text-xs text-emerald-900/70 mt-1">
+                Finance, main dashboard and enrollment use this year and term. Set it under Years &amp; Terms.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setTab("years")}>
+              Manage years &amp; terms
+            </Button>
+          </CardContent>
+        </Card>
+
         <OverviewPanel
           readiness={readiness}
           activeYear={activeYear}
@@ -125,7 +145,9 @@ export default function AcademicsPage() {
           subjectsCount={subjects.length}
           onJump={setTab}
         />
+      </>
       )}
+
       {tab === "years" && (
         <YearsPanel
           years={years}
@@ -323,11 +345,29 @@ function YearsPanel({
   });
 
   const activateMut = useMutation({
-    mutationFn: (id: number) => activateAcademicYear(id),
+    mutationFn: (id: number) => activateAcademicYear(id, { seed_terms: true }),
     onSuccess: () => {
-      toast.success("Year activated");
+      toast.success("Year activated — default terms added if none existed");
       onRefresh();
     },
+  });
+
+  const seedMut = useMutation({
+    mutationFn: (id: number) => seedDefaultTerms(id),
+    onSuccess: (data) => {
+      toast.success(data?.created ? `Added ${data.created} terms` : "Terms already present");
+      onRefresh();
+    },
+    onError: () => toast.error("Could not seed terms"),
+  });
+
+  const currentMut = useMutation({
+    mutationFn: (termId: number) => setCurrentTerm(termId),
+    onSuccess: () => {
+      toast.success("Current term updated — dashboards & finance will use this");
+      onRefresh();
+    },
+    onError: () => toast.error("Could not set current term"),
   });
 
   const termMut = useMutation({
@@ -372,26 +412,57 @@ function YearsPanel({
                     </p>
                     {/* Mini timeline */}
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {(y.terms || []).map((t) => (
-                        <div
-                          key={t.id}
-                          className="text-xs px-3 py-1.5 rounded-lg bg-primary-50 text-primary-900 border border-primary-100"
+                      {(y.terms || []).map((term) => (
+                        <button
+                          key={term.id}
+                          type="button"
+                          onClick={() => currentMut.mutate(term.id)}
+                          disabled={currentMut.isPending}
+                          className={`text-xs px-3 py-1.5 rounded-lg border transition-colors text-left ${
+                            term.is_current
+                              ? "bg-emerald-600 text-white border-emerald-700 shadow-sm"
+                              : "bg-primary-50 text-primary-900 border-primary-100 hover:border-emerald-400"
+                          }`}
+                          title="Set as current term"
                         >
-                          <span className="font-semibold">{t.name}</span>
-                          <span className="text-primary-700/70 ml-1">
-                            {t.start_date?.slice(5)} – {t.end_date?.slice(5)}
+                          <span className="font-semibold">{term.name}</span>
+                          {term.is_current && (
+                            <span className="ml-1 font-bold">· current</span>
+                          )}
+                          <span className={term.is_current ? "ml-1 opacity-90" : "text-primary-700/70 ml-1"}>
+                            {term.start_date?.slice(5)} – {term.end_date?.slice(5)}
                           </span>
-                        </div>
+                        </button>
                       ))}
                       {(y.terms || []).length === 0 && (
-                        <span className="text-xs text-textMuted">No terms yet</span>
+                        <span className="text-xs text-textMuted">No terms yet — activate year or seed terms</span>
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {!y.is_active && (
                       <Button size="sm" variant="outline" onClick={() => activateMut.mutate(y.id)}>
                         Set active
+                      </Button>
+                    )}
+                    {y.is_active && (y.terms || []).length === 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={seedMut.isPending}
+                        onClick={() => seedMut.mutate(y.id)}
+                      >
+                        Seed Term 1–3
+                      </Button>
+                    )}
+                    {(y.terms || []).length === 0 && !y.is_active && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={seedMut.isPending}
+                        onClick={() => seedMut.mutate(y.id)}
+                      >
+                        Seed Term 1–3
                       </Button>
                     )}
                     <Button size="sm" className="bg-secondary hover:bg-secondary-700 text-white" onClick={() => setTermOpen(y)}>
