@@ -438,16 +438,22 @@ class AccountBalancesView(APIView):
     """Account balances from double-entry journal lines."""
     permission_classes = [IsAuthenticated]
 
-def get(self, request):
+    def get(self, request):
         school = _school(request)
         if not school:
             return Response({"detail": "No school"}, status=400)
         from apps.finance.seed_defaults import ensure_school_finance_defaults
         from apps.finance.models import Account, JournalLine
-        from django.db.models import Sum, Q
         ensure_school_finance_defaults(school)
 
-        accounts = list(Account.objects.filter(school=school, is_active=True).order_by("code"))
+        accounts = list(
+            Account.objects.filter(school=school, is_active=True).order_by("code")
+        )
+        # Optional filter: only cash pots on expenses page
+        only_type = (request.query_params.get("type") or "").upper().strip()
+        if only_type:
+            accounts = [a for a in accounts if a.account_type == only_type]
+
         rows = []
         for acc in accounts:
             agg = JournalLine.objects.filter(account=acc).aggregate(

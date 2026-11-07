@@ -103,8 +103,11 @@ export default function ExpensesPage() {
     queryKey: ["account-balances", schoolId],
     enabled: !!schoolId,
     queryFn: async () => {
-      const res = await api.get("/finance/account-balances/", { headers });
-      return res.data?.accounts || [];
+      const res = await api.get("/finance/account-balances/", {
+        headers,
+        params: { type: "ASSET" },
+      });
+      return Array.isArray(res.data?.accounts) ? res.data.accounts : [];
     },
   });
 
@@ -220,7 +223,8 @@ export default function ExpensesPage() {
       {/* Account positions */}
       <div className="grid sm:grid-cols-3 gap-3">
         {(balances.length ? balances : accounts).slice(0, 6).map((a: any) => {
-          const bal = a.balance != null ? Number(a.balance) : null;
+          const hasBal = a.balance !== undefined && a.balance !== null;
+          const bal = hasBal ? Number(a.balance) : null;
           return (
             <Card key={a.id || a.code} className="border-slate-200">
               <CardContent className="p-4">
@@ -230,12 +234,14 @@ export default function ExpensesPage() {
                 </p>
                 <p
                   className={`text-xl font-bold tabular-nums ${
-                    bal != null && bal < 0 ? "text-rose-700" : "text-slate-900"
+                    bal != null && bal < 0 ? "text-rose-700" : "text-emerald-800"
                   }`}
                 >
                   {bal != null
                     ? `${currency} ${bal.toLocaleString()}`
-                    : "—"}
+                    : balancesQ.isLoading
+                      ? "…"
+                      : `${currency} 0`}
                 </p>
                 {a.inflow != null && (
                   <p className="text-[11px] text-muted-foreground mt-1">
