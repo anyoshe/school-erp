@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { FinanceNavLinks } from "../components/FinanceNav";
 import api from "@/utils/api";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ export default function IncomeReceiptsPage() {
 
   return (
     <div className="space-y-4 p-4 sm:p-6 max-w-5xl mx-auto">
+      <FinanceNavLinks />
       <div className="flex items-center gap-3">
         <Button asChild variant="outline" size="sm">
           <Link href="/dashboard/modules/finance">

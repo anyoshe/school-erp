@@ -1,3 +1,4 @@
+import { FinanceNavLinks } from "../components/FinanceNav";
 "use client";
 
 import { useState, useEffect } from "react";
@@ -164,6 +165,7 @@ export default function InvoicesPage() {
   // Shell first — never block the whole module on network
   return (
     <div className="space-y-6">
+      <FinanceNavLinks />
       {loading && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground rounded-xl border bg-stone-50 px-4 py-3">
           <Loader2 className="h-4 w-4 animate-spin" />

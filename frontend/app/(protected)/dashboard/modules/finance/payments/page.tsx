@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { FinanceNavLinks } from "../components/FinanceNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -279,6 +280,7 @@ export default function PaymentsPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-5xl mx-auto">
+      <FinanceNavLinks />
       <div className="flex flex-wrap items-center gap-3">
         <Button asChild variant="outline" size="sm">
           <Link href="/dashboard/modules/finance">

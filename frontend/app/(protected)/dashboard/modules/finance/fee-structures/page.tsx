@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Pencil, Trash2, Copy, Plus, Loader2, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { FinanceNavLinks } from "../components/FinanceNav";
 import api from "@/utils/api";
 import { toast } from "sonner";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
@@ -171,6 +172,7 @@ export default function FeeStructuresList() {
 
   return (
     <div>
+      <FinanceNavLinks />
       <div className="mb-3 flex items-center gap-2">
         <Button asChild variant="outline" size="sm">
           <Link href="/dashboard/modules/finance">

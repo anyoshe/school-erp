@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { FinanceNavLinks } from "../components/FinanceNav";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Loader2, Wallet } from "lucide-react";
 import api from "@/utils/api";
@@ -136,6 +137,7 @@ export default function ExpensesPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-6xl mx-auto">
+      <FinanceNavLinks />
       <div className="flex flex-wrap items-center gap-3">
         <Button asChild variant="outline" size="sm">
           <Link href="/dashboard/modules/finance">

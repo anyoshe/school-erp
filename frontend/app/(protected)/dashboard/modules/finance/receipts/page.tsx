@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
+import { FinanceNavLinks } from "../components/FinanceNav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -364,6 +365,7 @@ export default function ReceiptPrintPage() {
 
   return (
     <div className="space-y-6 p-4 sm:p-6 max-w-6xl mx-auto">
+      <FinanceNavLinks />
       <style dangerouslySetInnerHTML={{ __html: RECEIPT_CSS }} />
 
       <div className="flex flex-wrap items-center gap-3">
