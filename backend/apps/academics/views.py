@@ -759,3 +759,61 @@ class ClassRegisterView(APIView):
             "count": len(rows),
             "students": rows,
         })
+
+
+
+class GradeLevelSubjectViewSet(viewsets.ModelViewSet):
+    """Map subjects onto grade levels (compulsory / optional)."""
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_serializer_class(self):
+        from .serializers import (
+            GradeLevelSubjectSerializer,
+            GradeLevelSubjectCreateUpdateSerializer,
+        )
+        if self.action in ("create", "update", "partial_update"):
+            return GradeLevelSubjectCreateUpdateSerializer
+        return GradeLevelSubjectSerializer
+
+    def get_queryset(self):
+        from .models import GradeLevelSubject
+        qs = GradeLevelSubject.objects.select_related(
+            "grade_level", "subject"
+        ).filter(
+            grade_level__school_id__in=accessible_school_ids(self.request)
+        )
+        grade = self.request.query_params.get("grade_level")
+        if grade:
+            qs = qs.filter(grade_level_id=grade)
+        return qs.order_by("order", "subject__name")
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    @action(detail=False, methods=["post"], url_path="seed-defaults")
+    def seed_defaults(self, request):
+        """Create CBC-style subject catalog and map to all school grades."""
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+        from apps.academics.subject_map import seed_school_subject_map
+        replace = str(request.data.get("replace", "")).lower() in ("1", "true", "yes")
+        result = seed_school_subject_map(school, replace=replace)
+        return Response(result)
+
+    @action(detail=False, methods=["post"], url_path="map-grade")
+    def map_grade(self, request):
+        """Map default subjects for one grade_level id."""
+        school = selected_school(request)
+        grade_id = request.data.get("grade_level")
+        if not grade_id:
+            return Response({"detail": "grade_level required"}, status=400)
+        from .models import GradeLevel
+        grade = GradeLevel.objects.filter(pk=grade_id, school=school).first()
+        if not grade:
+            return Response({"detail": "Grade not found"}, status=404)
+        from apps.academics.subject_map import map_subjects_for_grade
+        replace = str(request.data.get("replace", "")).lower() in ("1", "true", "yes")
+        created = map_subjects_for_grade(grade, replace=replace)
+        return Response({"created": created, "grade": grade.name})

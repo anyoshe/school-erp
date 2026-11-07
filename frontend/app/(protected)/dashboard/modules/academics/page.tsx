@@ -22,9 +22,11 @@ import {
   fetchGradeLevels, createGradeLevel, createSection,
   fetchClassRegister, ensureGradeSections,
   fetchSubjects, createSubject, fetchCurricula,
+  fetchGradeSubjects, assignSubjectToGrade, removeGradeSubject,
+  seedSubjectMap, mapDefaultSubjectsForGrade,
   fetchCurriculumTemplates, adoptCurriculumTemplate,
   type AcademicYear, type GradeLevel, type CurriculumTemplate, type Term,
-  type ClassRegisterStudent,
+  type ClassRegisterStudent, type Subject, type GradeSubject,
 } from "./services";
 
 type Tab = "overview" | "years" | "classes" | "subjects";
@@ -168,8 +170,12 @@ export default function AcademicsPage() {
       {tab === "subjects" && (
         <SubjectsPanel
           subjects={subjects}
+          grades={grades}
           loading={subjectsQ.isLoading}
-          onRefresh={() => qc.invalidateQueries({ queryKey: ["subjects"] })}
+          onRefresh={() => {
+            qc.invalidateQueries({ queryKey: ["subjects"] });
+            qc.invalidateQueries({ queryKey: ["grade-levels"] });
+          }}
         />
       )}
     </div>
@@ -836,53 +842,308 @@ function ClassesPanel({
 }
 
 
+
 function SubjectsPanel({
-  subjects, loading, onRefresh,
+  subjects, grades, loading, onRefresh,
 }: {
-  subjects: { id: number; name: string; code?: string; is_compulsory: boolean }[];
+  subjects: Subject[];
+  grades: GradeLevel[];
   loading: boolean;
   onRefresh: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", code: "", is_compulsory: true });
+  const [gradeId, setGradeId] = useState<number | "">("");
+  const [mapped, setMapped] = useState<GradeSubject[]>([]);
+  const [mapLoading, setMapLoading] = useState(false);
+  const [assignId, setAssignId] = useState<string>("");
+
+  const sortedGrades = useMemo(
+    () => grades.slice().sort((a, b) => a.order - b.order),
+    [grades]
+  );
+
+  const loadMap = async (gid: number) => {
+    setMapLoading(true);
+    try {
+      const rows = await fetchGradeSubjects(gid);
+      setMapped(rows);
+    } catch {
+      setMapped([]);
+      toast.error("Could not load subjects for this grade");
+    } finally {
+      setMapLoading(false);
+    }
+  };
+
   const mut = useMutation({
     mutationFn: () => createSubject(form),
     onSuccess: () => {
-      toast.success("Subject added");
+      toast.success("Subject created");
       setOpen(false);
       setForm({ name: "", code: "", is_compulsory: true });
       onRefresh();
     },
-    onError: () => toast.error("Could not add subject"),
+    onError: () => toast.error("Could not create subject"),
   });
+
+  const seedMut = useMutation({
+    mutationFn: () => seedSubjectMap(false),
+    onSuccess: (data) => {
+      toast.success(
+        `Catalog ready (${data.subjects} subjects). Mapped ${data.mapped} links across ${data.grades} grades.`
+      );
+      onRefresh();
+      if (gradeId) loadMap(Number(gradeId));
+    },
+    onError: () => toast.error("Could not seed subject map"),
+  });
+
+  const mapGradeMut = useMutation({
+    mutationFn: () => mapDefaultSubjectsForGrade(Number(gradeId), false),
+    onSuccess: (data) => {
+      toast.success(`${data.grade}: added ${data.created} subject(s)`);
+      loadMap(Number(gradeId));
+      onRefresh();
+    },
+    onError: () => toast.error("Could not map subjects for grade"),
+  });
+
+  const assignMut = useMutation({
+    mutationFn: () =>
+      assignSubjectToGrade({
+        grade_level: Number(gradeId),
+        subject: Number(assignId),
+        is_compulsory: true,
+        order: mapped.length + 1,
+      }),
+    onSuccess: () => {
+      toast.success("Subject assigned");
+      setAssignId("");
+      loadMap(Number(gradeId));
+    },
+    onError: (err: any) => {
+      const d = err?.response?.data;
+      toast.error(d?.detail || d?.non_field_errors?.[0] || "Already assigned or failed");
+    },
+  });
+
+  const unassigned = subjects.filter(
+    (s) => !mapped.some((m) => Number(m.subject) === Number(s.id))
+  );
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <p className="text-textMuted text-sm">Subject catalogue for timetables, teachers, and later exams.</p>
-        <Button className="bg-primary hover:bg-primary-700" onClick={() => setOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" /> Subject
-        </Button>
+      <div className="flex flex-wrap justify-between items-center gap-2">
+        <p className="text-textMuted text-sm">
+          Build a subject catalog, then map core and optional subjects to each grade.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            disabled={seedMut.isPending}
+            onClick={() => seedMut.mutate()}
+          >
+            {seedMut.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Sparkles className="h-4 w-4 mr-2" />
+            )}
+            Seed CBC subject map
+          </Button>
+          <Button className="bg-primary hover:bg-primary-700" onClick={() => setOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" /> Subject
+          </Button>
+        </div>
       </div>
-      {loading ? (
-        <div className="h-32 animate-pulse bg-stone-100 rounded-2xl" />
-      ) : subjects.length === 0 ? (
-        <Empty hint="Math, English, Kiswahili…" />
-      ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {subjects.map((s) => (
-            <div key={s.id} className="rounded-xl border border-border bg-white px-4 py-3 flex items-center justify-between">
-              <div>
-                <p className="font-medium text-textPrimary">{s.name}</p>
-                {s.code && <p className="text-xs text-textMuted">{s.code}</p>}
+
+      <div className="grid lg:grid-cols-5 gap-4">
+        {/* Catalog */}
+        <Card className="lg:col-span-2 border-border rounded-2xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Subject catalog</CardTitle>
+            <p className="text-xs text-muted-foreground">{subjects.length} subject(s)</p>
+          </CardHeader>
+          <CardContent className="space-y-1 max-h-[420px] overflow-y-auto">
+            {loading ? (
+              <div className="h-24 animate-pulse bg-stone-100 rounded-xl" />
+            ) : subjects.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">
+                No subjects yet. Seed the CBC map or add subjects manually.
+              </p>
+            ) : (
+              subjects.map((s) => (
+                <div
+                  key={s.id}
+                  className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
+                >
+                  <div>
+                    <p className="font-medium">{s.name}</p>
+                    {s.code ? (
+                      <p className="text-[11px] text-muted-foreground font-mono">{s.code}</p>
+                    ) : null}
+                  </div>
+                  {s.is_compulsory ? (
+                    <Badge className="bg-primary/10 text-primary border-0 text-[10px]">Core</Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-[10px]">Optional</Badge>
+                  )}
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Grade map */}
+        <Card className="lg:col-span-3 border-border rounded-2xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Subjects by grade</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Select a grade to view or edit its teaching subjects.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2 items-end">
+              <div className="min-w-[180px] flex-1">
+                <Label>Grade</Label>
+                <select
+                  className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={gradeId === "" ? "" : String(gradeId)}
+                  onChange={(e) => {
+                    const v = e.target.value ? Number(e.target.value) : "";
+                    setGradeId(v);
+                    if (v) loadMap(Number(v));
+                    else setMapped([]);
+                  }}
+                >
+                  <option value="">Select grade…</option>
+                  {sortedGrades.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
               </div>
-              {s.is_compulsory && (
-                <Badge className="bg-secondary-50 text-secondary-800 border-0 text-[10px]">Core</Badge>
+              {gradeId !== "" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={mapGradeMut.isPending}
+                  onClick={() => mapGradeMut.mutate()}
+                >
+                  Apply default subjects
+                </Button>
               )}
             </div>
-          ))}
-        </div>
-      )}
+
+            {!gradeId ? (
+              <p className="text-sm text-muted-foreground py-8 text-center">
+                Choose a grade to see its subject list.
+              </p>
+            ) : mapLoading ? (
+              <div className="flex justify-center py-10 text-muted-foreground gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" /> Loading…
+              </div>
+            ) : (
+              <>
+                <div className="rounded-xl border overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2">#</th>
+                        <th className="px-3 py-2">Subject</th>
+                        <th className="px-3 py-2">Type</th>
+                        <th className="px-3 py-2 w-20" />
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mapped.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
+                            No subjects mapped. Use &quot;Apply default subjects&quot; or assign from catalog.
+                          </td>
+                        </tr>
+                      ) : (
+                        mapped.map((row, idx) => (
+                          <tr key={row.id} className="border-t">
+                            <td className="px-3 py-2 text-muted-foreground">{idx + 1}</td>
+                            <td className="px-3 py-2 font-medium">
+                              {row.subject_name}
+                              {row.subject_code ? (
+                                <span className="ml-2 text-[11px] font-mono text-muted-foreground">
+                                  {row.subject_code}
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-2">
+                              {row.is_compulsory ? (
+                                <Badge className="bg-emerald-50 text-emerald-800 border-0 text-[10px]">
+                                  Compulsory
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-[10px]">
+                                  Optional
+                                </Badge>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-red-600 h-8"
+                                onClick={async () => {
+                                  try {
+                                    await removeGradeSubject(row.id);
+                                    toast.success("Removed");
+                                    loadMap(Number(gradeId));
+                                  } catch {
+                                    toast.error("Could not remove");
+                                  }
+                                }}
+                              >
+                                Remove
+                              </Button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {unassigned.length > 0 && (
+                  <div className="flex flex-wrap gap-2 items-end pt-1">
+                    <div className="min-w-[200px] flex-1">
+                      <Label>Assign from catalog</Label>
+                      <select
+                        className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
+                        value={assignId}
+                        onChange={(e) => setAssignId(e.target.value)}
+                      >
+                        <option value="">Select subject…</option>
+                        {unassigned.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="bg-primary"
+                      disabled={!assignId || assignMut.isPending}
+                      onClick={() => assignMut.mutate()}
+                    >
+                      Assign
+                    </Button>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="rounded-2xl sm:max-w-sm">
           <DialogHeader><DialogTitle>New subject</DialogTitle></DialogHeader>
@@ -913,7 +1174,6 @@ function SubjectsPanel({
     </div>
   );
 }
-
 
 function AdoptCurriculumPanel({
   templates,

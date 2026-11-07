@@ -228,3 +228,48 @@ export async function createSectionFull(payload: {
   const { data } = await api.post("/academics/sections/", payload);
   return data as Section;
 }
+
+export type GradeSubject = {
+  id: number;
+  grade_level: number;
+  grade_level_name?: string;
+  subject: number;
+  subject_name?: string;
+  subject_code?: string;
+  is_compulsory: boolean;
+  order: number;
+};
+
+export async function fetchGradeSubjects(gradeLevelId: number | string) {
+  const { data } = await api.get("/academics/grade-subjects/", {
+    params: { grade_level: gradeLevelId },
+  });
+  return (data.results ?? data) as GradeSubject[];
+}
+
+export async function assignSubjectToGrade(payload: {
+  grade_level: number;
+  subject: number;
+  is_compulsory?: boolean;
+  order?: number;
+}) {
+  const { data } = await api.post("/academics/grade-subjects/", payload);
+  return data as GradeSubject;
+}
+
+export async function removeGradeSubject(id: number) {
+  await api.delete(`/academics/grade-subjects/${id}/`);
+}
+
+export async function seedSubjectMap(replace = false) {
+  const { data } = await api.post("/academics/grade-subjects/seed-defaults/", { replace });
+  return data as { subjects: number; mapped: number; grades: number };
+}
+
+export async function mapDefaultSubjectsForGrade(gradeLevelId: number, replace = false) {
+  const { data } = await api.post("/academics/grade-subjects/map-grade/", {
+    grade_level: gradeLevelId,
+    replace,
+  });
+  return data as { created: number; grade: string };
+}
