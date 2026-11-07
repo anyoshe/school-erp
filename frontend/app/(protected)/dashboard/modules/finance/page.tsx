@@ -14,14 +14,11 @@ import {
   ClipboardList,
   Scale,
   ScrollText,
-  Menu,
-  X,
 } from "lucide-react";
 import api from "@/utils/api";
 import { toast } from "sonner";
 import Link from "next/link";
 import { FinanceNavLinks } from "./components/FinanceNav";
-import { usePathname } from "next/navigation";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 
 interface FeeItemTotal {
