@@ -239,10 +239,20 @@ class SchoolViewSet(ModelViewSet):
                 Q(school=school) | Q(invoice__student__school=school) | Q(invoice__school=school)
             )
             pay_real = pay_qs.exclude(payment_method="TRANSFER")
-            collected_fees_month = (
-                pay_real.filter(paid_at__gte=month_start).aggregate(t=Sum("amount"))["t"]
-                or Decimal("0")
+            # Detect term/year from invoices / payments / enrollment (same as Finance)
+            try:
+                from apps.finance.clearance import _detect_year_term, term_match_q
+                year_label, term_label = _detect_year_term(school)
+            except Exception:
+                year_label, term_label = str(today.year), "Term 1"
+
+            pay_term_qs = pay_real.filter(
+                Q(academic_year=year_label) | Q(invoice__academic_year=year_label)
+            ).filter(
+                term_match_q("term", term_label) | term_match_q("invoice__term", term_label)
             )
+            # Fees for detected term (not calendar month — matches admission term)
+            collected_fees_month = pay_term_qs.aggregate(t=Sum("amount"))["t"] or Decimal("0")
             collected_fees_total = pay_real.aggregate(t=Sum("amount"))["t"] or Decimal("0")
 
             # Pre-enrollment charges: ONLY ApplicationCharge paid amounts
@@ -301,26 +311,24 @@ class SchoolViewSet(ModelViewSet):
                 or Decimal("0")
             )
 
-            collected_fees_month = collected_fees_month + deposit_month
-            collected_fees_total = collected_fees_total + deposit_total
-
+            # Note: enrollment deposits already in Payment after clearance path;
+            # only add deposit_month when they are not yet on Payment ledger.
             collected_month = collected_fees_month + admission_month + interview_month
 
-            billed = inv.aggregate(t=Sum("amount_due"))["t"] or Decimal("0")
-            paid_total = inv.aggregate(t=Sum("amount_paid"))["t"] or Decimal("0")
+            # Term-scoped billed / outstanding (same term as admissions)
+            inv_term = inv.filter(academic_year=year_label).filter(term_match_q("term", term_label))
+            if not inv_term.exists():
+                inv_term = inv.filter(term_match_q("term", term_label))
+            billed = inv_term.aggregate(t=Sum("amount_due"))["t"] or Decimal("0")
+            paid_total = inv_term.aggregate(t=Sum("amount_paid"))["t"] or Decimal("0")
+            outstanding = inv_term.filter(is_paid=False).aggregate(t=Sum("balance"))["t"] or Decimal("0")
             collection_rate = float((paid_total / billed * 100) if billed > 0 else 0)
+            overdue = inv_term.filter(is_paid=False, due_date__lt=today).count()
+            unpaid = inv_term.filter(is_paid=False).count()
             overdue_balance = (
-                inv.filter(is_paid=False, due_date__lt=today).aggregate(t=Sum("balance"))["t"]
+                inv_term.filter(is_paid=False, due_date__lt=today).aggregate(t=Sum("balance"))["t"]
                 or Decimal("0")
             )
-            # Current term label for owner dashboard
-            term_label = "Term"
-            year_label = str(today.year)
-            try:
-                from apps.finance.clearance import _detect_year_term
-                year_label, term_label = _detect_year_term(school)
-            except Exception:
-                pass
 
             finance = {
                 "current_term": term_label,

@@ -360,49 +360,72 @@ def _build_finance_dashboard_summary(request):
     selected_year = q_year or auto_year
     selected_term = q_term or auto_term
 
-    # Available terms/years from invoices + payments for the switcher
-    term_labels = list(
-        inv_base.exclude(term="").exclude(term__isnull=True)
-        .values_list("term", flat=True).distinct()
-    )
+    # Available terms/years: invoices, payments, enrollment choices
+    from apps.finance.clearance import term_match_q, _normalize_term_token
+
+    def _norm_term_label(t):
+        t = str(t or "").strip()
+        tok = _normalize_term_token(t)
+        if tok.isdigit():
+            return f"Term {tok}"
+        return t
+
+    term_labels = []
+    for t in inv_base.exclude(term="").exclude(term__isnull=True).values_list("term", flat=True).distinct():
+        label = _norm_term_label(t)
+        if label and label not in term_labels:
+            term_labels.append(label)
     year_labels = list(
         inv_base.exclude(academic_year="").exclude(academic_year__isnull=True)
         .values_list("academic_year", flat=True).distinct()
     )
     for t in pay_base.exclude(term="").values_list("term", flat=True).distinct():
-        if t and t not in term_labels:
-            term_labels.append(t)
+        label = _norm_term_label(t)
+        if label and label not in term_labels:
+            term_labels.append(label)
+    for t in pay_base.exclude(invoice__term="").values_list("invoice__term", flat=True).distinct():
+        label = _norm_term_label(t)
+        if label and label not in term_labels:
+            term_labels.append(label)
     for y in pay_base.exclude(academic_year="").values_list("academic_year", flat=True).distinct():
         if y and y not in year_labels:
             year_labels.append(y)
+    # Enrollment terms from admissions (so switcher matches admission wizard)
+    try:
+        from apps.admissions.models import Application
+        for ey, et in (
+            Application.objects.filter(school_id__in=school_ids)
+            .exclude(enrollment_term="")
+            .exclude(enrollment_term__isnull=True)
+            .values_list("enrollment_academic_year", "enrollment_term")
+            .distinct()[:50]
+        ):
+            label = _norm_term_label(et)
+            if label and label not in term_labels:
+                term_labels.append(label)
+            if ey and str(ey) not in year_labels:
+                year_labels.append(str(ey)[:9])
+    except Exception:
+        pass
     for label in ("Term 1", "Term 2", "Term 3"):
         if label not in term_labels:
             term_labels.append(label)
     if selected_year and selected_year not in year_labels:
         year_labels.insert(0, selected_year)
+    selected_term = _norm_term_label(selected_term) or selected_term
 
-    # Filter invoice/payment sets for selected term + year
-    inv_term = inv_base.filter(academic_year=selected_year).filter(
-        Q(term__iexact=selected_term) | Q(term__icontains=selected_term.split()[-1] if selected_term else "")
-    )
-    # Fallback if no exact match: by year only then all
+    # Filter invoice/payment sets for selected term + year (token-aware)
+    inv_term = inv_base.filter(academic_year=selected_year).filter(term_match_q("term", selected_term))
+    # Do NOT fall back to all invoices — that mixed terms and broke totals
     if not inv_term.exists():
-        inv_term = inv_base.filter(academic_year=selected_year)
-    if not inv_term.exists():
-        inv_term = inv_base
+        inv_term = inv_base.filter(academic_year=selected_year).filter(term_match_q("term", selected_term))
 
     pay_term = pay_base.filter(
         Q(academic_year=selected_year) | Q(invoice__academic_year=selected_year)
     ).filter(
-        Q(term__iexact=selected_term)
-        | Q(term__icontains=selected_term.split()[-1] if selected_term else "")
-        | Q(invoice__term__iexact=selected_term)
-        | Q(invoice__term__icontains=selected_term.split()[-1] if selected_term else "")
+        term_match_q("term", selected_term)
+        | term_match_q("invoice__term", selected_term)
     )
-    if not pay_term.exists():
-        pay_term = pay_base.filter(
-            Q(academic_year=selected_year) | Q(invoice__academic_year=selected_year)
-        )
 
     pay_year = pay_base.filter(
         Q(academic_year=selected_year) | Q(invoice__academic_year=selected_year)
