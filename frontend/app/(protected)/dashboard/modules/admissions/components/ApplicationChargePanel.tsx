@@ -294,13 +294,19 @@ export default function ApplicationChargePanel({
                       );
                       if (idx >= 0) {
                         const next = [...prev];
-                        next[idx] = { ...next[idx], ...patch };
+                        next[idx] = { ...next[idx], ...patch } as Charge;
                         return next;
                       }
-                      return [
-                        ...prev,
-                        { charge_type: ctype, list_amount: 0, amount_due: 0, amount_paid: 0, ...patch },
-                      ];
+                      const created: Charge = {
+                        charge_type: ctype,
+                        policy: String(policy),
+                        list_amount: 0,
+                        amount_due: Number(patch.amount_due ?? 0),
+                        amount_paid: Number(patch.amount_paid ?? 0),
+                        decision_made: true,
+                        is_satisfied: true,
+                      };
+                      return [...prev, created];
                     });
                     void updateCharge(ctype, patch);
                   }}
