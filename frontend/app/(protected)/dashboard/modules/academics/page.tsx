@@ -12,6 +12,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -79,6 +87,55 @@ function TabIcon({ id, className }: { id: Tab; className?: string }) {
     default:
       return <BookOpen className={cn} />;
   }
+}
+
+
+function GradeSelect({
+  grades,
+  value,
+  onChange,
+  placeholder = "Select grade…",
+  emptyLabel,
+  className,
+  getLabel,
+}: {
+  grades: GradeLevel[];
+  value: number | "";
+  onChange: (v: number | "") => void;
+  placeholder?: string;
+  /** When set, shows an empty option (e.g. "All grades" or "Select grade…") */
+  emptyLabel?: string;
+  className?: string;
+  getLabel?: (g: GradeLevel) => string;
+}) {
+  const sorted = useMemo(
+    () => grades.slice().sort((a, b) => a.order - b.order),
+    [grades]
+  );
+  const selectValue = value === "" ? "__empty__" : String(value);
+  return (
+    <Select
+      value={selectValue}
+      onValueChange={(v) => {
+        if (v === "__empty__") onChange("");
+        else onChange(Number(v));
+      }}
+    >
+      <SelectTrigger className={className || "h-10 w-full mt-1 bg-background"}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent position="popper" className="z-[200] max-h-60">
+        {emptyLabel != null ? (
+          <SelectItem value="__empty__">{emptyLabel}</SelectItem>
+        ) : null}
+        {sorted.map((g) => (
+          <SelectItem key={g.id} value={String(g.id)}>
+            {getLabel ? getLabel(g) : g.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 }
 
 export default function AcademicsPage() {
@@ -1243,23 +1300,15 @@ function SubjectsPanel({
             <div className="flex flex-wrap gap-2 items-end">
               <div className="min-w-[180px] flex-1">
                 <Label>Grade</Label>
-                <select
-                  className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
-                  value={gradeId === "" ? "" : String(gradeId)}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onChange={(e) => {
-                    const v = e.target.value ? Number(e.target.value) : "";
+                <GradeSelect
+                  grades={grades}
+                  value={gradeId}
+                  emptyLabel="Select grade…"
+                  onChange={(v) => {
                     setGradeId(v);
                     if (!v) setMapped([]);
                   }}
-                >
-                  <option value="">Select grade…</option>
-                  {sortedGrades.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
               {gradeId !== "" && (
                 <Button
@@ -1457,7 +1506,20 @@ function PromotionPanel({
     }
   };
 
-  const rolloverMut = useMutation({
+  
+  useEffect(() => {
+    if (sourceGradeId === "") {
+      setPreview([]);
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void loadPreview(Number(sourceGradeId));
+    }, 200);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceGradeId]);
+
+const rolloverMut = useMutation({
     mutationFn: () => {
       if (!activeYear) throw new Error("No year");
       return rolloverAcademicYear(activeYear.id, { activate: true });
@@ -1547,24 +1609,17 @@ function PromotionPanel({
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             <div>
               <Label>Source grade</Label>
-              <select
-                className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
-                value={sourceGradeId === "" ? "" : String(sourceGradeId)}
-                onChange={(e) => {
-                  const v = e.target.value ? Number(e.target.value) : "";
+              <GradeSelect
+                grades={grades}
+                value={sourceGradeId}
+                emptyLabel="Select class…"
+                getLabel={(g) => `${g.name} (${g.student_count ?? 0})`}
+                onChange={(v) => {
                   setSourceGradeId(v);
                   setLastResult(null);
-                  if (v) loadPreview(Number(v));
-                  else setPreview([]);
+                  if (!v) setPreview([]);
                 }}
-              >
-                <option value="">Select class…</option>
-                {sortedGrades.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name} ({g.student_count ?? 0})
-                  </option>
-                ))}
-              </select>
+              />
             </div>
             <div>
               <Label>Into academic year</Label>
@@ -2034,19 +2089,12 @@ function TeachersPanel({
         </div>
         <div>
           <Label>Grade / class</Label>
-          <select
-            className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
-            value={gradeId === "" ? "" : String(gradeId)}
-            onMouseDown={(e) => e.stopPropagation()}
-            onChange={(e) => setGradeId(e.target.value ? Number(e.target.value) : "")}
-          >
-            <option value="">Select class…</option>
-            {sortedGrades.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
+          <GradeSelect
+            grades={grades}
+            value={gradeId}
+            emptyLabel="Select class…"
+            onChange={setGradeId}
+          />
         </div>
       </div>
 
@@ -2405,22 +2453,12 @@ function AssessmentsPanel({
         </div>
         <div>
           <Label>Grade</Label>
-          <select
-            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
-            value={gradeId === "" ? "" : String(gradeId)}
-            onMouseDown={(e) => e.stopPropagation()}
-            onChange={(e) => setGradeId(e.target.value ? Number(e.target.value) : "")}
-          >
-            <option value="">All grades</option>
-            {grades
-              .slice()
-              .sort((a, b) => a.order - b.order)
-              .map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.name}
-                </option>
-              ))}
-          </select>
+          <GradeSelect
+            grades={grades}
+            value={gradeId}
+            emptyLabel="All grades"
+            onChange={setGradeId}
+          />
         </div>
       </div>
 
@@ -2768,22 +2806,15 @@ function ReportCardsPanel({
         </div>
         <div>
           <Label>Grade</Label>
-          <select
-            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
-            value={gradeId === "" ? "" : String(gradeId)}
-            onMouseDown={(e) => e.stopPropagation()}
-            onChange={(e) => {
-              setGradeId(e.target.value ? Number(e.target.value) : "");
+          <GradeSelect
+            grades={grades}
+            value={gradeId}
+            emptyLabel="Select…"
+            onChange={(v) => {
+              setGradeId(v);
               setSectionId("");
             }}
-          >
-            <option value="">Select…</option>
-            {sortedGrades.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.name}
-              </option>
-            ))}
-          </select>
+          />
         </div>
         <div>
           <Label>Section</Label>
