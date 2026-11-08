@@ -9,6 +9,8 @@ Examples:
   python manage.py backfill_payroll_fee_group --school-id <uuid> --fee-name ICT
   python manage.py backfill_payroll_fee_group --only-paid
 """
+from uuid import UUID
+
 from django.core.management.base import BaseCommand
 from django.db.models import Q
 
@@ -31,15 +33,15 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--fee-id",
-            type=str,
-            default="",
+            type=UUID,
+            default=None,
             help="Exact FeeCategory UUID/id to assign (overrides --fee-name)",
         )
         parser.add_argument(
             "--school-id",
-            type=str,
-            default="",
-            help="Limit to one school",
+            type=UUID,
+            default=None,
+            help="Limit to one school (must be a real school UUID)",
         )
         parser.add_argument(
             "--only-paid",
@@ -58,8 +60,8 @@ class Command(BaseCommand):
 
         dry = options["dry_run"]
         fee_name = (options["fee_name"] or "").strip()
-        fee_id = (options["fee_id"] or "").strip()
-        school_id = (options["school_id"] or "").strip()
+        fee_id = options["fee_id"]
+        school_id = options["school_id"]
         only_paid = options["only_paid"]
         force = options["force"]
 
