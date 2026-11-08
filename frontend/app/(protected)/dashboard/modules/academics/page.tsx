@@ -3102,7 +3102,7 @@ function MarksEntryPanel({
 
   useEffect(() => {
     if (yearObj) {
-      const cur = yearObj.terms?.find((t) => t.is_current) || yearObj.terms?.[0];
+      const cur = yearObj.terms?.find((tm) => tm.is_current) || yearObj.terms?.[0];
       if (cur) setTermId(cur.id);
     }
   }, [yearObj?.id]);
@@ -3161,7 +3161,6 @@ function MarksEntryPanel({
           if (raw === undefined) continue;
           const trimmed = String(raw).trim();
           if (trimmed === "") {
-            // leave blank — do not overwrite unless previously had value and cleared
             marks.push({
               student: row.student_id,
               assessment: col.id,
@@ -3199,7 +3198,6 @@ function MarksEntryPanel({
     }
   };
 
-  // Live averages from draft
   const liveRows = useMemo(() => {
     if (!matrix) return [];
     const rows = matrix.rows.map((row) => {
@@ -3217,11 +3215,44 @@ function MarksEntryPanel({
       const average = wsum > 0 ? Math.round((weighted / wsum) * 10) / 10 : null;
       return { ...row, liveAverage: average };
     });
-    const sorted = rows.slice().sort((a, b) => {
+    return rows.slice().sort((a, b) => {
       if (sortBy === "admission") {
-        return (
+        return (a.admission_number || "").localeCompare(b.admission_number || "", undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+      }
+      return (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
+    });
+  }, [matrix, draft, sortBy]);
+
+  const labelFor = (avg: number | null) => {
+    if (avg == null || !matrix) return "—";
+    const sys = (matrix.grading_system || "percentage").toLowerCase();
+    const pass = matrix.passing_mark || 50;
+    if (sys === "cbc" || sys === "competency" || sys === "competency_based") {
+      if (avg >= 80) return "EE";
+      if (avg >= 60) return "ME";
+      if (avg >= 40) return "AE";
+      return "BE";
+    }
+    if (sys === "mastery") {
+      if (avg >= 80) return "Mastery";
+      if (avg >= 60) return "Approaching";
+      return "Beginning";
+    }
+    if (sys === "pass_fail" || sys === "pass/fail") {
+      return avg >= pass ? "Pass" : "Fail";
+    }
+    if (avg >= 80) return "A";
+    if (avg >= 70) return "B";
+    if (avg >= 60) return "C";
+    if (avg >= 50) return "D";
+    return "E";
+  };
+
+  return (
     <div className="flex flex-col gap-2 h-[min(78vh,calc(100vh-11rem))] min-h-[28rem]">
-      {/* Filters always ABOVE the grid — not overlapping the table */}
       <div className="shrink-0 relative z-40 rounded-xl border bg-white shadow-sm p-2.5 sm:p-3 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground max-w-xl">
@@ -3233,12 +3264,12 @@ function MarksEntryPanel({
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
               {matrix ? "Reload" : "Open markbook"}
             </Button>
-            {matrix && (
+            {matrix ? (
               <Button size="sm" className="bg-primary" disabled={saving} onClick={save}>
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
                 Save all
               </Button>
-            )}
+            ) : null}
           </div>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 items-end">
@@ -3313,7 +3344,7 @@ function MarksEntryPanel({
             />
           </div>
         </div>
-        {matrix && (
+        {matrix ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-[11px] text-muted-foreground">
               {matrix.grade_level.name} · {matrix.subject.name} · {matrix.term.name} ·{" "}
@@ -3337,10 +3368,9 @@ function MarksEntryPanel({
               </button>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
 
-      {/* Table scrolls in remaining space only — never covers filters */}
       <div className="flex-1 min-h-0 relative z-0 rounded-xl border bg-white overflow-hidden flex flex-col">
         {matrix ? (
           <div className="flex-1 min-h-0 overflow-auto">
@@ -3352,9 +3382,7 @@ function MarksEntryPanel({
                   {matrix.columns.map((c) => (
                     <th key={c.id} className="px-1.5 py-2 text-center min-w-[5.5rem] bg-slate-50">
                       <div className="normal-case font-semibold text-foreground text-xs">{c.name}</div>
-                      <div className="font-normal normal-case text-[10px] opacity-70">
-                        /{c.max_score}
-                      </div>
+                      <div className="font-normal normal-case text-[10px] opacity-70">/{c.max_score}</div>
                     </th>
                   ))}
                   <th className="px-2 py-2 text-right bg-slate-50">Avg</th>
@@ -3396,7 +3424,7 @@ function MarksEntryPanel({
                     </td>
                   </tr>
                 ))}
-                {liveRows.length === 0 && (
+                {liveRows.length === 0 ? (
                   <tr>
                     <td
                       colSpan={(matrix.columns.length || 0) + 4}
@@ -3405,7 +3433,7 @@ function MarksEntryPanel({
                       No learners in this class/section.
                     </td>
                   </tr>
-                )}
+                ) : null}
               </tbody>
             </table>
           </div>
