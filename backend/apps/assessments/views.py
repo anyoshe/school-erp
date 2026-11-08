@@ -1140,3 +1140,272 @@ class MarksCsvImportView(APIView):
                 "assessments_matched": [a.name for a in field_map.values()],
             }
         )
+
+
+
+class TranscriptView(APIView):
+    """
+    Official multi-term academic transcript for one student.
+    Aggregates all published-style term averages across years.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+        student_id = request.query_params.get("student")
+        if not student_id:
+            return Response({"detail": "student is required"}, status=400)
+        from apps.students.models import Student
+        from apps.academics.models import AcademicYear, Term
+
+        student = (
+            Student.objects.filter(pk=student_id, school=school)
+            .select_related("current_class", "section", "school")
+            .first()
+        )
+        if not student:
+            return Response({"detail": "Student not found"}, status=404)
+
+        years = AcademicYear.objects.filter(school=school).order_by("start_date", "name")
+        terms_payload = []
+        all_averages = []
+        for year in years:
+            for term in year.terms.order_by("order", "name"):
+                card = _build_student_report(
+                    student, school, academic_year_id=year.id, term_id=term.id
+                )
+                if not card.get("subjects_with_marks") and not any(
+                    s.get("average") is not None for s in card.get("subjects") or []
+                ):
+                    continue
+                terms_payload.append(
+                    {
+                        "academic_year": {"id": year.id, "name": year.name},
+                        "term": {"id": term.id, "name": term.name},
+                        "subjects": card.get("subjects") or [],
+                        "overall_average": card.get("overall_average"),
+                        "overall_grade": card.get("overall_grade"),
+                        "position": card.get("position"),
+                        "class_teacher_name": card.get("class_teacher_name"),
+                    }
+                )
+                if card.get("overall_average") is not None:
+                    all_averages.append(float(card["overall_average"]))
+
+        cumulative = (
+            round(sum(all_averages) / len(all_averages), 1) if all_averages else None
+        )
+        from .grading import grade_label, grading_system_for_school
+
+        return Response(
+            {
+                "document": "OFFICIAL ACADEMIC TRANSCRIPT",
+                "issued_at": __import__("django.utils.timezone", fromlist=["now"]).now().date().isoformat(),
+                "school": {
+                    "name": school.name,
+                    "short_name": getattr(school, "short_name", "") or "",
+                    "address": getattr(school, "address", "") or "",
+                    "phone": getattr(school, "phone", "") or "",
+                    "email": getattr(school, "email", "") or "",
+                    "motto": getattr(school, "motto", "") or "",
+                },
+                "student": {
+                    "id": str(student.id),
+                    "admission_number": student.admission_number,
+                    "full_name": f"{student.first_name or ''} {student.last_name or ''}".strip(),
+                    "date_of_birth": student.date_of_birth.isoformat()
+                    if student.date_of_birth
+                    else None,
+                    "gender": student.gender,
+                    "nationality": student.nationality,
+                    "current_grade": student.current_class.name if student.current_class else None,
+                },
+                "terms": terms_payload,
+                "cumulative_average": cumulative,
+                "cumulative_grade": grade_label(
+                    cumulative,
+                    grading_system_for_school(
+                        school,
+                        student.current_class.curriculum if student.current_class else None,
+                    ),
+                    school.passing_mark,
+                )
+                if cumulative is not None
+                else None,
+                "certification": (
+                    "This is to certify that the above is a true extract of the academic record "
+                    "of the named learner as held by the school."
+                ),
+            }
+        )
+
+
+class ExamHallViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        from .models import ExamHall
+
+        school = selected_school(self.request)
+        if not school:
+            return ExamHall.objects.none()
+        return ExamHall.objects.filter(school=school)
+
+    def get_serializer_class(self):
+        from rest_framework import serializers
+        from .models import ExamHall
+
+        class S(serializers.ModelSerializer):
+            class Meta:
+                model = ExamHall
+                fields = "__all__"
+                read_only_fields = ("id", "school", "created_at")
+
+        return S
+
+    def perform_create(self, serializer):
+        school = selected_school(self.request)
+        serializer.save(school=school)
+
+
+class ExamSittingViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        from .models import ExamSitting
+
+        school = selected_school(self.request)
+        if not school:
+            return ExamSitting.objects.none()
+        qs = ExamSitting.objects.filter(school=school).select_related(
+            "hall", "grade_level", "subject", "academic_year", "term"
+        )
+        grade = self.request.query_params.get("grade_level")
+        if grade:
+            qs = qs.filter(grade_level_id=grade)
+        return qs.order_by("-exam_date", "start_time")
+
+    def get_serializer_class(self):
+        from rest_framework import serializers
+        from .models import ExamSitting, ExamSeat
+
+        class S(serializers.ModelSerializer):
+            hall_name = serializers.CharField(source="hall.name", read_only=True)
+            subject_name = serializers.CharField(source="subject.name", read_only=True)
+            grade_name = serializers.CharField(source="grade_level.name", read_only=True)
+            seat_count = serializers.SerializerMethodField()
+
+            class Meta:
+                model = ExamSitting
+                fields = (
+                    "id",
+                    "title",
+                    "assessment",
+                    "academic_year",
+                    "term",
+                    "grade_level",
+                    "subject",
+                    "hall",
+                    "hall_name",
+                    "exam_date",
+                    "start_time",
+                    "end_time",
+                    "instructions",
+                    "subject_name",
+                    "grade_name",
+                    "seat_count",
+                    "created_at",
+                )
+                read_only_fields = ("id", "created_at")
+
+            def get_seat_count(self, obj):
+                return obj.seats.count()
+
+        return S
+
+    def perform_create(self, serializer):
+        school = selected_school(self.request)
+        serializer.save(
+            school=school,
+            created_by=self.request.user if self.request.user.is_authenticated else None,
+        )
+
+
+class ExamAllocateSeatsView(APIView):
+    """Auto-assign seats for all learners in the sitting's grade (optional section)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, sitting_id):
+        from .models import ExamSitting, ExamSeat
+        from apps.students.models import Student
+
+        school = selected_school(request)
+        sitting = ExamSitting.objects.filter(pk=sitting_id, school=school).select_related("hall").first()
+        if not sitting:
+            return Response({"detail": "Sitting not found"}, status=404)
+
+        qs = (
+            Student.objects.filter(school=school, current_class=sitting.grade_level)
+            .exclude(status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED", "PENDING_CLEARANCE"])
+            .order_by("admission_number", "last_name")
+        )
+        section_id = request.data.get("section")
+        if section_id:
+            qs = qs.filter(section_id=section_id)
+        students = list(qs[: sitting.hall.capacity])
+        ExamSeat.objects.filter(sitting=sitting).delete()
+        seats = []
+        for i, st in enumerate(students, start=1):
+            row = chr(64 + ((i - 1) // 10) + 1)  # A, B, C...
+            num = ((i - 1) % 10) + 1
+            label = f"{row}-{num}"
+            seats.append(
+                ExamSeat(sitting=sitting, student=st, seat_label=label, row_label=row)
+            )
+        ExamSeat.objects.bulk_create(seats)
+        return Response(
+            {
+                "allocated": len(seats),
+                "capacity": sitting.hall.capacity,
+                "hall": sitting.hall.name,
+            }
+        )
+
+
+class ExamSeatListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, sitting_id):
+        from .models import ExamSitting, ExamSeat
+
+        school = selected_school(request)
+        sitting = ExamSitting.objects.filter(pk=sitting_id, school=school).first()
+        if not sitting:
+            return Response({"detail": "Sitting not found"}, status=404)
+        seats = (
+            ExamSeat.objects.filter(sitting=sitting)
+            .select_related("student")
+            .order_by("seat_label")
+        )
+        return Response(
+            {
+                "sitting_id": str(sitting.id),
+                "title": sitting.title,
+                "seats": [
+                    {
+                        "seat_label": s.seat_label,
+                        "row_label": s.row_label,
+                        "admission_number": s.student.admission_number,
+                        "name": f"{s.student.first_name or ''} {s.student.last_name or ''}".strip(),
+                        "student_id": str(s.student_id),
+                    }
+                    for s in seats
+                ],
+            }
+        )

@@ -38,7 +38,7 @@ urlpatterns = [
     path('api/library/', include('apps.library.urls')),
     path('api/reports/', include('apps.reports.urls')),
     path('api/core/', include('apps.core.urls')),
-    # path('api/parent-portal/', include('apps.parent_portal.urls')),
+    path('api/parent-portal/', include('apps.parent_portal.urls')),
     # path('api/elearning/', include('apps.elearning.urls')),
     # path('api/health/', include('apps.health.urls')),
     # path('api/events/', include('apps.events.urls')),

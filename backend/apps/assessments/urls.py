@@ -9,10 +9,17 @@ from .views import (
     DefaultAssessmentPlanView,
     PrepareGradeAssessmentsView,
     MarksCsvImportView,
+    TranscriptView,
+    ExamHallViewSet,
+    ExamSittingViewSet,
+    ExamAllocateSeatsView,
+    ExamSeatListView,
 )
 
 router = DefaultRouter()
 router.register(r"assessments", AssessmentViewSet, basename="assessment")
+router.register(r"exam-halls", ExamHallViewSet, basename="exam-hall")
+router.register(r"exam-sittings", ExamSittingViewSet, basename="exam-sitting")
 
 urlpatterns = [
     path(
@@ -28,11 +35,22 @@ urlpatterns = [
     path("class-results/", ClassResultsView.as_view(), name="class-results"),
     path("report-card/", ReportCardView.as_view(), name="report-card"),
     path("report-cards/", ClassReportCardsView.as_view(), name="report-cards"),
+    path("transcript/", TranscriptView.as_view(), name="transcript"),
     path("marks-matrix/", MarksMatrixView.as_view(), name="marks-matrix"),
     path(
         "assessment-plans/default/",
         DefaultAssessmentPlanView.as_view(),
         name="default-assessment-plan",
+    ),
+    path(
+        "exam-sittings/<uuid:sitting_id>/allocate/",
+        ExamAllocateSeatsView.as_view(),
+        name="exam-allocate",
+    ),
+    path(
+        "exam-sittings/<uuid:sitting_id>/seats/",
+        ExamSeatListView.as_view(),
+        name="exam-seats",
     ),
     path("", include(router.urls)),
 ]

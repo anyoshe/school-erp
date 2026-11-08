@@ -1,46 +1,155 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import api from "@/utils/api";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { UsersRound, AlertCircle } from "lucide-react";
+import { Loader2, GraduationCap, User } from "lucide-react";
+
+type Child = {
+  id: string;
+  admission_number: string;
+  full_name: string;
+  grade?: string | null;
+  section?: string | null;
+  status?: string;
+};
 
 export default function ParentPortalPage() {
   const { currentSchool } = useCurrentSchool();
+  const [selected, setSelected] = useState<string>("");
+
+  const childrenQ = useQuery({
+    queryKey: ["parent-children", currentSchool?.id],
+    queryFn: async () => {
+      const { data } = await api.get("/parent-portal/children/");
+      return data as { children: Child[]; guardian?: string; detail?: string };
+    },
+    enabled: !!currentSchool?.id,
+  });
+
+  const children = childrenQ.data?.children || [];
+  useEffect(() => {
+    if (!selected && children[0]) setSelected(children[0].id);
+  }, [children, selected]);
+
+  const resultsQ = useQuery({
+    queryKey: ["parent-results", selected],
+    queryFn: async () => {
+      const { data } = await api.get(`/parent-portal/children/${selected}/results/`);
+      return data;
+    },
+    enabled: !!selected,
+  });
+
+  const card = resultsQ.data;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50/50 via-slate-50 to-primary-50/30 p-6 md:p-10">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-10">
-          <h1 className="text-4xl font-bold text-slate-900">Parent / Guardian Portal</h1>
-          <p className="text-lg text-slate-600 mt-3">
-            Direct communication, fee tracking, and student progress for parents
-          </p>
-        </div>
+    <div className="max-w-5xl mx-auto space-y-4 p-1">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary">Parent portal</p>
+        <h1 className="text-2xl font-bold">Results for your children</h1>
+        <p className="text-sm text-muted-foreground">
+          {currentSchool?.name || "Your school"} · term report snapshot
+        </p>
+      </div>
 
-        {/* Coming Soon / Placeholder */}
-        <Card className="bg-white/70 backdrop-blur-xl border border-white/30 rounded-3xl shadow-2xl overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-primary-600 to-primary-900 text-white">
-            <div className="flex items-center gap-4">
-              <UsersRound className="h-8 w-8" />
-              <CardTitle className="text-2xl">Parent Portal</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="p-8 text-center space-y-6">
-            <AlertCircle className="h-16 w-16 mx-auto text-amber-500" />
-            <h2 className="text-2xl font-semibold text-slate-800">
-              Module Under Construction
-            </h2>
-            <p className="text-slate-600 max-w-2xl mx-auto">
-              This powerful feature for parent engagement is coming soon.
-              You'll be able to send messages, push notifications, share progress reports, and integrate M-Pesa payments.
-            </p>
-            <div className="text-sm text-slate-500">
-              Expected: Q1 2026
-            </div>
+      {childrenQ.isLoading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : children.length === 0 ? (
+        <Card>
+          <CardContent className="p-6 text-sm text-muted-foreground">
+            {childrenQ.data?.detail ||
+              "No learners linked yet. Ask the school office to link your parent account to your child’s admission number."}
           </CardContent>
         </Card>
-      </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap gap-2">
+            {children.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelected(c.id)}
+                className={`rounded-full border px-3 py-1.5 text-sm ${
+                  selected === c.id
+                    ? "bg-primary text-white border-primary"
+                    : "bg-white hover:border-primary/40"
+                }`}
+              >
+                <User className="inline h-3.5 w-3.5 mr-1" />
+                {c.full_name}
+                <span className="opacity-70 text-xs ml-1">({c.admission_number})</span>
+              </button>
+            ))}
+          </div>
+
+          {resultsQ.isLoading ? (
+            <div className="flex items-center gap-2 text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading results…
+            </div>
+          ) : card ? (
+            <Card className="border-border shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <GraduationCap className="h-5 w-5 text-primary" />
+                  {card.student?.full_name}
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {card.grade?.name} · {card.term?.name || "Term"} ·{" "}
+                  {card.academic_year?.name || "Year"}
+                  {card.position != null ? ` · Position ${card.position}/${card.out_of}` : ""}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap gap-6">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Overall average</p>
+                    <p className="text-2xl font-bold tabular-nums">
+                      {card.overall_average != null ? `${card.overall_average}%` : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Overall grade</p>
+                    <p className="text-2xl font-bold text-primary">{card.overall_grade || "—"}</p>
+                  </div>
+                </div>
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2">Subject</th>
+                        <th className="px-3 py-2 text-right">Average</th>
+                        <th className="px-3 py-2 text-center">Grade</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(card.subjects || []).map((s: any) => (
+                        <tr key={s.subject_id} className="border-t">
+                          <td className="px-3 py-2 font-medium">{s.subject_name}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {s.average != null ? `${s.average}%` : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-center font-semibold text-primary">
+                            {s.grade_letter || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => window.print()}>
+                  Print results
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

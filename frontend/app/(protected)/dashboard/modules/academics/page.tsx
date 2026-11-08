@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
@@ -489,6 +490,27 @@ export default function AcademicsPage() {
           }}
         />
       )}
+
+      <div className="flex flex-wrap gap-2 print:hidden">
+        <Link
+          href="/dashboard/modules/academics/transcripts"
+          className="text-xs px-3 py-1.5 rounded-lg border bg-white hover:border-primary/40 text-primary font-medium"
+        >
+          Official transcripts
+        </Link>
+        <Link
+          href="/dashboard/modules/academics/exams"
+          className="text-xs px-3 py-1.5 rounded-lg border bg-white hover:border-primary/40 text-primary font-medium"
+        >
+          Exam hall scheduling
+        </Link>
+        <Link
+          href="/dashboard/modules/parent"
+          className="text-xs px-3 py-1.5 rounded-lg border bg-white hover:border-primary/40 text-primary font-medium"
+        >
+          Parent results portal
+        </Link>
+      </div>
 
       {/* Sticky sub-nav so tabs stay visible while scrolling content */}
       <div

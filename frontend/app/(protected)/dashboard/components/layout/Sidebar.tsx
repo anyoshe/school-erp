@@ -53,7 +53,7 @@ const MODULE_CONFIG: Record<string, MenuItem> = {
   staff: { label: "Human Resource Management", icon: FileText, href: "/dashboard/modules/hr" },
   events: { label: "Events Management", icon: Calendar, href: "/dashboard/modules/events" },
   health: { label: "Health & Wellness", icon: Book, href: "/dashboard/modules/health" },
-  parent_portal: { label: "Parent Portal", icon: Users, href: "/dashboard/modules/parent-portal" },
+  parent_portal: { label: "Parent Portal", icon: Users, href: "/dashboard/modules/parent" },
   alumni: { label: "Alumni Management", icon: Users, href: "/dashboard/modules/alumni" },
   transport: { label: "Transport Management", icon: Users, href: "/dashboard/modules/transport" },
   elearning: { label: "E-Learning", icon: BookOpen, href: "/dashboard/modules/elearning" },
@@ -99,6 +99,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     "attendance",
     "staff",
     "reports",
+    "parent_portal",
   ];
 
 // Build unique items by code first (already deduplicated)
