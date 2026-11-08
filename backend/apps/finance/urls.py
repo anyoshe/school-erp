@@ -17,6 +17,7 @@ from .accounting_views import (
     BillViewSet,
     OwnerStandingView,
     StudentFeeStatementView,
+    InternalTransferView,
 )
 
 router = DefaultRouter()
@@ -35,6 +36,7 @@ router.register(r'bills', BillViewSet, basename='bill')
 
 urlpatterns = [
     path('account-balances/', AccountBalancesView.as_view(), name='account-balances'),
+    path('internal-transfers/', InternalTransferView.as_view(), name='internal-transfers'),
     path('income-receipts/', IncomeReceiptListView.as_view(), name='income-receipts'),
     path('dashboard-summary/', FinanceDashboardSummaryView.as_view(), name='finance-dashboard-summary'),
     path('awaiting-clearance/', AwaitingClearanceView.as_view(), name='awaiting-clearance'),

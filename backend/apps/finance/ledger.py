@@ -343,3 +343,70 @@ def post_payroll(payroll, *, payment_method=None, paid_from_account=None, user=N
         )
     # Also skip re-posting the expense-level journal if something else posts expenses
     return True
+
+
+@transaction.atomic
+def post_internal_transfer(
+    school,
+    *,
+    from_account,
+    to_account,
+    amount,
+    entry_date=None,
+    memo: str = "",
+    reference: str = "",
+    user=None,
+):
+    """
+    Move money between cash pots (evening reconciliation):
+      Cr from_account (outflow) · Dr to_account (inflow)
+    """
+    from apps.finance.models import Account
+    from apps.finance.seed_defaults import ensure_school_cash_accounts
+
+    ensure_school_cash_accounts(school)
+    amt = _d(amount)
+    if amt <= 0:
+        raise ValueError("Transfer amount must be greater than zero")
+    if not from_account or not to_account:
+        raise ValueError("Both source and destination accounts are required")
+    if str(from_account.pk) == str(to_account.pk):
+        raise ValueError("Source and destination must be different accounts")
+    if from_account.school_id != school.id or to_account.school_id != school.id:
+        raise ValueError("Accounts must belong to the selected school")
+    if from_account.account_type != Account.AccountType.ASSET:
+        raise ValueError("Source must be a cash/bank asset account")
+    if to_account.account_type != Account.AccountType.ASSET:
+        raise ValueError("Destination must be a cash/bank asset account")
+
+    when = entry_date or timezone.now().date()
+    note = (memo or f"Transfer {from_account.code} → {to_account.code}").strip()[:255]
+    # Unique-ish source id so re-posts with same payload don't double (timestamp+accounts+amount)
+    import uuid
+    sid = str(uuid.uuid4())
+
+    entry = post_journal(
+        school,
+        when,
+        note,
+        [
+            {
+                "account": to_account,
+                "debit": amt,
+                "credit": 0,
+                "memo": note,
+                "reference": reference or "",
+            },
+            {
+                "account": from_account,
+                "debit": 0,
+                "credit": amt,
+                "memo": note,
+                "reference": reference or "",
+            },
+        ],
+        source_type="transfer",
+        source_id=sid,
+    )
+    return entry
+

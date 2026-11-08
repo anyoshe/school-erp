@@ -479,3 +479,128 @@ class AccountBalancesView(APIView):
             })
         return Response({"accounts": rows})
 
+
+class InternalTransferView(APIView):
+    """
+    Evening reconciliation: move money between Cash / Bank / M-Pesa.
+    GET  — recent transfers + current asset balances
+    POST — { from_account, to_account, amount, entry_date?, memo?, reference? }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = _school(request)
+        if not school:
+            return Response({"detail": "No school"}, status=400)
+        from apps.finance.seed_defaults import ensure_school_finance_defaults
+        from apps.finance.models import Account, JournalEntry, JournalLine
+        from django.db.models import Sum as DjSum
+
+        ensure_school_finance_defaults(school)
+        accounts = list(
+            Account.objects.filter(
+                school=school, account_type=Account.AccountType.ASSET, is_active=True
+            ).order_by("code")
+        )
+        pots = []
+        for acc in accounts:
+            agg = JournalLine.objects.filter(account=acc).aggregate(
+                d=DjSum("debit"), c=DjSum("credit")
+            )
+            deb = Decimal(str(agg["d"] or 0))
+            cre = Decimal(str(agg["c"] or 0))
+            pots.append({
+                "id": str(acc.id),
+                "code": acc.code,
+                "name": acc.name,
+                "balance": float(deb - cre),
+            })
+
+        transfers = []
+        for entry in (
+            JournalEntry.objects.filter(school=school, source_type="transfer")
+            .prefetch_related("lines", "lines__account")
+            .order_by("-entry_date", "-created_at")[:40]
+        ):
+            from_name = to_name = ""
+            amount = Decimal("0")
+            for line in entry.lines.all():
+                if line.credit and line.credit > 0:
+                    from_name = f"{line.account.code} · {line.account.name}"
+                    amount = line.credit
+                if line.debit and line.debit > 0:
+                    to_name = f"{line.account.code} · {line.account.name}"
+            transfers.append({
+                "id": str(entry.id),
+                "entry_date": entry.entry_date.isoformat() if entry.entry_date else None,
+                "memo": entry.memo,
+                "from_account": from_name,
+                "to_account": to_name,
+                "amount": float(amount),
+                "created_at": entry.created_at.isoformat() if entry.created_at else None,
+            })
+
+        return Response({"accounts": pots, "transfers": transfers})
+
+    def post(self, request):
+        school = _school(request)
+        if not school:
+            return Response({"detail": "No school"}, status=400)
+        from apps.finance.models import Account
+        from apps.finance.ledger import post_internal_transfer
+        from django.utils.dateparse import parse_date
+
+        data = request.data or {}
+        from_id = data.get("from_account") or data.get("from_account_id")
+        to_id = data.get("to_account") or data.get("to_account_id")
+        amount = data.get("amount")
+        if not from_id or not to_id:
+            return Response(
+                {"detail": "from_account and to_account are required"},
+                status=400,
+            )
+        try:
+            amount_d = Decimal(str(amount or 0))
+        except Exception:
+            return Response({"detail": "Invalid amount"}, status=400)
+        if amount_d <= 0:
+            return Response({"detail": "Amount must be greater than zero"}, status=400)
+
+        from_acc = Account.objects.filter(pk=from_id, school=school).first()
+        to_acc = Account.objects.filter(pk=to_id, school=school).first()
+        if not from_acc or not to_acc:
+            return Response({"detail": "Account not found for this school"}, status=404)
+
+        entry_date = data.get("entry_date")
+        if isinstance(entry_date, str) and entry_date:
+            entry_date = parse_date(entry_date[:10])
+        else:
+            entry_date = None
+
+        try:
+            entry = post_internal_transfer(
+                school,
+                from_account=from_acc,
+                to_account=to_acc,
+                amount=amount_d,
+                entry_date=entry_date,
+                memo=(data.get("memo") or data.get("notes") or "")[:255],
+                reference=(data.get("reference") or "")[:100],
+                user=request.user,
+            )
+        except ValueError as exc:
+            return Response({"detail": str(exc)}, status=400)
+        except Exception as exc:
+            return Response({"detail": str(exc)}, status=400)
+
+        return Response(
+            {
+                "id": str(entry.id) if entry else None,
+                "detail": "Transfer recorded",
+                "amount": float(amount_d),
+                "from": f"{from_acc.code} · {from_acc.name}",
+                "to": f"{to_acc.code} · {to_acc.name}",
+            },
+            status=201,
+        )
+

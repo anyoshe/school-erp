@@ -363,7 +363,10 @@ export default function FinanceDashboard() {
           <div>
             <h2 className="text-sm font-semibold text-slate-900">Cash position</h2>
             <p className="text-xs text-muted-foreground">
-              What is in cash, bank and M-Pesa after collections and expenses
+              What is in cash, bank and M-Pesa after collections and expenses.{" "}
+              <a href="/dashboard/modules/finance/reconcile" className="text-teal-700 font-medium hover:underline">
+                Evening reconcile →
+              </a>
             </p>
           </div>
           <p className="text-lg font-bold tabular-nums text-emerald-800">
