@@ -96,7 +96,12 @@ function TabIcon({ id, className }: { id: Tab; className?: string }) {
 
 
 function useMenuPosition(open: boolean, anchorRef: { current: HTMLElement | null }) {
-  const [coords, setCoords] = useState<{ top: number; left: number; width: number; maxHeight: number; openUp: boolean } | null>(null);
+  const [coords, setCoords] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
 
   useLayoutEffect(() => {
     if (!open || !anchorRef.current) {
@@ -107,18 +112,20 @@ function useMenuPosition(open: boolean, anchorRef: { current: HTMLElement | null
       const el = anchorRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      const gap = 4;
-      const spaceBelow = window.innerHeight - r.bottom - gap - 8;
-      const spaceAbove = r.top - gap - 8;
-      const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
-      const maxHeight = Math.min(320, Math.max(120, openUp ? spaceAbove : spaceBelow));
-      setCoords({
-        top: openUp ? r.top - gap : r.bottom + gap,
-        left: r.left,
-        width: Math.max(r.width, 160),
-        maxHeight,
-        openUp,
-      });
+      const gap = 6;
+      const pad = 12;
+      const spaceBelow = window.innerHeight - r.bottom - gap - pad;
+      const spaceAbove = r.top - gap - pad;
+      const openUp = spaceBelow < 200 && spaceAbove > spaceBelow;
+      const maxHeight = Math.min(400, Math.max(160, openUp ? spaceAbove : spaceBelow));
+      let top = openUp ? r.top - gap - maxHeight : r.bottom + gap;
+      top = Math.min(Math.max(pad, top), window.innerHeight - pad - Math.min(maxHeight, 120));
+      let left = r.left;
+      const width = Math.max(r.width, 180);
+      if (left + width > window.innerWidth - pad) {
+        left = Math.max(pad, window.innerWidth - pad - width);
+      }
+      setCoords({ top, left, width, maxHeight });
     };
     update();
     window.addEventListener("resize", update);
@@ -152,15 +159,20 @@ function PortalSelectMenu({
   triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const coords = useMenuPosition(open, btnRef);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     if (!open) return;
     const onDoc = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      const node = e.target as Node;
+      if (btnRef.current?.contains(node) || menuRef.current?.contains(node)) return;
       setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -177,26 +189,30 @@ function PortalSelectMenu({
   const selected = options.find((o) => o.value === value);
   const label = selected?.label || emptyLabel || placeholder || "Select…";
 
+  const baseTrigger =
+    "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring mt-0.5";
+
   const menu =
-    open && coords && typeof document !== "undefined"
+    mounted && open && coords
       ? createPortal(
           <div
             ref={menuRef}
             role="listbox"
-            className="fixed z-[10000] rounded-md border bg-white shadow-xl py-1 overflow-y-auto overscroll-contain"
+            className="fixed z-[2147483000] rounded-md border border-border bg-white shadow-2xl py-1 overflow-y-auto overscroll-contain"
             style={{
+              top: coords.top,
               left: coords.left,
               width: coords.width,
               maxHeight: coords.maxHeight,
-              top: coords.openUp ? undefined : coords.top,
-              bottom: coords.openUp ? window.innerHeight - coords.top : undefined,
             }}
           >
             {emptyLabel != null ? (
               <button
                 type="button"
                 role="option"
-                className={`w-full text-left px-3 py-2 text-sm hover:bg-primary/10 ${value === "" ? "bg-primary/10 font-medium text-primary" : "text-foreground"}`}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-primary/10 ${
+                  value === "" ? "bg-primary/10 font-medium text-primary" : "text-foreground"
+                }`}
                 onClick={() => {
                   onChange("");
                   setOpen(false);
@@ -237,10 +253,7 @@ function PortalSelectMenu({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className={
-          triggerClassName ||
-          "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-        }
+        className={triggerClassName ? `${baseTrigger} ${triggerClassName}` : baseTrigger}
       >
         <span className={`truncate text-left ${selected ? "text-foreground" : "text-muted-foreground"}`}>
           {label}
@@ -288,11 +301,7 @@ function GradeSelect({
       options={options}
       placeholder={placeholder}
       emptyLabel={emptyLabel}
-      triggerClassName={
-        className
-          ? `${className} flex items-center justify-between rounded-md border border-input px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring`
-          : undefined
-      }
+      className={className}
     />
   );
 }
@@ -330,11 +339,7 @@ function SubjectSelect({
       options={options}
       placeholder={placeholder}
       emptyLabel={emptyLabel}
-      triggerClassName={
-        className
-          ? `${className} flex items-center justify-between rounded-md border border-input px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring`
-          : undefined
-      }
+      className={className}
     />
   );
 }
@@ -344,9 +349,11 @@ export default function AcademicsPage() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("overview");
   const [tabsReady, setTabsReady] = useState(false);
+  const [shellReady, setShellReady] = useState(false);
 
   useEffect(() => {
     setTabsReady(true);
+    setShellReady(true);
   }, []);
 
   const yearsQ = useQuery({ queryKey: ["academic-years"], queryFn: fetchAcademicYears });
@@ -382,8 +389,18 @@ export default function AcademicsPage() {
 
   const workTabs = tab === "marks" || tab === "assessments" || tab === "report-cards" || tab === "teachers";
 
+  if (!shellReady) {
+    return (
+      <div className="max-w-7xl mx-auto space-y-3 pb-4" suppressHydrationWarning>
+        <div className="h-10 w-48 rounded-lg bg-muted/50 animate-pulse" />
+        <div className="h-9 w-full rounded-lg bg-muted/40 animate-pulse" />
+        <div className="h-40 w-full rounded-xl bg-muted/30 animate-pulse" />
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-7xl mx-auto space-y-3 pb-4">
+    <div className="max-w-7xl mx-auto space-y-3 pb-4" suppressHydrationWarning>
       {/* Compact header — full blurb only on structure overview */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="min-w-0">
