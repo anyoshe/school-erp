@@ -49,11 +49,24 @@ interface RevenueByPeriod {
   session: number;
 }
 
+interface CashPositionAccount {
+  id: string;
+  code: string;
+  name: string;
+  balance: number;
+  inflow: number;
+  outflow: number;
+}
+
 interface DashboardSummaryResponse {
   stats: Stats & {
     yearCollected?: number;
     yearInvoiced?: number;
     allTimeCollected?: number;
+  };
+  cashPositions?: {
+    accounts: CashPositionAccount[];
+    totalCash: number;
   };
   revenueByPeriod: RevenueByPeriod;
   detectedTerm: string;
@@ -122,7 +135,10 @@ export default function FinanceDashboard() {
   const [availableYears, setAvailableYears] = useState<string[]>([]);
   const [yearCollected, setYearCollected] = useState(0);
   const [allTimeCollected, setAllTimeCollected] = useState(0);
-  const [cashPositions, setCashPositions] = useState<{ accounts: any[]; totalCash: number }>({ accounts: [], totalCash: 0 });
+  const [cashPositions, setCashPositions] = useState<{
+    accounts: CashPositionAccount[];
+    totalCash: number;
+  }>({ accounts: [], totalCash: 0 });
 
   const fetchDashboardData = useCallback(async () => {
     const params: Record<string, string> = {};
