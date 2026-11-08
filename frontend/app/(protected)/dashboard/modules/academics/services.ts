@@ -555,6 +555,8 @@ export async function fetchClassResults(params: {
 
 
 export type ReportCard = {
+  position?: number | null;
+  out_of?: number | null;
   student: {
     id: string;
     first_name: string;
@@ -688,4 +690,18 @@ export async function saveMarksMatrix(
 ) {
   const { data } = await api.post("/assessments/marks-matrix/", { marks }, { params });
   return data as { saved: number; errors: unknown[] };
+}
+
+
+export async function prepareGradeAssessments(params: {
+  academic_year: number;
+  term: number;
+  grade_level: number;
+}) {
+  const { data } = await api.post("/assessments/prepare-grade-assessments/", params);
+  return data as {
+    subjects: number;
+    assessments_created: number;
+    detail: { subject_id: string; subject_name: string; created: number; columns: number }[];
+  };
 }

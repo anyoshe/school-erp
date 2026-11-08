@@ -3108,6 +3108,63 @@ function ReportCardsPanel({
         </Card>
       )}
 
+      {cards.length > 0 && (
+        <Card className="border-border rounded-xl print:hidden">
+          <CardContent className="p-4">
+            <h3 className="font-semibold mb-2">Class ranking</h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Position by overall term average. Learners without marks are listed last.
+            </p>
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2">Pos</th>
+                    <th className="px-3 py-2">Adm</th>
+                    <th className="px-3 py-2">Learner</th>
+                    <th className="px-3 py-2 text-right">Average</th>
+                    <th className="px-3 py-2 text-center">Grade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...cards]
+                    .sort((a, b) => {
+                      const ap = a.position ?? 9999;
+                      const bp = b.position ?? 9999;
+                      if (ap !== bp) return ap - bp;
+                      return (a.student.full_name || "").localeCompare(b.student.full_name || "");
+                    })
+                    .map((c) => {
+                      const idx = cards.findIndex((x) => x.student.id === c.student.id);
+                      return (
+                        <tr
+                          key={c.student.id}
+                          className={`border-t cursor-pointer hover:bg-primary/5 ${
+                            idx === selectedIdx ? "bg-primary/10" : ""
+                          }`}
+                          onClick={() => setSelectedIdx(idx)}
+                        >
+                          <td className="px-3 py-2 font-semibold tabular-nums">
+                            {c.position != null ? c.position : "—"}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-xs">{c.student.admission_number}</td>
+                          <td className="px-3 py-2 font-medium">{c.student.full_name}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {c.overall_average != null ? `${c.overall_average.toFixed(1)}%` : "—"}
+                          </td>
+                          <td className="px-3 py-2 text-center font-semibold text-primary">
+                            {c.overall_grade || "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {cards.length > 1 && (
         <div className="flex flex-wrap gap-2 print:hidden">
           {cards.map((c, i) => (
@@ -3227,6 +3284,15 @@ function ReportCardsPanel({
                     {card.overall_grade || "—"}
                   </p>
                 </div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">Class position</p>
+                  <p className="text-2xl font-bold tabular-nums">
+                    {card.position != null ? `${card.position}` : "—"}
+                    {card.out_of ? (
+                      <span className="text-sm font-normal text-muted-foreground"> / {card.out_of}</span>
+                    ) : null}
+                  </p>
+                </div>
                 <div className="text-xs text-muted-foreground max-w-[12rem]">
                   Based on {card.subjects_with_marks} subject(s) with marks entered.
                 </div>
@@ -3310,7 +3376,33 @@ function MarksEntryPanel({
   const cellKey = (studentId: string, assessmentId: string) =>
     `${studentId}__${assessmentId}`;
 
-  const load = async () => {
+  
+  const prepareAllSubjects = async () => {
+    if (!yearId || !termId || !gradeId) {
+      toast.message("Select year, term and grade first");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await prepareGradeAssessments({
+        academic_year: Number(yearId),
+        term: Number(termId),
+        grade_level: Number(gradeId),
+      });
+      toast.success(
+        res.assessments_created
+          ? `Prepared ${res.assessments_created} assessments across ${res.subjects} subject(s)`
+          : `Plans already in place for ${res.subjects} subject(s)`
+      );
+      if (subjectId) await load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Could not prepare assessments");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+const load = async () => {
     if (!yearId || !termId || !gradeId || !subjectId) {
       toast.message("Select year, term, grade and subject");
       return;
@@ -3480,13 +3572,22 @@ function MarksEntryPanel({
 
   return (
     <div className="flex flex-col gap-2 h-[min(78vh,calc(100vh-11rem))] min-h-[28rem]">
-      <div className="shrink-0 relative z-40 rounded-xl border bg-white shadow-sm p-2.5 sm:p-3 space-y-2">
+      <div className="shrink-0 relative z-[80] overflow-visible rounded-xl border bg-white shadow-sm p-2.5 sm:p-3 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground max-w-xl">
             Columns come from the assessment plans for the selected class, subject, and term.
             Averages update as you type.
           </p>
-          <div className="flex gap-2 shrink-0">
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || loading || !yearId || !termId || !gradeId}
+              onClick={prepareAllSubjects}
+              title="Create CAT 1–3 / End of Term for every subject in this grade"
+            >
+              Prepare all subjects
+            </Button>
             <Button size="sm" variant="outline" disabled={busy || loading} onClick={load}>
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
               {matrix ? "Reload" : "Open markbook"}
@@ -3601,7 +3702,7 @@ function MarksEntryPanel({
         ) : null}
       </div>
 
-      <div className="flex-1 min-h-0 relative z-0 rounded-xl border bg-white overflow-hidden flex flex-col">
+      <div className="flex-1 min-h-0 relative z-[1] rounded-xl border bg-white overflow-hidden flex flex-col">
         {matrix && matrix.columns.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
             <div className="max-w-xl space-y-1">

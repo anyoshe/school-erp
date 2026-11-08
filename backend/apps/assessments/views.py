@@ -504,6 +504,27 @@ class ClassReportCardsView(APIView):
             )
             cards.append(card)
 
+        # Class ranking by overall average (ties share position)
+        ranked = [
+            (i, c)
+            for i, c in enumerate(cards)
+            if c.get("overall_average") is not None
+        ]
+        ranked.sort(key=lambda x: (-float(x[1]["overall_average"]), x[1]["student"].get("last_name", "")))
+        out_of = len(ranked)
+        prev_avg = None
+        rank = 0
+        for pos, (idx, card) in enumerate(ranked, start=1):
+            avg = float(card["overall_average"])
+            if prev_avg is None or avg != prev_avg:
+                rank = pos
+            prev_avg = avg
+            cards[idx]["position"] = rank
+            cards[idx]["out_of"] = out_of
+        for c in cards:
+            c.setdefault("position", None)
+            c.setdefault("out_of", out_of)
+
         return Response(
             {
                 "count": len(cards),
@@ -795,4 +816,86 @@ class DefaultAssessmentPlanView(APIView):
                 "assessment_names": [assessment.name for assessment in assessments],
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+class PrepareGradeAssessmentsView(APIView):
+    """
+    Create the standard assessment plan (CAT 1–3, End of Term, Practical where relevant)
+    for every subject mapped to a grade in the given year/term.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from apps.academics.models import AcademicYear, Term, GradeLevel, GradeLevelSubject
+        from .presets import ensure_term_assessments
+
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+
+        year_id = request.data.get("academic_year")
+        term_id = request.data.get("term")
+        grade_id = request.data.get("grade_level")
+        if not year_id or not term_id or not grade_id:
+            return Response(
+                {"detail": "academic_year, term and grade_level are required"},
+                status=400,
+            )
+
+        year = AcademicYear.objects.filter(pk=year_id, school=school).first()
+        term = Term.objects.filter(pk=term_id, academic_year=year).first() if year else None
+        grade = GradeLevel.objects.filter(pk=grade_id).first()
+        if not year or not term or not grade:
+            return Response({"detail": "Invalid year, term or grade"}, status=400)
+
+        mapped = (
+            GradeLevelSubject.objects.filter(grade_level=grade)
+            .select_related("subject")
+            .order_by("order", "subject__name")
+        )
+        created_total = 0
+        subjects_done = []
+        for row in mapped:
+            before = Assessment.objects.filter(
+                school=school,
+                academic_year=year,
+                term=term,
+                grade_level=grade,
+                subject=row.subject,
+            ).count()
+            ensure_term_assessments(
+                school=school,
+                academic_year=year,
+                term=term,
+                grade_level=grade,
+                subject=row.subject,
+                created_by=request.user if request.user.is_authenticated else None,
+            )
+            after = Assessment.objects.filter(
+                school=school,
+                academic_year=year,
+                term=term,
+                grade_level=grade,
+                subject=row.subject,
+            ).count()
+            created = max(0, after - before)
+            created_total += created
+            subjects_done.append(
+                {
+                    "subject_id": str(row.subject_id),
+                    "subject_name": row.subject.name,
+                    "created": created,
+                    "columns": after,
+                }
+            )
+
+        return Response(
+            {
+                "subjects": len(subjects_done),
+                "assessments_created": created_total,
+                "detail": subjects_done,
+            },
+            status=status.HTTP_201_CREATED if created_total else status.HTTP_200_OK,
         )
