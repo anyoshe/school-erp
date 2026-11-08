@@ -128,13 +128,59 @@ function GradeSelect({
       <SelectTrigger className={className || "h-10 w-full mt-1 bg-background"}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContent position="popper" className="z-[200] max-h-60">
+      <SelectContent position="popper" sideOffset={4} className="z-[300] max-h-[min(20rem,var(--radix-select-content-available-height))]">
         {emptyLabel != null ? (
           <SelectItem value="__empty__">{emptyLabel}</SelectItem>
         ) : null}
         {sorted.map((g) => (
           <SelectItem key={g.id} value={String(g.id)}>
             {getLabel ? getLabel(g) : g.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+
+function SubjectSelect({
+  subjects,
+  value,
+  onChange,
+  placeholder = "Select subject…",
+  emptyLabel = "Select subject…",
+  className,
+}: {
+  subjects: Subject[];
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  emptyLabel?: string;
+  className?: string;
+}) {
+  const sorted = useMemo(
+    () => subjects.slice().sort((a, b) => a.name.localeCompare(b.name)),
+    [subjects]
+  );
+  const selectValue = value === "" ? "__empty__" : value;
+  return (
+    <Select
+      value={selectValue}
+      onValueChange={(v) => onChange(v === "__empty__" ? "" : v)}
+    >
+      <SelectTrigger className={className || "h-10 w-full mt-1 bg-background"}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent
+        position="popper"
+        sideOffset={4}
+        className="z-[300] max-h-[min(20rem,var(--radix-select-content-available-height))]"
+      >
+        <SelectItem value="__empty__">{emptyLabel}</SelectItem>
+        {sorted.map((s) => (
+          <SelectItem key={s.id} value={String(s.id)}>
+            {s.name}
+            {s.code ? ` (${s.code})` : ""}
           </SelectItem>
         ))}
       </SelectContent>
@@ -3042,6 +3088,7 @@ function MarksEntryPanel({
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sortBy, setSortBy] = useState<"name" | "admission">("name");
 
   const activeYear = years.find((y) => y.is_active) || years[0];
   const yearObj = years.find((y) => y.id === yearId) || activeYear;
@@ -3155,7 +3202,7 @@ function MarksEntryPanel({
   // Live averages from draft
   const liveRows = useMemo(() => {
     if (!matrix) return [];
-    return matrix.rows.map((row) => {
+    const rows = matrix.rows.map((row) => {
       let weighted = 0;
       let wsum = 0;
       for (const col of matrix.columns) {
@@ -3170,7 +3217,17 @@ function MarksEntryPanel({
       const average = wsum > 0 ? Math.round((weighted / wsum) * 10) / 10 : null;
       return { ...row, liveAverage: average };
     });
-  }, [matrix, draft]);
+    const sorted = rows.slice().sort((a, b) => {
+      if (sortBy === "admission") {
+        return (a.admission_number || "").localeCompare(b.admission_number || "", undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+      }
+      return (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
+    });
+    return sorted;
+  }, [matrix, draft, sortBy]);
 
   const labelFor = (avg: number | null) => {
     if (avg == null || !matrix) return "—";
@@ -3280,32 +3337,41 @@ function MarksEntryPanel({
           </div>
           <div className="col-span-2 sm:col-span-1 lg:col-span-2">
             <Label className="text-[11px]">Subject</Label>
-            <select
-              className="w-full mt-0.5 h-9 rounded-md border px-2 text-sm bg-background"
+            <SubjectSelect
+              subjects={subjects}
               value={subjectId}
-              onChange={(e) => {
-                setSubjectId(e.target.value);
+              className="h-9 w-full mt-0.5 bg-background"
+              onChange={(v) => {
+                setSubjectId(v);
                 setMatrix(null);
               }}
-            >
-              <option value="">Select subject…</option>
-              {subjects
-                .slice()
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((s) => (
-                  <option key={s.id} value={String(s.id)}>
-                    {s.name}
-                  </option>
-                ))}
-            </select>
+            />
           </div>
         </div>
         {matrix && (
-          <p className="text-[11px] text-muted-foreground">
-            {matrix.grade_level.name} · {matrix.subject.name} · {matrix.term.name} ·{" "}
-            {matrix.academic_year.name} · grading {matrix.grading_system} (pass {matrix.passing_mark}%)
-            · {liveRows.length} learner(s)
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] text-muted-foreground">
+              {matrix.grade_level.name} · {matrix.subject.name} · {matrix.term.name} ·{" "}
+              {matrix.academic_year.name} · grading {matrix.grading_system} (pass{" "}
+              {matrix.passing_mark}%) · {liveRows.length} learner(s)
+            </p>
+            <div className="inline-flex rounded-lg border overflow-hidden text-[11px]">
+              <button
+                type="button"
+                className={`px-2.5 py-1 ${sortBy === "name" ? "bg-primary text-white" : "bg-white text-muted-foreground"}`}
+                onClick={() => setSortBy("name")}
+              >
+                A–Z name
+              </button>
+              <button
+                type="button"
+                className={`px-2.5 py-1 border-l ${sortBy === "admission" ? "bg-primary text-white" : "bg-white text-muted-foreground"}`}
+                onClick={() => setSortBy("admission")}
+              >
+                Adm #
+              </button>
+            </div>
+          </div>
         )}
       </div>
 

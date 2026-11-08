@@ -556,13 +556,18 @@ class MarksMatrixView(APIView):
             created_by=request.user if request.user.is_authenticated else None,
         )
 
-        students = (
-            Student.objects.filter(school=school, current_class=ctx["grade"])
-            .exclude(status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED", "PENDING_CLEARANCE"])
-            .order_by("last_name", "first_name")
+        sort = (request.query_params.get("sort") or "name").lower()
+        students = Student.objects.filter(
+            school=school, current_class=ctx["grade"]
+        ).exclude(
+            status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED", "PENDING_CLEARANCE"]
         )
         if ctx["section_id"]:
             students = students.filter(section_id=ctx["section_id"])
+        if sort in ("admission", "admission_number", "adm"):
+            students = students.order_by("admission_number", "last_name", "first_name")
+        else:
+            students = students.order_by("last_name", "first_name", "admission_number")
 
         students = list(students[:400])
         student_ids = [s.id for s in students]
