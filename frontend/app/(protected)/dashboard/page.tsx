@@ -78,7 +78,7 @@ export default function DashboardHome() {
       </div>
 
       {/* Colorful KPI row */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 items-stretch">
         <Kpi
           label="Active students"
           value={pulseQ.isLoading ? "…" : String(pulse?.students?.active ?? 0)}
@@ -347,18 +347,25 @@ function Kpi({
     <button
       type="button"
       onClick={onClick}
-      className="text-left rounded-2xl border border-stone-100 p-4 shadow-md hover:shadow-lg transition-all group"
+      className="h-full min-h-[138px] w-full text-left rounded-2xl border border-stone-100 p-4 shadow-md hover:shadow-lg transition-all group"
       style={{ background: t.bg }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">{label}</p>
-          <p className="text-xl sm:text-2xl font-bold text-stone-900 mt-1 group-hover:opacity-90">
+      <div className="flex h-full min-w-0 items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="line-clamp-2 min-h-8 text-xs font-semibold uppercase tracking-wide text-stone-500">
+            {label}
+          </p>
+          <p
+            title={value}
+            className="mt-1 whitespace-nowrap text-[clamp(0.875rem,1.65vw,1.5rem)] font-bold leading-tight tracking-tight tabular-nums text-stone-900 group-hover:opacity-90"
+          >
             {value}
           </p>
-          <p className="text-xs text-stone-500 mt-1">{sub}</p>
+          <p title={sub} className="mt-1 line-clamp-2 min-h-8 text-xs leading-4 text-stone-500">
+            {sub}
+          </p>
         </div>
-        <div className="p-2.5 rounded-xl text-white" style={{ background: t.icon }}>
+        <div className="shrink-0 rounded-xl p-2.5 text-white" style={{ background: t.icon }}>
           <Icon className="h-5 w-5" />
         </div>
       </div>
