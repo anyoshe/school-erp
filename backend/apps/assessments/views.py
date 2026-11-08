@@ -222,3 +222,268 @@ class ClassResultsView(APIView):
                 "results": results[:300],
             }
         )
+
+
+def _letter_from_pct(p):
+    if p is None:
+        return None
+    p = float(p)
+    if p >= 80:
+        return "A"
+    if p >= 70:
+        return "B"
+    if p >= 60:
+        return "C"
+    if p >= 50:
+        return "D"
+    return "E"
+
+
+def _build_student_report(student, school, academic_year_id=None, term_id=None):
+    """Aggregate marks into a printable report-card payload."""
+    from apps.academics.models import AcademicYear, Term, GradeLevelSubject
+
+    year = None
+    term = None
+    if academic_year_id:
+        year = AcademicYear.objects.filter(pk=academic_year_id, school=school).first()
+    if not year:
+        year = AcademicYear.objects.filter(school=school, is_active=True).first()
+    if term_id:
+        term = Term.objects.filter(pk=term_id).first()
+    if not term and year:
+        term = year.terms.filter(is_current=True).first() or year.terms.order_by("order").first()
+
+    grade = student.current_class
+    section = getattr(student, "section", None)
+
+    assessments = Assessment.objects.filter(school=school)
+    if grade:
+        assessments = assessments.filter(grade_level=grade)
+    if year:
+        assessments = assessments.filter(academic_year=year)
+    if term:
+        assessments = assessments.filter(Q(term=term) | Q(term__isnull=True))
+
+    marks = (
+        Mark.objects.filter(
+            assessment__in=assessments,
+            student=student,
+            is_absent=False,
+            score__isnull=False,
+        )
+        .select_related("assessment", "assessment__subject")
+        .order_by("assessment__subject__name", "assessment__assessment_date")
+    )
+
+    by_subject = {}
+    for m in marks:
+        subj = m.assessment.subject
+        key = str(subj.id)
+        bucket = by_subject.setdefault(
+            key,
+            {
+                "subject_id": key,
+                "subject_name": subj.name,
+                "entries": [],
+                "weighted_sum": Decimal("0"),
+                "weight_total": Decimal("0"),
+            },
+        )
+        pct = m.percentage
+        if pct is None:
+            continue
+        weight = Decimal(str(m.assessment.weight or 1))
+        bucket["entries"].append(
+            {
+                "assessment": m.assessment.name,
+                "kind": m.assessment.kind,
+                "score": float(m.score),
+                "max_score": float(m.assessment.max_score or 100),
+                "percentage": float(pct),
+                "grade_letter": m.grade_letter,
+                "weight": float(weight),
+            }
+        )
+        bucket["weighted_sum"] += Decimal(str(pct)) * weight
+        bucket["weight_total"] += weight
+
+    subjects = []
+    overall_sum = Decimal("0")
+    overall_n = 0
+    for b in sorted(by_subject.values(), key=lambda x: x["subject_name"]):
+        avg = None
+        if b["weight_total"] > 0:
+            avg = float(b["weighted_sum"] / b["weight_total"])
+            overall_sum += Decimal(str(avg))
+            overall_n += 1
+        subjects.append(
+            {
+                "subject_id": b["subject_id"],
+                "subject_name": b["subject_name"],
+                "entries": b["entries"],
+                "average": round(avg, 1) if avg is not None else None,
+                "grade_letter": _letter_from_pct(avg),
+            }
+        )
+
+    # Include mapped subjects with no marks yet (so card shows full curriculum)
+    if grade:
+        mapped = (
+            GradeLevelSubject.objects.filter(grade_level=grade)
+            .select_related("subject")
+            .order_by("order", "subject__name")
+        )
+        have = {s["subject_id"] for s in subjects}
+        for m in mapped:
+            sid = str(m.subject_id)
+            if sid not in have:
+                subjects.append(
+                    {
+                        "subject_id": sid,
+                        "subject_name": m.subject.name,
+                        "entries": [],
+                        "average": None,
+                        "grade_letter": None,
+                    }
+                )
+
+    overall = float(overall_sum / overall_n) if overall_n else None
+
+    class_teacher_name = None
+    if section and getattr(section, "class_teacher", None):
+        u = section.class_teacher.user
+        class_teacher_name = (
+            f"{u.first_name or ''} {u.last_name or ''}".strip() or u.email
+        )
+
+    return {
+        "student": {
+            "id": str(student.id),
+            "first_name": student.first_name or "",
+            "last_name": student.last_name or "",
+            "full_name": f"{student.first_name or ''} {student.last_name or ''}".strip(),
+            "admission_number": student.admission_number or "",
+        },
+        "school": {
+            "id": str(school.id),
+            "name": school.name,
+            "short_name": getattr(school, "short_name", "") or "",
+            "address": getattr(school, "address", "") or "",
+            "phone": getattr(school, "phone", "") or "",
+            "email": getattr(school, "email", "") or "",
+            "logo": None,
+        },
+        "academic_year": (
+            {"id": year.id, "name": year.name} if year else None
+        ),
+        "term": ({"id": term.id, "name": term.name} if term else None),
+        "grade": (
+            {"id": grade.id, "name": grade.name} if grade else None
+        ),
+        "section": (
+            {"id": section.id, "name": section.name} if section else None
+        ),
+        "class_teacher_name": class_teacher_name,
+        "subjects": subjects,
+        "overall_average": round(overall, 1) if overall is not None else None,
+        "overall_grade": _letter_from_pct(overall),
+        "subjects_with_marks": overall_n,
+    }
+
+
+class ReportCardView(APIView):
+    """Single student term report card."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+        student_id = request.query_params.get("student")
+        if not student_id:
+            return Response({"detail": "student is required"}, status=400)
+        from apps.students.models import Student
+
+        student = (
+            Student.objects.filter(
+                pk=student_id, school_id__in=accessible_school_ids(request)
+            )
+            .select_related(
+                "current_class",
+                "section",
+                "section__class_teacher",
+                "section__class_teacher__user",
+            )
+            .first()
+        )
+        if not student:
+            return Response({"detail": "Student not found"}, status=404)
+
+        data = _build_student_report(
+            student,
+            school,
+            academic_year_id=request.query_params.get("academic_year"),
+            term_id=request.query_params.get("term"),
+        )
+        # logo absolute if possible
+        if getattr(school, "logo", None):
+            try:
+                data["school"]["logo"] = request.build_absolute_uri(school.logo.url)
+            except Exception:
+                data["school"]["logo"] = None
+        return Response(data)
+
+
+class ClassReportCardsView(APIView):
+    """Report cards for all learners in a grade/section (batch)."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+        grade_id = request.query_params.get("grade_level")
+        if not grade_id:
+            return Response({"detail": "grade_level is required"}, status=400)
+
+        from apps.students.models import Student
+
+        qs = (
+            Student.objects.filter(
+                school=school,
+                current_class_id=grade_id,
+            )
+            .exclude(status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED", "PENDING_CLEARANCE"])
+            .select_related(
+                "current_class",
+                "section",
+                "section__class_teacher",
+                "section__class_teacher__user",
+            )
+            .order_by("last_name", "first_name")
+        )
+        section_id = request.query_params.get("section")
+        if section_id:
+            qs = qs.filter(section_id=section_id)
+
+        cards = []
+        for student in qs[:200]:
+            card = _build_student_report(
+                student,
+                school,
+                academic_year_id=request.query_params.get("academic_year"),
+                term_id=request.query_params.get("term"),
+            )
+            cards.append(card)
+
+        return Response(
+            {
+                "count": len(cards),
+                "grade_level": grade_id,
+                "section": section_id,
+                "cards": cards,
+            }
+        )

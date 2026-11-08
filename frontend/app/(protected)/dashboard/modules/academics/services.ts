@@ -551,3 +551,65 @@ export async function fetchClassResults(params: {
     }[];
   };
 }
+
+
+export type ReportCard = {
+  student: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    full_name: string;
+    admission_number: string;
+  };
+  school: {
+    id: string;
+    name: string;
+    short_name?: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+    logo?: string | null;
+  };
+  academic_year: { id: number; name: string } | null;
+  term: { id: number; name: string } | null;
+  grade: { id: number; name: string } | null;
+  section: { id: number; name: string } | null;
+  class_teacher_name?: string | null;
+  subjects: {
+    subject_id: string;
+    subject_name: string;
+    entries: {
+      assessment: string;
+      kind: string;
+      score: number;
+      max_score: number;
+      percentage: number;
+      grade_letter: string;
+      weight: number;
+    }[];
+    average: number | null;
+    grade_letter: string | null;
+  }[];
+  overall_average: number | null;
+  overall_grade: string | null;
+  subjects_with_marks: number;
+};
+
+export async function fetchReportCard(params: {
+  student: string;
+  academic_year?: number;
+  term?: number;
+}) {
+  const { data } = await api.get("/assessments/report-card/", { params });
+  return data as ReportCard;
+}
+
+export async function fetchClassReportCards(params: {
+  grade_level: number;
+  academic_year?: number;
+  term?: number;
+  section?: number;
+}) {
+  const { data } = await api.get("/assessments/report-cards/", { params });
+  return data as { count: number; cards: ReportCard[] };
+}

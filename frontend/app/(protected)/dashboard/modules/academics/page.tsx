@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   BookOpen, CalendarRange, Layers, GraduationCap, Plus, Sparkles,
   CheckCircle2, Circle, ChevronRight, Users, Loader2, ClipboardList,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,10 +30,10 @@ import {
   type AcademicYear, type GradeLevel, type CurriculumTemplate, type Term,
   type ClassRegisterStudent, type Subject, type GradeSubject,
   fetchTeachers, syncTeachersFromUsers, fetchTeacherCoverage, assignSubjectTeacher, removeSubjectTeacher, updateSection, assignTeacherAllSubjects,
-  fetchAssessments, createAssessment, fetchMarksheet, saveMarksheet, fetchClassResults,
+  fetchAssessments, createAssessment, fetchMarksheet, saveMarksheet, fetchClassResults, fetchReportCard, fetchClassReportCards, type ReportCard,
 } from "./services";
 
-type Tab = "overview" | "years" | "classes" | "subjects" | "teachers" | "assessments" | "promotion";
+type Tab = "overview" | "years" | "classes" | "subjects" | "teachers" | "assessments" | "report-cards" | "promotion";
 
 export default function AcademicsPage() {
   const { currentSchool } = useCurrentSchool();
@@ -77,6 +78,7 @@ export default function AcademicsPage() {
     { id: "subjects", label: "Subjects", icon: BookOpen },
     { id: "teachers", label: "Teachers", icon: Users },
     { id: "assessments", label: "Assessments", icon: ClipboardList },
+    { id: "report-cards", label: "Report cards", icon: FileText },
     { id: "promotion", label: "Promotion", icon: GraduationCap },
   ];
 
@@ -202,6 +204,9 @@ export default function AcademicsPage() {
         />
       )}
 
+      {tab === "report-cards" && (
+        <ReportCardsPanel grades={grades} years={years} loading={gradesQ.isLoading || yearsQ.isLoading} />
+      )}
       {tab === "promotion" && (
         <PromotionPanel
           years={years}
@@ -2584,3 +2589,302 @@ function AssessmentsPanel({
   );
 }
 
+
+function ReportCardsPanel({
+  grades,
+  years,
+  loading,
+}: {
+  grades: GradeLevel[];
+  years: AcademicYear[];
+  loading: boolean;
+}) {
+  const [yearId, setYearId] = useState<number | "">("");
+  const [termId, setTermId] = useState<number | "">("");
+  const [gradeId, setGradeId] = useState<number | "">("");
+  const [sectionId, setSectionId] = useState<number | "">("");
+  const [cards, setCards] = useState<ReportCard[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [selectedIdx, setSelectedIdx] = useState(0);
+
+  const sortedGrades = useMemo(
+    () => grades.slice().sort((a, b) => a.order - b.order),
+    [grades]
+  );
+  const activeYear = years.find((y) => y.is_active) || years[0];
+  const yearObj = years.find((y) => y.id === yearId) || activeYear;
+  const terms = yearObj?.terms || [];
+  const gradeObj = grades.find((g) => g.id === gradeId);
+  const sections = gradeObj?.sections || [];
+
+  useEffect(() => {
+    if (activeYear && yearId === "") setYearId(activeYear.id);
+  }, [activeYear, yearId]);
+
+  useEffect(() => {
+    if (yearObj) {
+      const cur = yearObj.terms?.find((t) => t.is_current) || yearObj.terms?.[0];
+      if (cur) setTermId(cur.id);
+    }
+  }, [yearObj?.id]);
+
+  const load = async () => {
+    if (!gradeId) {
+      toast.message("Select a grade");
+      return;
+    }
+    setBusy(true);
+    try {
+      const data = await fetchClassReportCards({
+        grade_level: Number(gradeId),
+        academic_year: yearId ? Number(yearId) : undefined,
+        term: termId ? Number(termId) : undefined,
+        section: sectionId ? Number(sectionId) : undefined,
+      });
+      setCards(data.cards || []);
+      setSelectedIdx(0);
+      if (!(data.cards || []).length) {
+        toast.message("No learners found for this class");
+      }
+    } catch {
+      toast.error("Could not load report cards");
+      setCards([]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const card = cards[selectedIdx];
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground max-w-2xl">
+        Term report cards from entered marks. Weighted subject averages use assessment weights.
+        Print one learner or the whole class (use browser print).
+      </p>
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
+        <div>
+          <Label>Year</Label>
+          <select
+            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
+            value={yearId === "" ? "" : String(yearId)}
+            onChange={(e) => setYearId(e.target.value ? Number(e.target.value) : "")}
+          >
+            {years.map((y) => (
+              <option key={y.id} value={y.id}>
+                {y.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label>Term</Label>
+          <select
+            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
+            value={termId === "" ? "" : String(termId)}
+            onChange={(e) => setTermId(e.target.value ? Number(e.target.value) : "")}
+          >
+            <option value="">All / default</option>
+            {terms.map((tm) => (
+              <option key={tm.id} value={tm.id}>
+                {tm.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label>Grade</Label>
+          <select
+            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
+            value={gradeId === "" ? "" : String(gradeId)}
+            onChange={(e) => {
+              setGradeId(e.target.value ? Number(e.target.value) : "");
+              setSectionId("");
+            }}
+          >
+            <option value="">Select…</option>
+            {sortedGrades.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label>Section</Label>
+          <select
+            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
+            value={sectionId === "" ? "" : String(sectionId)}
+            onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : "")}
+          >
+            <option value="">All sections</option>
+            {sections.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <Button className="bg-primary" disabled={busy || loading} onClick={load}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+            Load cards
+          </Button>
+          {cards.length > 0 && (
+            <Button variant="outline" onClick={() => window.print()}>
+              Print
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {cards.length > 1 && (
+        <div className="flex flex-wrap gap-2 print:hidden">
+          {cards.map((c, i) => (
+            <button
+              key={c.student.id}
+              type="button"
+              onClick={() => setSelectedIdx(i)}
+              className={`text-xs px-2.5 py-1 rounded-full border ${
+                i === selectedIdx
+                  ? "bg-primary text-white border-primary"
+                  : "bg-white border-border"
+              }`}
+            >
+              {c.student.full_name || c.student.admission_number}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {card ? (
+        <div className="report-card-print space-y-4">
+          {/* single selected for screen; all for print via CSS could be added later */}
+          <Card className="border-border rounded-2xl overflow-hidden max-w-3xl mx-auto">
+            <CardContent className="p-6 sm:p-8 space-y-5">
+              <div className="text-center space-y-1 border-b pb-4">
+                {card.school.logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={card.school.logo}
+                    alt=""
+                    className="h-16 mx-auto object-contain mb-2"
+                  />
+                ) : null}
+                <h2 className="text-xl font-bold tracking-tight">{card.school.name}</h2>
+                <p className="text-xs text-muted-foreground">
+                  {[card.school.address, card.school.phone, card.school.email]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+                <p className="text-sm font-semibold mt-2 uppercase tracking-wide text-primary">
+                  Academic Report Card
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {card.academic_year?.name || "—"}
+                  {card.term ? ` · ${card.term.name}` : ""}
+                </p>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                <p>
+                  <span className="text-muted-foreground">Learner:</span>{" "}
+                  <strong>{card.student.full_name}</strong>
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Admission #:</span>{" "}
+                  {card.student.admission_number || "—"}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Class:</span>{" "}
+                  {card.grade?.name || "—"}
+                  {card.section ? ` · ${card.section.name}` : ""}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Class teacher:</span>{" "}
+                  {card.class_teacher_name || "—"}
+                </p>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2">Subject</th>
+                      <th className="px-3 py-2">Assessments</th>
+                      <th className="px-3 py-2 text-right">Average %</th>
+                      <th className="px-3 py-2 text-center">Grade</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {card.subjects.map((s) => (
+                      <tr key={s.subject_id} className="border-t">
+                        <td className="px-3 py-2 font-medium">{s.subject_name}</td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {s.entries.length
+                            ? s.entries
+                                .map(
+                                  (e) =>
+                                    `${e.assessment}: ${e.percentage.toFixed(0)}%`
+                                )
+                                .join(" · ")
+                            : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {s.average != null ? s.average.toFixed(1) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-center font-semibold">
+                          {s.grade_letter || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-wrap justify-between items-center gap-3 pt-2 border-t">
+                <div>
+                  <p className="text-xs text-muted-foreground">Overall average</p>
+                  <p className="text-2xl font-bold tabular-nums">
+                    {card.overall_average != null
+                      ? `${card.overall_average.toFixed(1)}%`
+                      : "—"}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground">Overall grade</p>
+                  <p className="text-3xl font-bold text-primary">
+                    {card.overall_grade || "—"}
+                  </p>
+                </div>
+                <div className="text-xs text-muted-foreground max-w-[12rem]">
+                  Based on {card.subjects_with_marks} subject(s) with marks entered.
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-6 pt-6 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-6">Class teacher</p>
+                  <div className="border-t border-dashed pt-1">
+                    {card.class_teacher_name || "Signature"}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-6">Head teacher</p>
+                  <div className="border-t border-dashed pt-1">Signature / stamp</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        !busy && (
+          <p className="text-center text-sm text-muted-foreground py-12">
+            Select year, term and grade, then load report cards.
+          </p>
+        )
+      )}
+    </div>
+  );
+}
