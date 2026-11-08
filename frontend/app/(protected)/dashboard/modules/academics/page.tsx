@@ -44,6 +44,8 @@ type Tab =
   | "promotion";
 
 /** Stable tab list (module scope) — avoids SSR/client icon identity mismatches. */
+const EMPTY_LIST: never[] = [];
+
 const ACADEMICS_TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Structure Map" },
   { id: "years", label: "Years & Terms" },
@@ -99,11 +101,11 @@ export default function AcademicsPage() {
     queryFn: fetchCurriculumTemplates,
   });
 
-  const years = yearsQ.data ?? [];
-  const grades = gradesQ.data ?? [];
-  const subjects = subjectsQ.data ?? [];
-  const curricula = curriculaQ.data ?? [];
-  const templates = templatesQ.data ?? [];
+  const years = yearsQ.data ?? (EMPTY_LIST as AcademicYear[]);
+  const grades = gradesQ.data ?? (EMPTY_LIST as GradeLevel[]);
+  const subjects = subjectsQ.data ?? (EMPTY_LIST as Subject[]);
+  const curricula = curriculaQ.data ?? (EMPTY_LIST as { id: number; name: string }[]);
+  const templates = templatesQ.data ?? (EMPTY_LIST as CurriculumTemplate[]);
   const activeYear = years.find((y) => y.is_active) ?? years[0];
   const needsCurriculum = !curriculaQ.isLoading && curricula.length === 0;
 
@@ -1099,6 +1101,18 @@ function SubjectsPanel({
     }
   };
 
+  useEffect(() => {
+    if (gradeId === "") {
+      setMapped([]);
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void loadMap(Number(gradeId));
+    }, 200);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gradeId]);
+
   const mut = useMutation({
     mutationFn: () => createSubject(form),
     onSuccess: () => {
@@ -1232,11 +1246,11 @@ function SubjectsPanel({
                 <select
                   className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
                   value={gradeId === "" ? "" : String(gradeId)}
+                  onMouseDown={(e) => e.stopPropagation()}
                   onChange={(e) => {
                     const v = e.target.value ? Number(e.target.value) : "";
                     setGradeId(v);
-                    if (v) loadMap(Number(v));
-                    else setMapped([]);
+                    if (!v) setMapped([]);
                   }}
                 >
                   <option value="">Select grade…</option>
@@ -1849,16 +1863,16 @@ function TeachersPanel({
     }
   };
 
-  const loadCoverage = async () => {
-    if (!gradeId) {
+  const loadCoverage = async (gid: number, yid: number | "") => {
+    if (!gid) {
       setCoverage(null);
       return;
     }
     setBusy(true);
     try {
       const data = await fetchTeacherCoverage({
-        grade_level: Number(gradeId),
-        academic_year: yearId ? Number(yearId) : undefined,
+        grade_level: Number(gid),
+        academic_year: yid ? Number(yid) : undefined,
       });
       setCoverage(data);
     } catch {
@@ -1873,8 +1887,16 @@ function TeachersPanel({
     loadTeachers();
   }, []);
 
+  // Debounce so native <select> can finish open/close without a remount mid-gesture
   useEffect(() => {
-    loadCoverage();
+    if (!gradeId) {
+      setCoverage(null);
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void loadCoverage(Number(gradeId), yearId);
+    }, 200);
+    return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gradeId, yearId]);
 
@@ -2015,6 +2037,7 @@ function TeachersPanel({
           <select
             className="w-full mt-1 h-10 rounded-md border border-input bg-background px-3 text-sm"
             value={gradeId === "" ? "" : String(gradeId)}
+            onMouseDown={(e) => e.stopPropagation()}
             onChange={(e) => setGradeId(e.target.value ? Number(e.target.value) : "")}
           >
             <option value="">Select class…</option>
@@ -2034,14 +2057,14 @@ function TeachersPanel({
         </p>
       )}
 
-      {loading || busy ? (
-        <div className="flex justify-center py-12 text-muted-foreground gap-2">
-          <Loader2 className="h-5 w-5 animate-spin" /> Loading…
-        </div>
-      ) : !gradeId ? (
+      {!gradeId ? (
         <p className="text-sm text-muted-foreground text-center py-12">
           Choose a grade to see subject coverage and assign teachers.
         </p>
+      ) : busy || loading ? (
+        <div className="flex justify-center py-12 text-muted-foreground gap-2">
+          <Loader2 className="h-5 w-5 animate-spin" /> Loading coverage…
+        </div>
       ) : coverage ? (
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2 items-end justify-between">
@@ -2230,7 +2253,10 @@ function AssessmentsPanel({
   };
 
   useEffect(() => {
-    load();
+    const handle = window.setTimeout(() => {
+      void load();
+    }, 200);
+    return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yearId, gradeId, termId]);
 
@@ -2382,6 +2408,7 @@ function AssessmentsPanel({
           <select
             className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
             value={gradeId === "" ? "" : String(gradeId)}
+            onMouseDown={(e) => e.stopPropagation()}
             onChange={(e) => setGradeId(e.target.value ? Number(e.target.value) : "")}
           >
             <option value="">All grades</option>
@@ -2744,6 +2771,7 @@ function ReportCardsPanel({
           <select
             className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
             value={gradeId === "" ? "" : String(gradeId)}
+            onMouseDown={(e) => e.stopPropagation()}
             onChange={(e) => {
               setGradeId(e.target.value ? Number(e.target.value) : "");
               setSectionId("");
