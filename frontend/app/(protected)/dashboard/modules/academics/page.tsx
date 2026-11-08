@@ -183,23 +183,36 @@ export default function AcademicsPage() {
     return { checks, score };
   }, [curricula, grades, years, subjects]);
 
+  const workTabs = tab === "marks" || tab === "assessments" || tab === "report-cards" || tab === "teachers";
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-        <div>
-          <div className="inline-flex items-center gap-2 text-primary text-sm font-semibold mb-1">
-            <GraduationCap className="h-4 w-4" /> Academic Core
+    <div className="max-w-7xl mx-auto space-y-3 pb-4">
+      {/* Compact header — full blurb only on structure overview */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="min-w-0">
+          <div className="inline-flex items-center gap-2 text-primary text-xs font-semibold uppercase tracking-wide">
+            <GraduationCap className="h-3.5 w-3.5" /> Academic management
           </div>
-          <h1 className="text-3xl font-bold text-textPrimary tracking-tight">
-            Academic Structure
+          <h1 className="text-xl sm:text-2xl font-bold text-textPrimary tracking-tight truncate">
+            {tab === "marks"
+              ? "Marks entry"
+              : tab === "assessments"
+                ? "Assessments"
+                : tab === "report-cards"
+                  ? "Report cards"
+                  : tab === "teachers"
+                    ? "Teachers"
+                    : tab === "promotion"
+                      ? "Promotion"
+                      : "Academic structure"}
           </h1>
-          <p className="text-textMuted mt-1 max-w-xl">
-            Design how {currentSchool?.name || "your school"} is organised — years, classes, and subjects.
-            Everything else (students, fees, attendance) hangs on this spine.
-          </p>
+          {!workTabs && (
+            <p className="text-textMuted text-sm mt-0.5 max-w-2xl line-clamp-2">
+              Years, classes and subjects for {currentSchool?.name || "your school"}.
+            </p>
+          )}
         </div>
-        <ReadinessRing score={readiness.score} />
+        {tab === "overview" && <ReadinessRing score={readiness.score} />}
       </div>
 
       {needsCurriculum && (
@@ -214,30 +227,32 @@ export default function AcademicsPage() {
         />
       )}
 
-      {/* Tabs — icons rendered after mount to avoid lucide SSR/client path mismatches */}
+      {/* Sticky sub-nav so tabs stay visible while scrolling content */}
       <div
-        className="flex flex-wrap gap-2 border-b border-border pb-2"
+        className="sticky top-0 z-20 -mx-1 px-1 py-2 bg-background/95 backdrop-blur border-b border-border supports-[backdrop-filter]:bg-background/80"
         suppressHydrationWarning
       >
-        {ACADEMICS_TABS.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setTab(id)}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-              tab === id
-                ? "bg-primary text-white shadow-md"
-                : "text-textMuted hover:bg-primary-50 hover:text-primary"
-            }`}
-          >
-            {tabsReady ? (
-              <TabIcon id={id} className="h-4 w-4" />
-            ) : (
-              <span className="inline-block h-4 w-4" aria-hidden />
-            )}
-            {label}
-          </button>
-        ))}
+        <div className="flex flex-wrap gap-1.5">
+          {ACADEMICS_TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                tab === id
+                  ? "bg-primary text-white shadow-sm"
+                  : "text-textMuted hover:bg-primary-50 hover:text-primary bg-white border border-border/80"
+              }`}
+            >
+              {tabsReady ? (
+                <TabIcon id={id} className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <span className="inline-block h-3.5 w-3.5" aria-hidden />
+              )}
+              <span className="whitespace-nowrap">{label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {tab === "overview" && (
@@ -3183,154 +3198,154 @@ function MarksEntryPanel({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
-        <p className="font-semibold text-primary">Preset markbook</p>
-        <p className="text-muted-foreground mt-0.5">
-          CAT 1–3 and End of Term are created automatically for the subject and term.
-          Practical appears for science/ICT-style subjects. Enter marks, save once —
-          averages and grade labels update immediately.
-        </p>
-      </div>
-
-      <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
-        <div>
-          <Label>Year</Label>
-          <select
-            className="w-full mt-1 h-10 rounded-md border px-3 text-sm bg-background"
-            value={yearId === "" ? "" : String(yearId)}
-            onChange={(e) => setYearId(e.target.value ? Number(e.target.value) : "")}
-          >
-            {years.map((y) => (
-              <option key={y.id} value={y.id}>
-                {y.name}
-              </option>
-            ))}
-          </select>
+    <div className="flex flex-col gap-2 min-h-0">
+      {/* Sticky control strip — stays visible above the grid */}
+      <div className="sticky top-[3.25rem] z-10 rounded-xl border bg-white/95 backdrop-blur shadow-sm p-2.5 sm:p-3 space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground max-w-xl">
+            Preset columns: <strong>CAT 1–3</strong>, <strong>End of Term</strong>
+            {subjectId ? " (+ Practical for science/ICT)" : ""}. Averages update as you type.
+          </p>
+          <div className="flex gap-2 shrink-0">
+            <Button size="sm" variant="outline" disabled={busy || loading} onClick={load}>
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+              {matrix ? "Reload" : "Open markbook"}
+            </Button>
+            {matrix && (
+              <Button size="sm" className="bg-primary" disabled={saving} onClick={save}>
+                {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                Save all
+              </Button>
+            )}
+          </div>
         </div>
-        <div>
-          <Label>Term</Label>
-          <select
-            className="w-full mt-1 h-10 rounded-md border px-3 text-sm bg-background"
-            value={termId === "" ? "" : String(termId)}
-            onChange={(e) => setTermId(e.target.value ? Number(e.target.value) : "")}
-          >
-            <option value="">Select term…</option>
-            {terms.map((tm) => (
-              <option key={tm.id} value={tm.id}>
-                {tm.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <Label>Grade</Label>
-          <GradeSelect
-            grades={grades}
-            value={gradeId}
-            emptyLabel="Select…"
-            onChange={(v) => {
-              setGradeId(v);
-              setSectionId("");
-              setMatrix(null);
-            }}
-          />
-        </div>
-        <div>
-          <Label>Section</Label>
-          <select
-            className="w-full mt-1 h-10 rounded-md border px-3 text-sm bg-background"
-            value={sectionId === "" ? "" : String(sectionId)}
-            onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : "")}
-          >
-            <option value="">All sections</option>
-            {sections.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <Label>Subject</Label>
-          <select
-            className="w-full mt-1 h-10 rounded-md border px-3 text-sm bg-background"
-            value={subjectId}
-            onChange={(e) => {
-              setSubjectId(e.target.value);
-              setMatrix(null);
-            }}
-          >
-            <option value="">Select subject…</option>
-            {subjects
-              .slice()
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((s) => (
-                <option key={s.id} value={String(s.id)}>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 items-end">
+          <div>
+            <Label className="text-[11px]">Year</Label>
+            <select
+              className="w-full mt-0.5 h-9 rounded-md border px-2 text-sm bg-background"
+              value={yearId === "" ? "" : String(yearId)}
+              onChange={(e) => setYearId(e.target.value ? Number(e.target.value) : "")}
+            >
+              {years.map((y) => (
+                <option key={y.id} value={y.id}>
+                  {y.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label className="text-[11px]">Term</Label>
+            <select
+              className="w-full mt-0.5 h-9 rounded-md border px-2 text-sm bg-background"
+              value={termId === "" ? "" : String(termId)}
+              onChange={(e) => setTermId(e.target.value ? Number(e.target.value) : "")}
+            >
+              <option value="">Select…</option>
+              {terms.map((tm) => (
+                <option key={tm.id} value={tm.id}>
+                  {tm.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <Label className="text-[11px]">Grade</Label>
+            <GradeSelect
+              grades={grades}
+              value={gradeId}
+              emptyLabel="Select…"
+              className="h-9 w-full mt-0.5 bg-background"
+              onChange={(v) => {
+                setGradeId(v);
+                setSectionId("");
+                setMatrix(null);
+              }}
+            />
+          </div>
+          <div>
+            <Label className="text-[11px]">Section</Label>
+            <select
+              className="w-full mt-0.5 h-9 rounded-md border px-2 text-sm bg-background"
+              value={sectionId === "" ? "" : String(sectionId)}
+              onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : "")}
+            >
+              <option value="">All</option>
+              {sections.map((s) => (
+                <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
               ))}
-          </select>
+            </select>
+          </div>
+          <div className="col-span-2 sm:col-span-1 lg:col-span-2">
+            <Label className="text-[11px]">Subject</Label>
+            <select
+              className="w-full mt-0.5 h-9 rounded-md border px-2 text-sm bg-background"
+              value={subjectId}
+              onChange={(e) => {
+                setSubjectId(e.target.value);
+                setMatrix(null);
+              }}
+            >
+              <option value="">Select subject…</option>
+              {subjects
+                .slice()
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((s) => (
+                  <option key={s.id} value={String(s.id)}>
+                    {s.name}
+                  </option>
+                ))}
+            </select>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button className="bg-primary flex-1" disabled={busy || loading} onClick={load}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-            Open markbook
-          </Button>
-        </div>
+        {matrix && (
+          <p className="text-[11px] text-muted-foreground">
+            {matrix.grade_level.name} · {matrix.subject.name} · {matrix.term.name} ·{" "}
+            {matrix.academic_year.name} · grading {matrix.grading_system} (pass {matrix.passing_mark}%)
+            · {liveRows.length} learner(s)
+          </p>
+        )}
       </div>
 
-      {matrix && (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-muted-foreground">
-              {matrix.grade_level.name} · {matrix.subject.name} · {matrix.term.name} ·{" "}
-              {matrix.academic_year.name}
-              <span className="ml-2 text-xs">
-                Grading: {matrix.grading_system} (pass {matrix.passing_mark}%)
-              </span>
-            </p>
-            <Button className="bg-primary" disabled={saving} onClick={save}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-              Save all marks
-            </Button>
-          </div>
-
-          <div className="overflow-x-auto rounded-xl border bg-white">
+      {matrix ? (
+        <div className="rounded-xl border bg-white overflow-hidden flex flex-col max-h-[min(70vh,calc(100vh-16rem))]">
+          <div className="overflow-auto flex-1">
             <table className="w-full text-sm min-w-[720px]">
-              <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+              <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground sticky top-0 z-[1] shadow-sm">
                 <tr>
-                  <th className="px-3 py-2 sticky left-0 bg-slate-50">Adm</th>
-                  <th className="px-3 py-2 sticky left-16 bg-slate-50">Learner</th>
+                  <th className="px-2 py-2 sticky left-0 bg-slate-50 z-[2] min-w-[4.5rem]">Adm</th>
+                  <th className="px-2 py-2 sticky left-[4.5rem] bg-slate-50 z-[2] min-w-[8rem]">Learner</th>
                   {matrix.columns.map((c) => (
-                    <th key={c.id} className="px-2 py-2 text-center min-w-[88px]">
-                      <div>{c.name}</div>
+                    <th key={c.id} className="px-1.5 py-2 text-center min-w-[5.5rem] bg-slate-50">
+                      <div className="normal-case font-semibold text-foreground text-xs">{c.name}</div>
                       <div className="font-normal normal-case text-[10px] opacity-70">
-                        /{c.max_score} · w{c.weight}
+                        /{c.max_score}
                       </div>
                     </th>
                   ))}
-                  <th className="px-3 py-2 text-right">Average</th>
-                  <th className="px-3 py-2 text-center">Grade</th>
+                  <th className="px-2 py-2 text-right bg-slate-50">Avg</th>
+                  <th className="px-2 py-2 text-center bg-slate-50">Grade</th>
                 </tr>
               </thead>
               <tbody>
                 {liveRows.map((row) => (
                   <tr key={row.student_id} className="border-t hover:bg-slate-50/80">
-                    <td className="px-3 py-1.5 font-mono text-xs sticky left-0 bg-white">
+                    <td className="px-2 py-1 font-mono text-[11px] sticky left-0 bg-white z-[1]">
                       {row.admission_number}
                     </td>
-                    <td className="px-3 py-1.5 font-medium sticky left-16 bg-white whitespace-nowrap">
+                    <td className="px-2 py-1 font-medium sticky left-[4.5rem] bg-white z-[1] whitespace-nowrap text-xs">
                       {row.name}
                     </td>
                     {matrix.columns.map((col) => (
-                      <td key={col.id} className="px-1 py-1">
+                      <td key={col.id} className="px-1 py-0.5">
                         <Input
                           type="number"
                           min={0}
                           max={col.max_score}
                           step="0.5"
-                          className="h-9 text-center tabular-nums"
+                          className="h-8 text-center tabular-nums text-sm px-1"
                           value={draft[cellKey(row.student_id, col.id)] ?? ""}
                           onChange={(e) =>
                             setDraft((d) => ({
@@ -3341,10 +3356,10 @@ function MarksEntryPanel({
                         />
                       </td>
                     ))}
-                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold">
+                    <td className="px-2 py-1 text-right tabular-nums font-semibold text-xs">
                       {row.liveAverage != null ? row.liveAverage.toFixed(1) : "—"}
                     </td>
-                    <td className="px-3 py-1.5 text-center font-semibold text-primary">
+                    <td className="px-2 py-1 text-center font-semibold text-primary text-xs">
                       {labelFor(row.liveAverage)}
                     </td>
                   </tr>
@@ -3362,13 +3377,13 @@ function MarksEntryPanel({
               </tbody>
             </table>
           </div>
-        </>
-      )}
-
-      {!matrix && !busy && (
-        <p className="text-center text-sm text-muted-foreground py-12">
-          Choose year, term, grade and subject, then open the markbook.
-        </p>
+        </div>
+      ) : (
+        !busy && (
+          <div className="rounded-xl border border-dashed bg-slate-50/50 py-10 text-center text-sm text-muted-foreground">
+            Select year, term, grade and subject, then open the markbook.
+          </div>
+        )
       )}
     </div>
   );
