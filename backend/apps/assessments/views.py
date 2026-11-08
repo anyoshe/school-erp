@@ -487,3 +487,224 @@ class ClassReportCardsView(APIView):
                 "cards": cards,
             }
         )
+
+
+class MarksMatrixView(APIView):
+    """
+    Preset term markbook for a class + subject.
+
+    GET  ?academic_year=&term=&grade_level=&subject=&section=
+         Ensures CAT 1–3, End of Term (+ Practical when relevant) exist,
+         returns columns + student rows with scores.
+
+    POST same query filters + body:
+         { "marks": [ { "student", "assessment", "score", "is_absent" }, ... ] }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _resolve_context(self, request):
+        school = selected_school(request)
+        if not school:
+            return None, Response({"detail": "No school selected"}, status=400)
+
+        from apps.academics.models import AcademicYear, Term, GradeLevel, Subject
+
+        year_id = request.query_params.get("academic_year") or request.data.get("academic_year")
+        term_id = request.query_params.get("term") or request.data.get("term")
+        grade_id = request.query_params.get("grade_level") or request.data.get("grade_level")
+        subject_id = request.query_params.get("subject") or request.data.get("subject")
+        section_id = request.query_params.get("section") or request.data.get("section")
+
+        if not all([year_id, term_id, grade_id, subject_id]):
+            return None, Response(
+                {"detail": "academic_year, term, grade_level and subject are required"},
+                status=400,
+            )
+
+        year = AcademicYear.objects.filter(pk=year_id, school=school).first()
+        term = Term.objects.filter(pk=term_id, academic_year=year).first() if year else None
+        grade = GradeLevel.objects.filter(pk=grade_id, school=school).first()
+        subject = Subject.objects.filter(pk=subject_id, school=school).first()
+        if not all([year, term, grade, subject]):
+            return None, Response({"detail": "Invalid year, term, grade or subject"}, status=400)
+
+        return {
+            "school": school,
+            "year": year,
+            "term": term,
+            "grade": grade,
+            "subject": subject,
+            "section_id": section_id,
+        }, None
+
+    def get(self, request):
+        from apps.students.models import Student
+        from .presets import ensure_term_assessments, grade_label
+
+        ctx, err = self._resolve_context(request)
+        if err:
+            return err
+
+        school = ctx["school"]
+        assessments = ensure_term_assessments(
+            school=school,
+            academic_year=ctx["year"],
+            term=ctx["term"],
+            grade_level=ctx["grade"],
+            subject=ctx["subject"],
+            created_by=request.user if request.user.is_authenticated else None,
+        )
+
+        students = (
+            Student.objects.filter(school=school, current_class=ctx["grade"])
+            .exclude(status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED", "PENDING_CLEARANCE"])
+            .order_by("last_name", "first_name")
+        )
+        if ctx["section_id"]:
+            students = students.filter(section_id=ctx["section_id"])
+
+        students = list(students[:400])
+        student_ids = [s.id for s in students]
+
+        marks = Mark.objects.filter(
+            assessment__in=assessments,
+            student_id__in=student_ids,
+        )
+        by_key = {(str(m.assessment_id), str(m.student_id)): m for m in marks}
+
+        columns = [
+            {
+                "id": str(a.id),
+                "name": a.name,
+                "kind": a.kind,
+                "max_score": float(a.max_score),
+                "weight": float(a.weight),
+            }
+            for a in assessments
+        ]
+
+        grading_system = getattr(school, "grading_system", None) or "percentage"
+        passing_mark = int(getattr(school, "passing_mark", None) or 50)
+
+        rows = []
+        for s in students:
+            cells = {}
+            weighted_sum = Decimal("0")
+            weight_total = Decimal("0")
+            for a in assessments:
+                m = by_key.get((str(a.id), str(s.id)))
+                score = float(m.score) if m and m.score is not None else None
+                is_absent = bool(m.is_absent) if m else False
+                pct = None
+                if score is not None and a.max_score:
+                    pct = round(float(score) / float(a.max_score) * 100, 1)
+                    if not is_absent:
+                        w = Decimal(str(a.weight or 1))
+                        weighted_sum += Decimal(str(pct)) * w
+                        weight_total += w
+                cells[str(a.id)] = {
+                    "score": score,
+                    "is_absent": is_absent,
+                    "percentage": pct,
+                }
+            avg = float(weighted_sum / weight_total) if weight_total > 0 else None
+            rows.append(
+                {
+                    "student_id": str(s.id),
+                    "admission_number": s.admission_number or "",
+                    "name": f"{s.first_name or ''} {s.last_name or ''}".strip(),
+                    "cells": cells,
+                    "average": round(avg, 1) if avg is not None else None,
+                    "grade_label": grade_label(avg, grading_system, passing_mark),
+                }
+            )
+
+        return Response(
+            {
+                "academic_year": {"id": ctx["year"].id, "name": ctx["year"].name},
+                "term": {"id": ctx["term"].id, "name": ctx["term"].name},
+                "grade_level": {"id": ctx["grade"].id, "name": ctx["grade"].name},
+                "subject": {"id": ctx["subject"].id, "name": ctx["subject"].name},
+                "section_id": ctx["section_id"],
+                "grading_system": grading_system,
+                "passing_mark": passing_mark,
+                "columns": columns,
+                "rows": rows,
+                "preset": [c["name"] for c in columns],
+            }
+        )
+
+    def post(self, request):
+        from apps.students.models import Student
+        from .presets import ensure_term_assessments, grade_label
+
+        ctx, err = self._resolve_context(request)
+        if err:
+            return err
+
+        school = ctx["school"]
+        assessments = ensure_term_assessments(
+            school=school,
+            academic_year=ctx["year"],
+            term=ctx["term"],
+            grade_level=ctx["grade"],
+            subject=ctx["subject"],
+            created_by=request.user if request.user.is_authenticated else None,
+        )
+        assessment_ids = {str(a.id) for a in assessments}
+        by_id = {str(a.id): a for a in assessments}
+
+        payload = request.data.get("marks") or []
+        if not isinstance(payload, list):
+            return Response({"detail": "marks must be a list"}, status=400)
+
+        saved = 0
+        errors = []
+        with transaction.atomic():
+            for row in payload:
+                aid = str(row.get("assessment") or "")
+                sid = row.get("student") or row.get("student_id")
+                if aid not in assessment_ids or not sid:
+                    errors.append({"row": row, "detail": "invalid assessment or student"})
+                    continue
+                assessment = by_id[aid]
+                # Ensure student belongs to school/grade
+                if not Student.objects.filter(
+                    pk=sid, school=school, current_class=ctx["grade"]
+                ).exists():
+                    errors.append({"row": row, "detail": "student not in class"})
+                    continue
+
+                is_absent = bool(row.get("is_absent"))
+                score_raw = row.get("score")
+                score = None
+                if not is_absent and score_raw not in (None, ""):
+                    try:
+                        score = Decimal(str(score_raw))
+                    except (InvalidOperation, TypeError, ValueError):
+                        errors.append({"row": row, "detail": "invalid score"})
+                        continue
+                    if score < 0 or score > assessment.max_score:
+                        errors.append(
+                            {
+                                "row": row,
+                                "detail": f"score must be 0–{assessment.max_score}",
+                            }
+                        )
+                        continue
+
+                Mark.objects.update_or_create(
+                    assessment=assessment,
+                    student_id=sid,
+                    defaults={
+                        "school": school,
+                        "score": score,
+                        "is_absent": is_absent,
+                        "remarks": (row.get("remarks") or "")[:255],
+                        "recorded_by": request.user if request.user.is_authenticated else None,
+                    },
+                )
+                saved += 1
+
+        return Response({"saved": saved, "errors": errors[:20]})

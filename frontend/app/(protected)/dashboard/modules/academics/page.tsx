@@ -38,7 +38,7 @@ import {
   type AcademicYear, type GradeLevel, type CurriculumTemplate, type Term,
   type ClassRegisterStudent, type Subject, type GradeSubject,
   fetchTeachers, syncTeachersFromUsers, fetchTeacherCoverage, assignSubjectTeacher, removeSubjectTeacher, updateSection, assignTeacherAllSubjects,
-  fetchAssessments, createAssessment, fetchMarksheet, saveMarksheet, fetchClassResults, fetchReportCard, fetchClassReportCards, type ReportCard,
+  fetchAssessments, createAssessment, fetchMarksheet, saveMarksheet, fetchClassResults, fetchReportCard, fetchClassReportCards, type ReportCard, fetchMarksMatrix, saveMarksMatrix, type MarksMatrix,
 } from "./services";
 
 type Tab =
@@ -47,6 +47,7 @@ type Tab =
   | "classes"
   | "subjects"
   | "teachers"
+  | "marks"
   | "assessments"
   | "report-cards"
   | "promotion";
@@ -60,6 +61,7 @@ const ACADEMICS_TABS: { id: Tab; label: string }[] = [
   { id: "classes", label: "Classes" },
   { id: "subjects", label: "Subjects" },
   { id: "teachers", label: "Teachers" },
+  { id: "marks", label: "Marks entry" },
   { id: "assessments", label: "Assessments" },
   { id: "report-cards", label: "Report cards" },
   { id: "promotion", label: "Promotion" },
@@ -78,6 +80,8 @@ function TabIcon({ id, className }: { id: Tab; className?: string }) {
       return <BookOpen className={cn} />;
     case "teachers":
       return <Users className={cn} />;
+    case "marks":
+      return <ClipboardList className={cn} />;
     case "assessments":
       return <ClipboardList className={cn} />;
     case "report-cards":
@@ -300,6 +304,14 @@ export default function AcademicsPage() {
         />
       )}
 
+      {tab === "marks" && (
+        <MarksEntryPanel
+          grades={grades}
+          years={years}
+          subjects={subjects}
+          loading={gradesQ.isLoading || yearsQ.isLoading}
+        />
+      )}
       {tab === "assessments" && (
         <AssessmentsPanel
           grades={grades}
@@ -2989,6 +3001,374 @@ function ReportCardsPanel({
             Select year, term and grade, then load report cards.
           </p>
         )
+      )}
+    </div>
+  );
+}
+
+
+function MarksEntryPanel({
+  grades,
+  years,
+  subjects,
+  loading,
+}: {
+  grades: GradeLevel[];
+  years: AcademicYear[];
+  subjects: Subject[];
+  loading: boolean;
+}) {
+  const [yearId, setYearId] = useState<number | "">("");
+  const [termId, setTermId] = useState<number | "">("");
+  const [gradeId, setGradeId] = useState<number | "">("");
+  const [sectionId, setSectionId] = useState<number | "">("");
+  const [subjectId, setSubjectId] = useState<string>("");
+  const [matrix, setMatrix] = useState<MarksMatrix | null>(null);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const activeYear = years.find((y) => y.is_active) || years[0];
+  const yearObj = years.find((y) => y.id === yearId) || activeYear;
+  const terms = yearObj?.terms || [];
+  const gradeObj = grades.find((g) => g.id === gradeId);
+  const sections = gradeObj?.sections || [];
+
+  useEffect(() => {
+    if (activeYear && yearId === "") setYearId(activeYear.id);
+  }, [activeYear, yearId]);
+
+  useEffect(() => {
+    if (yearObj) {
+      const cur = yearObj.terms?.find((t) => t.is_current) || yearObj.terms?.[0];
+      if (cur) setTermId(cur.id);
+    }
+  }, [yearObj?.id]);
+
+  const cellKey = (studentId: string, assessmentId: string) =>
+    `${studentId}__${assessmentId}`;
+
+  const load = async () => {
+    if (!yearId || !termId || !gradeId || !subjectId) {
+      toast.message("Select year, term, grade and subject");
+      return;
+    }
+    setBusy(true);
+    try {
+      const data = await fetchMarksMatrix({
+        academic_year: Number(yearId),
+        term: Number(termId),
+        grade_level: Number(gradeId),
+        subject: subjectId,
+        section: sectionId || undefined,
+      });
+      setMatrix(data);
+      const d: Record<string, string> = {};
+      for (const row of data.rows) {
+        for (const col of data.columns) {
+          const cell = row.cells[col.id];
+          d[cellKey(row.student_id, col.id)] =
+            cell?.score != null && !cell?.is_absent ? String(cell.score) : "";
+        }
+      }
+      setDraft(d);
+      toast.success(
+        `Markbook ready: ${(data.preset || []).join(" · ") || data.columns.map((c) => c.name).join(" · ")}`
+      );
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Could not load markbook");
+      setMatrix(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const save = async () => {
+    if (!matrix || !yearId || !termId || !gradeId || !subjectId) return;
+    setSaving(true);
+    try {
+      const marks: {
+        student: string;
+        assessment: string;
+        score?: number | null;
+        is_absent?: boolean;
+      }[] = [];
+      for (const row of matrix.rows) {
+        for (const col of matrix.columns) {
+          const raw = draft[cellKey(row.student_id, col.id)];
+          if (raw === undefined) continue;
+          const trimmed = String(raw).trim();
+          if (trimmed === "") {
+            // leave blank — do not overwrite unless previously had value and cleared
+            marks.push({
+              student: row.student_id,
+              assessment: col.id,
+              score: null,
+              is_absent: false,
+            });
+          } else {
+            const n = Number(trimmed);
+            if (Number.isNaN(n)) continue;
+            marks.push({
+              student: row.student_id,
+              assessment: col.id,
+              score: n,
+              is_absent: false,
+            });
+          }
+        }
+      }
+      const res = await saveMarksMatrix(
+        {
+          academic_year: Number(yearId),
+          term: Number(termId),
+          grade_level: Number(gradeId),
+          subject: subjectId,
+          section: sectionId || undefined,
+        },
+        marks
+      );
+      toast.success(`Saved ${res.saved} mark(s)`);
+      await load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Live averages from draft
+  const liveRows = useMemo(() => {
+    if (!matrix) return [];
+    return matrix.rows.map((row) => {
+      let weighted = 0;
+      let wsum = 0;
+      for (const col of matrix.columns) {
+        const raw = draft[cellKey(row.student_id, col.id)];
+        if (raw === undefined || String(raw).trim() === "") continue;
+        const score = Number(raw);
+        if (Number.isNaN(score) || !col.max_score) continue;
+        const pct = (score / col.max_score) * 100;
+        weighted += pct * (col.weight || 1);
+        wsum += col.weight || 1;
+      }
+      const average = wsum > 0 ? Math.round((weighted / wsum) * 10) / 10 : null;
+      return { ...row, liveAverage: average };
+    });
+  }, [matrix, draft]);
+
+  const labelFor = (avg: number | null) => {
+    if (avg == null || !matrix) return "—";
+    const sys = (matrix.grading_system || "percentage").toLowerCase();
+    const pass = matrix.passing_mark || 50;
+    if (sys === "cbc" || sys === "competency" || sys === "competency_based") {
+      if (avg >= 80) return "EE";
+      if (avg >= 60) return "ME";
+      if (avg >= 40) return "AE";
+      return "BE";
+    }
+    if (sys === "mastery") {
+      if (avg >= 80) return "Mastery";
+      if (avg >= 60) return "Approaching";
+      return "Beginning";
+    }
+    if (sys === "pass_fail" || sys === "pass/fail") {
+      return avg >= pass ? "Pass" : "Fail";
+    }
+    if (avg >= 80) return "A";
+    if (avg >= 70) return "B";
+    if (avg >= 60) return "C";
+    if (avg >= 50) return "D";
+    return "E";
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+        <p className="font-semibold text-primary">Preset markbook</p>
+        <p className="text-muted-foreground mt-0.5">
+          CAT 1–3 and End of Term are created automatically for the subject and term.
+          Practical appears for science/ICT-style subjects. Enter marks, save once —
+          averages and grade labels update immediately.
+        </p>
+      </div>
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+        <div>
+          <Label>Year</Label>
+          <select
+            className="w-full mt-1 h-10 rounded-md border px-3 text-sm bg-background"
+            value={yearId === "" ? "" : String(yearId)}
+            onChange={(e) => setYearId(e.target.value ? Number(e.target.value) : "")}
+          >
+            {years.map((y) => (
+              <option key={y.id} value={y.id}>
+                {y.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label>Term</Label>
+          <select
+            className="w-full mt-1 h-10 rounded-md border px-3 text-sm bg-background"
+            value={termId === "" ? "" : String(termId)}
+            onChange={(e) => setTermId(e.target.value ? Number(e.target.value) : "")}
+          >
+            <option value="">Select term…</option>
+            {terms.map((tm) => (
+              <option key={tm.id} value={tm.id}>
+                {tm.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label>Grade</Label>
+          <GradeSelect
+            grades={grades}
+            value={gradeId}
+            emptyLabel="Select…"
+            onChange={(v) => {
+              setGradeId(v);
+              setSectionId("");
+              setMatrix(null);
+            }}
+          />
+        </div>
+        <div>
+          <Label>Section</Label>
+          <select
+            className="w-full mt-1 h-10 rounded-md border px-3 text-sm bg-background"
+            value={sectionId === "" ? "" : String(sectionId)}
+            onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : "")}
+          >
+            <option value="">All sections</option>
+            {sections.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <Label>Subject</Label>
+          <select
+            className="w-full mt-1 h-10 rounded-md border px-3 text-sm bg-background"
+            value={subjectId}
+            onChange={(e) => {
+              setSubjectId(e.target.value);
+              setMatrix(null);
+            }}
+          >
+            <option value="">Select subject…</option>
+            {subjects
+              .slice()
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.name}
+                </option>
+              ))}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <Button className="bg-primary flex-1" disabled={busy || loading} onClick={load}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+            Open markbook
+          </Button>
+        </div>
+      </div>
+
+      {matrix && (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">
+              {matrix.grade_level.name} · {matrix.subject.name} · {matrix.term.name} ·{" "}
+              {matrix.academic_year.name}
+              <span className="ml-2 text-xs">
+                Grading: {matrix.grading_system} (pass {matrix.passing_mark}%)
+              </span>
+            </p>
+            <Button className="bg-primary" disabled={saving} onClick={save}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              Save all marks
+            </Button>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border bg-white">
+            <table className="w-full text-sm min-w-[720px]">
+              <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 sticky left-0 bg-slate-50">Adm</th>
+                  <th className="px-3 py-2 sticky left-16 bg-slate-50">Learner</th>
+                  {matrix.columns.map((c) => (
+                    <th key={c.id} className="px-2 py-2 text-center min-w-[88px]">
+                      <div>{c.name}</div>
+                      <div className="font-normal normal-case text-[10px] opacity-70">
+                        /{c.max_score} · w{c.weight}
+                      </div>
+                    </th>
+                  ))}
+                  <th className="px-3 py-2 text-right">Average</th>
+                  <th className="px-3 py-2 text-center">Grade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {liveRows.map((row) => (
+                  <tr key={row.student_id} className="border-t hover:bg-slate-50/80">
+                    <td className="px-3 py-1.5 font-mono text-xs sticky left-0 bg-white">
+                      {row.admission_number}
+                    </td>
+                    <td className="px-3 py-1.5 font-medium sticky left-16 bg-white whitespace-nowrap">
+                      {row.name}
+                    </td>
+                    {matrix.columns.map((col) => (
+                      <td key={col.id} className="px-1 py-1">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={col.max_score}
+                          step="0.5"
+                          className="h-9 text-center tabular-nums"
+                          value={draft[cellKey(row.student_id, col.id)] ?? ""}
+                          onChange={(e) =>
+                            setDraft((d) => ({
+                              ...d,
+                              [cellKey(row.student_id, col.id)]: e.target.value,
+                            }))
+                          }
+                        />
+                      </td>
+                    ))}
+                    <td className="px-3 py-1.5 text-right tabular-nums font-semibold">
+                      {row.liveAverage != null ? row.liveAverage.toFixed(1) : "—"}
+                    </td>
+                    <td className="px-3 py-1.5 text-center font-semibold text-primary">
+                      {labelFor(row.liveAverage)}
+                    </td>
+                  </tr>
+                ))}
+                {liveRows.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={(matrix.columns.length || 0) + 4}
+                      className="px-3 py-10 text-center text-muted-foreground"
+                    >
+                      No learners in this class/section.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {!matrix && !busy && (
+        <p className="text-center text-sm text-muted-foreground py-12">
+          Choose year, term, grade and subject, then open the markbook.
+        </p>
       )}
     </div>
   );

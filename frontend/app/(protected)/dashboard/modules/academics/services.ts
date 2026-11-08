@@ -613,3 +613,64 @@ export async function fetchClassReportCards(params: {
   const { data } = await api.get("/assessments/report-cards/", { params });
   return data as { count: number; cards: ReportCard[] };
 }
+
+
+export type MarksMatrixColumn = {
+  id: string;
+  name: string;
+  kind: string;
+  max_score: number;
+  weight: number;
+};
+
+export type MarksMatrixRow = {
+  student_id: string;
+  admission_number: string;
+  name: string;
+  cells: Record<string, { score: number | null; is_absent: boolean; percentage: number | null }>;
+  average: number | null;
+  grade_label: string | null;
+};
+
+export type MarksMatrix = {
+  academic_year: { id: number; name: string };
+  term: { id: number; name: string };
+  grade_level: { id: number; name: string };
+  subject: { id: number | string; name: string };
+  section_id?: string | number | null;
+  grading_system: string;
+  passing_mark: number;
+  columns: MarksMatrixColumn[];
+  rows: MarksMatrixRow[];
+  preset: string[];
+};
+
+export async function fetchMarksMatrix(params: {
+  academic_year: number;
+  term: number;
+  grade_level: number;
+  subject: number | string;
+  section?: number | string;
+}) {
+  const { data } = await api.get("/assessments/marks-matrix/", { params });
+  return data as MarksMatrix;
+}
+
+export async function saveMarksMatrix(
+  params: {
+    academic_year: number;
+    term: number;
+    grade_level: number;
+    subject: number | string;
+    section?: number | string;
+  },
+  marks: {
+    student: string;
+    assessment: string;
+    score?: number | null;
+    is_absent?: boolean;
+  }[]
+) {
+  const { data } = await api.post("/assessments/marks-matrix/", { marks }, { params });
+  return data as { saved: number; errors: unknown[] };
+}

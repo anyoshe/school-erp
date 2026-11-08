@@ -12,6 +12,7 @@ class Assessment(models.Model):
         CAT = "CAT", "CAT / Continuous"
         MIDTERM = "MIDTERM", "Midterm"
         END_TERM = "END_TERM", "End of term"
+        PRACTICAL = "PRACTICAL", "Practical"
         PROJECT = "PROJECT", "Project"
         OTHER = "OTHER", "Other"
 
