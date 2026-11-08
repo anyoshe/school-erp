@@ -135,16 +135,16 @@ class Mark(models.Model):
         pct = self.percentage
         if pct is None:
             return None
-        p = float(pct)
-        if p >= 80:
-            return "A"
-        if p >= 70:
-            return "B"
-        if p >= 60:
-            return "C"
-        if p >= 50:
-            return "D"
-        return "E"
+        from .grading import grade_label, grading_system_for_school
+
+        return grade_label(
+            pct,
+            grading_system_for_school(
+                self.school,
+                self.assessment.grade_level.curriculum,
+            ),
+            self.school.passing_mark,
+        )
 
     def __str__(self):
         return f"{self.student_id} {self.assessment_id} {self.score}"

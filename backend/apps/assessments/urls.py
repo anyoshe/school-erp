@@ -6,6 +6,7 @@ from .views import (
     ReportCardView,
     ClassReportCardsView,
     MarksMatrixView,
+    DefaultAssessmentPlanView,
 )
 
 router = DefaultRouter()
@@ -16,5 +17,6 @@ urlpatterns = [
     path("report-card/", ReportCardView.as_view(), name="report-card"),
     path("report-cards/", ClassReportCardsView.as_view(), name="report-cards"),
     path("marks-matrix/", MarksMatrixView.as_view(), name="marks-matrix"),
+    path("assessment-plans/default/", DefaultAssessmentPlanView.as_view(), name="default-assessment-plan"),
     path("", include(router.urls)),
 ]

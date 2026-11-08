@@ -39,7 +39,7 @@ import {
   type AcademicYear, type GradeLevel, type CurriculumTemplate, type Term,
   type ClassRegisterStudent, type Subject, type GradeSubject,
   fetchTeachers, syncTeachersFromUsers, fetchTeacherCoverage, assignSubjectTeacher, removeSubjectTeacher, updateSection, assignTeacherAllSubjects,
-  fetchAssessments, createAssessment, fetchMarksheet, saveMarksheet, fetchClassResults, fetchReportCard, fetchClassReportCards, type ReportCard, fetchMarksMatrix, saveMarksMatrix, type MarksMatrix,
+  fetchAssessments, createAssessment, fetchReportCard, fetchClassReportCards, type AssessmentItem, type ReportCard, fetchMarksMatrix, createDefaultAssessmentPlan, saveMarksMatrix, type MarksMatrix,
 } from "./services";
 
 type Tab =
@@ -53,8 +53,56 @@ type Tab =
   | "report-cards"
   | "promotion";
 
+type MarkbookContext = {
+  yearId: number;
+  termId: number;
+  gradeId: number;
+  subjectId: string;
+};
+
+function getApiErrorDetail(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("response" in error)) return;
+  const response = error.response;
+  if (typeof response !== "object" || response === null || !("data" in response)) return;
+  const data = response.data;
+  if (typeof data !== "object" || data === null || !("detail" in data)) return;
+  return typeof data.detail === "string" ? data.detail : undefined;
+}
+
 /** Stable tab list (module scope) — avoids SSR/client icon identity mismatches. */
 const EMPTY_LIST: never[] = [];
+
+function gradeLabelFor(
+  average: number | null,
+  gradingSystem: string,
+  passingMark: number
+) {
+  if (average == null) return "—";
+  const system = gradingSystem.toLowerCase();
+  if (["cbc", "competency", "competency_based", "kjsea"].includes(system)) {
+    if (average >= 90) return "EE1";
+    if (average >= 75) return "EE2";
+    if (average >= 58) return "ME1";
+    if (average >= 41) return "ME2";
+    if (average >= 31) return "AE1";
+    if (average >= 21) return "AE2";
+    if (average >= 11) return "BE1";
+    return "BE2";
+  }
+  if (system === "mastery") {
+    if (average >= 80) return "Mastery";
+    if (average >= 60) return "Approaching";
+    return "Beginning";
+  }
+  if (["pass_fail", "pass/fail", "passfail"].includes(system)) {
+    return average >= passingMark ? "Pass" : "Fail";
+  }
+  if (average >= 80) return "A";
+  if (average >= 70) return "B";
+  if (average >= 60) return "C";
+  if (average >= 50) return "D";
+  return "E";
+}
 
 const ACADEMICS_TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Structure Map" },
@@ -63,7 +111,7 @@ const ACADEMICS_TABS: { id: Tab; label: string }[] = [
   { id: "subjects", label: "Subjects" },
   { id: "teachers", label: "Teachers" },
   { id: "marks", label: "Marks entry" },
-  { id: "assessments", label: "Assessments" },
+  { id: "assessments", label: "Assessment plans" },
   { id: "report-cards", label: "Report cards" },
   { id: "promotion", label: "Promotion" },
 ];
@@ -348,6 +396,7 @@ export default function AcademicsPage() {
   const { currentSchool } = useCurrentSchool();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("overview");
+  const [markbookContext, setMarkbookContext] = useState<MarkbookContext | null>(null);
   const [tabsReady, setTabsReady] = useState(false);
   const [shellReady, setShellReady] = useState(false);
 
@@ -411,7 +460,7 @@ export default function AcademicsPage() {
             {tab === "marks"
               ? "Marks entry"
               : tab === "assessments"
-                ? "Assessments"
+                ? "Assessment plans"
                 : tab === "report-cards"
                   ? "Report cards"
                   : tab === "teachers"
@@ -539,6 +588,11 @@ export default function AcademicsPage() {
           years={years}
           subjects={subjects}
           loading={gradesQ.isLoading || yearsQ.isLoading}
+          initialContext={markbookContext}
+          onGoToAssessments={(context) => {
+            setMarkbookContext(context);
+            setTab("assessments");
+          }}
         />
       )}
       {tab === "assessments" && (
@@ -547,6 +601,9 @@ export default function AcademicsPage() {
           years={years}
           subjects={subjects}
           loading={gradesQ.isLoading || yearsQ.isLoading}
+          initialContext={markbookContext}
+          onGoToMarks={() => setTab("marks")}
+          onAssessmentCreated={(context) => setMarkbookContext(context)}
         />
       )}
 
@@ -2490,31 +2547,32 @@ function AssessmentsPanel({
   years,
   subjects,
   loading,
+  initialContext,
+  onGoToMarks,
+  onAssessmentCreated,
 }: {
   grades: GradeLevel[];
   years: AcademicYear[];
   subjects: Subject[];
   loading: boolean;
+  initialContext: MarkbookContext | null;
+  onGoToMarks: () => void;
+  onAssessmentCreated: (context: MarkbookContext) => void;
 }) {
-  const [list, setList] = useState<any[]>([]);
+  const [list, setList] = useState<AssessmentItem[]>([]);
   const [busy, setBusy] = useState(false);
-  const [yearId, setYearId] = useState<number | "">("");
-  const [gradeId, setGradeId] = useState<number | "">("");
-  const [termId, setTermId] = useState<number | "">("");
+  const [yearId, setYearId] = useState<number | "">(initialContext?.yearId ?? "");
+  const [gradeId, setGradeId] = useState<number | "">(initialContext?.gradeId ?? "");
+  const [termId, setTermId] = useState<number | "">(initialContext?.termId ?? "");
   const [openCreate, setOpenCreate] = useState(false);
   const [form, setForm] = useState({
     name: "CAT 1",
     kind: "CAT",
-    subject: "" as string | number | "",
+    subject: (initialContext?.subjectId ?? "") as string | number | "",
     max_score: "100",
+    weight: "1",
     assessment_date: "",
   });
-  const [sheetId, setSheetId] = useState<string | null>(null);
-  const [sheetRows, setSheetRows] = useState<any[]>([]);
-  const [sheetMeta, setSheetMeta] = useState<any>(null);
-  const [scores, setScores] = useState<Record<string, string>>({});
-  const [absent, setAbsent] = useState<Record<string, boolean>>({});
-  const [results, setResults] = useState<any[] | null>(null);
 
   const activeYear = years.find((y) => y.is_active) || years[0];
   const yearObj = years.find((y) => y.id === yearId) || activeYear;
@@ -2523,6 +2581,13 @@ function AssessmentsPanel({
   useEffect(() => {
     if (activeYear && yearId === "") setYearId(activeYear.id);
   }, [activeYear, yearId]);
+
+  useEffect(() => {
+    if (yearObj && termId === "") {
+      const currentTerm = yearObj.terms?.find((term) => term.is_current) || yearObj.terms?.[0];
+      if (currentTerm) setTermId(currentTerm.id);
+    }
+  }, [yearObj, termId]);
 
   const load = async () => {
     setBusy(true);
@@ -2549,113 +2614,56 @@ function AssessmentsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yearId, gradeId, termId]);
 
-  const openSheet = async (id: string) => {
-    setBusy(true);
-    try {
-      const data = await fetchMarksheet(id);
-      setSheetId(id);
-      setSheetMeta(data.assessment);
-      setSheetRows(data.rows || []);
-      const sc: Record<string, string> = {};
-      const ab: Record<string, boolean> = {};
-      (data.rows || []).forEach((r: any) => {
-        sc[r.student] = r.score != null ? String(r.score) : "";
-        ab[r.student] = !!r.is_absent;
-      });
-      setScores(sc);
-      setAbsent(ab);
-    } catch {
-      toast.error("Could not open marksheet");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const saveSheet = async () => {
-    if (!sheetId) return;
-    setBusy(true);
-    try {
-      const marks = sheetRows.map((r) => ({
-        student: r.student,
-        score: absent[r.student]
-          ? null
-          : scores[r.student] === "" || scores[r.student] == null
-            ? null
-            : Number(scores[r.student]),
-        is_absent: !!absent[r.student],
-        remarks: r.remarks || "",
-      }));
-      const res = await saveMarksheet(sheetId, marks);
-      toast.success(`Saved ${res.saved} mark(s)`);
-      await openSheet(sheetId);
-      load();
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Save failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const create = async () => {
-    if (!yearId || !gradeId || !form.subject || !form.name.trim()) {
-      toast.message("Year, grade, subject and name are required");
+    if (!yearId || !termId || !gradeId || !form.subject || !form.name.trim()) {
+      toast.message("Year, term, grade, subject and name are required");
       return;
     }
     setBusy(true);
     try {
-      const a = await createAssessment({
+      await createAssessment({
         name: form.name.trim(),
         kind: form.kind,
         academic_year: Number(yearId),
-        term: termId || null,
+        term: Number(termId),
         grade_level: Number(gradeId),
         subject: form.subject,
         max_score: form.max_score || 100,
+        weight: form.weight || 1,
         assessment_date: form.assessment_date || null,
       });
-      toast.success("Assessment created");
+      toast.success("Assessment plan created");
       setOpenCreate(false);
       await load();
-      if (a?.id) openSheet(a.id);
-    } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Create failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const loadResults = async () => {
-    if (!gradeId) {
-      toast.message("Select a grade for class results");
-      return;
-    }
-    setBusy(true);
-    try {
-      const data = await fetchClassResults({
-        grade_level: Number(gradeId),
-        academic_year: yearId ? Number(yearId) : undefined,
-        term: termId ? Number(termId) : undefined,
+      onAssessmentCreated({
+        yearId: Number(yearId),
+        termId: Number(termId),
+        gradeId: Number(gradeId),
+        subjectId: String(form.subject),
       });
-      setResults(data.results || []);
-    } catch {
-      toast.error("Could not load results");
+      onGoToMarks();
+    } catch (err: unknown) {
+      toast.error(getApiErrorDetail(err) || "Create failed");
     } finally {
       setBusy(false);
     }
   };
 
-  const gradeSubjects = subjects; // filter client-side optional
+  const gradeSubjects = subjects;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap justify-between gap-3">
         <p className="text-sm text-muted-foreground max-w-2xl">
-          Create CATs, midterms and end-of-term assessments, enter marks by class, and view simple
-          averages. Grades use A (80+) · B (70+) · C (60+) · D (50+) · E.
+          Define the assessments and weights for each class, subject, and term. Enter scores only
+          in Marks entry; each plan appears there as a markbook column.
         </p>
-        <Button className="bg-primary" onClick={() => setOpenCreate(true)} disabled={!gradeId}>
-          <Plus className="h-4 w-4 mr-1" /> New assessment
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={onGoToMarks}>Marks entry</Button>
+          <Button className="bg-primary" onClick={() => setOpenCreate(true)} disabled={!gradeId}>
+            <Plus className="h-4 w-4 mr-1" /> New assessment plan
+          </Button>
+        </div>
       </div>
 
       <div className="grid sm:grid-cols-3 gap-3 max-w-3xl">
@@ -2678,13 +2686,13 @@ function AssessmentsPanel({
           </select>
         </div>
         <div>
-          <Label>Term (optional)</Label>
+          <Label>Term</Label>
           <select
             className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
             value={termId === "" ? "" : String(termId)}
             onChange={(e) => setTermId(e.target.value ? Number(e.target.value) : "")}
           >
-            <option value="">All terms</option>
+            <option value="">Select term</option>
             {terms.map((tm) => (
               <option key={tm.id} value={tm.id}>
                 {tm.name}
@@ -2703,7 +2711,7 @@ function AssessmentsPanel({
         </div>
       </div>
 
-      {(loading || busy) && !sheetId ? (
+      {loading || busy ? (
         <div className="flex justify-center py-10 text-muted-foreground gap-2">
           <Loader2 className="h-5 w-5 animate-spin" /> Loading…
         </div>
@@ -2715,16 +2723,17 @@ function AssessmentsPanel({
                 <th className="px-3 py-2">Assessment</th>
                 <th className="px-3 py-2">Class</th>
                 <th className="px-3 py-2">Subject</th>
+                <th className="px-3 py-2">Term</th>
                 <th className="px-3 py-2">Max</th>
-                <th className="px-3 py-2">Entered</th>
-                <th className="px-3 py-2"></th>
+                <th className="px-3 py-2">Weight</th>
+                <th className="px-3 py-2">Marks entered</th>
               </tr>
             </thead>
             <tbody>
               {list.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
-                    No assessments yet. Select a grade and create one.
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                    No assessment plans match these filters. Create one to add columns to Marks entry.
                   </td>
                 </tr>
               ) : (
@@ -2736,14 +2745,11 @@ function AssessmentsPanel({
                     </td>
                     <td className="px-3 py-2">{a.grade_name}</td>
                     <td className="px-3 py-2">{a.subject_name}</td>
+                    <td className="px-3 py-2">{a.term_name || "All terms"}</td>
                     <td className="px-3 py-2">{a.max_score}</td>
+                    <td className="px-3 py-2">{a.weight ?? 1}</td>
                     <td className="px-3 py-2">
                       {a.entered_count ?? 0}/{a.marks_count ?? 0}
-                    </td>
-                    <td className="px-3 py-2">
-                      <Button size="sm" variant="secondary" onClick={() => openSheet(a.id)}>
-                        Enter marks
-                      </Button>
                     </td>
                   </tr>
                 ))
@@ -2753,40 +2759,10 @@ function AssessmentsPanel({
         </div>
       )}
 
-      <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={loadResults} disabled={!gradeId}>
-          Class averages
-        </Button>
-      </div>
-      {results && (
-        <div className="overflow-x-auto rounded-xl border">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">#</th>
-                <th className="px-3 py-2">Adm</th>
-                <th className="px-3 py-2">Name</th>
-                <th className="px-3 py-2">Average %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((r, i) => (
-                <tr key={r.student_id} className="border-t">
-                  <td className="px-3 py-2">{i + 1}</td>
-                  <td className="px-3 py-2 font-mono text-xs">{r.admission_number}</td>
-                  <td className="px-3 py-2 font-medium">{r.name}</td>
-                  <td className="px-3 py-2">{r.average != null ? r.average : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
       <Dialog open={openCreate} onOpenChange={setOpenCreate}>
         <DialogContent className="rounded-2xl sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>New assessment</DialogTitle>
+            <DialogTitle>New assessment plan</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -2806,6 +2782,7 @@ function AssessmentsPanel({
                 <option value="CAT">CAT / Continuous</option>
                 <option value="MIDTERM">Midterm</option>
                 <option value="END_TERM">End of term</option>
+                <option value="PRACTICAL">Practical</option>
                 <option value="PROJECT">Project</option>
                 <option value="OTHER">Other</option>
               </select>
@@ -2829,8 +2806,21 @@ function AssessmentsPanel({
               <div>
                 <Label>Max score</Label>
                 <Input
+                  type="number"
+                  min="1"
+                  step="0.01"
                   value={form.max_score}
                   onChange={(e) => setForm((f) => ({ ...f, max_score: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Weight</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.weight}
+                  onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
                 />
               </div>
               <div>
@@ -2842,101 +2832,21 @@ function AssessmentsPanel({
                 />
               </div>
             </div>
-            {!gradeId && (
-              <p className="text-xs text-amber-700">Select a grade in the filters first.</p>
+            {(!gradeId || !termId) && (
+              <p className="text-xs text-amber-700">Select a grade and term in the filters first.</p>
             )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpenCreate(false)}>
               Cancel
             </Button>
-            <Button className="bg-primary" onClick={create} disabled={busy || !gradeId}>
+            <Button className="bg-primary" onClick={create} disabled={busy || !gradeId || !termId}>
               Create
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!sheetId} onOpenChange={(v) => !v && setSheetId(null)}>
-        <DialogContent className="rounded-2xl sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              Marksheet — {sheetMeta?.name} · {sheetMeta?.subject_name} · {sheetMeta?.grade_name}
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-xs text-muted-foreground">
-            Max score: {sheetMeta?.max_score}. Leave blank if not entered. Tick absent if the
-            learner missed the paper.
-          </p>
-          <div className="overflow-x-auto rounded-xl border">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-2 py-2">Adm</th>
-                  <th className="px-2 py-2">Name</th>
-                  <th className="px-2 py-2">Score</th>
-                  <th className="px-2 py-2">Absent</th>
-                  <th className="px-2 py-2">Grade</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sheetRows.map((r) => {
-                  const max = Number(sheetMeta?.max_score || 100);
-                  const raw = scores[r.student];
-                  const pct =
-                    !absent[r.student] && raw !== "" && raw != null
-                      ? (Number(raw) / max) * 100
-                      : null;
-                  let letter = "—";
-                  if (pct != null && !Number.isNaN(pct)) {
-                    if (pct >= 80) letter = "A";
-                    else if (pct >= 70) letter = "B";
-                    else if (pct >= 60) letter = "C";
-                    else if (pct >= 50) letter = "D";
-                    else letter = "E";
-                  }
-                  return (
-                    <tr key={r.student} className="border-t">
-                      <td className="px-2 py-1.5 font-mono text-xs">{r.admission_number}</td>
-                      <td className="px-2 py-1.5 font-medium">{r.student_name}</td>
-                      <td className="px-2 py-1.5">
-                        <Input
-                          className="h-8 w-24"
-                          type="number"
-                          disabled={!!absent[r.student]}
-                          value={scores[r.student] ?? ""}
-                          onChange={(e) =>
-                            setScores((s) => ({ ...s, [r.student]: e.target.value }))
-                          }
-                        />
-                      </td>
-                      <td className="px-2 py-1.5">
-                        <input
-                          type="checkbox"
-                          checked={!!absent[r.student]}
-                          onChange={(e) =>
-                            setAbsent((a) => ({ ...a, [r.student]: e.target.checked }))
-                          }
-                        />
-                      </td>
-                      <td className="px-2 py-1.5 font-semibold">{letter}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSheetId(null)}>
-              Close
-            </Button>
-            <Button className="bg-primary" onClick={saveSheet} disabled={busy}>
-              {busy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-              Save marks
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -3007,6 +2917,48 @@ function ReportCardsPanel({
   };
 
   const card = cards[selectedIdx];
+  const subjectSummaries = useMemo(() => {
+    const summaries = new Map<string, { name: string; total: number; count: number }>();
+    for (const report of cards) {
+      for (const subject of report.subjects) {
+        const summary = summaries.get(subject.subject_id) ?? {
+          name: subject.subject_name,
+          total: 0,
+          count: 0,
+        };
+        if (subject.average != null) {
+          summary.total += subject.average;
+          summary.count += 1;
+        }
+        summaries.set(subject.subject_id, summary);
+      }
+    }
+    return Array.from(summaries.entries())
+      .map(([id, summary]) => {
+        const average = summary.count
+          ? Math.round((summary.total / summary.count) * 10) / 10
+          : null;
+        return {
+          id,
+          name: summary.name,
+          average,
+          learners: summary.count,
+          grade: gradeLabelFor(
+            average,
+            cards[0]?.school.grading_system || "percentage",
+            cards[0]?.school.passing_mark ?? 50
+          ),
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [cards]);
+  const classOverallAverage = useMemo(() => {
+    const averages = cards
+      .map((report) => report.overall_average)
+      .filter((average): average is number => average != null);
+    if (!averages.length) return null;
+    return Math.round((averages.reduce((sum, average) => sum + average, 0) / averages.length) * 10) / 10;
+  }, [cards]);
 
   return (
     <div className="space-y-4">
@@ -3084,6 +3036,77 @@ function ReportCardsPanel({
           )}
         </div>
       </div>
+
+      {cards.length > 0 && (
+        <Card className="border-border rounded-xl">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <h3 className="font-semibold">{gradeObj?.name || "Class"} subject averages</h3>
+                <p className="text-xs text-muted-foreground">
+                  Mean of learners&apos; subject averages; learners without a subject mark are excluded.
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Overall class average</p>
+                <p className="font-bold tabular-nums">
+                  {classOverallAverage == null ? "—" : `${classOverallAverage.toFixed(1)}%`}
+                  {" · "}
+                  {gradeLabelFor(
+                    classOverallAverage,
+                    cards[0]?.school.grading_system || "percentage",
+                    cards[0]?.school.passing_mark ?? 50
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="overflow-x-auto rounded-lg border">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2">Subject</th>
+                    <th className="px-3 py-2 text-right">Class average</th>
+                    <th className="px-3 py-2 text-center">Overall grade</th>
+                    <th className="px-3 py-2 text-right">Learners</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subjectSummaries.map((subject) => (
+                    <tr key={subject.id} className="border-t">
+                      <td className="px-3 py-2 font-medium">{subject.name}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {subject.average == null ? "—" : `${subject.average.toFixed(1)}%`}
+                      </td>
+                      <td className="px-3 py-2 text-center font-semibold text-primary">
+                        {subject.grade}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">{subject.learners}</td>
+                    </tr>
+                  ))}
+                  {classOverallAverage != null && (
+                    <tr className="border-t bg-slate-50 font-semibold">
+                      <td className="px-3 py-2">Overall class average</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {classOverallAverage.toFixed(1)}%
+                      </td>
+                      <td className="px-3 py-2 text-center text-primary">
+                        {gradeLabelFor(
+                          classOverallAverage,
+                          cards[0]?.school.grading_system || "percentage",
+                          cards[0]?.school.passing_mark ?? 50
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {cards.filter((report) => report.overall_average != null).length}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {cards.length > 1 && (
         <div className="flex flex-wrap gap-2 print:hidden">
@@ -3241,17 +3264,26 @@ function MarksEntryPanel({
   years,
   subjects,
   loading,
+  initialContext,
+  onGoToAssessments,
 }: {
   grades: GradeLevel[];
   years: AcademicYear[];
   subjects: Subject[];
   loading: boolean;
+  initialContext: {
+    yearId: number;
+    termId: number;
+    gradeId: number;
+    subjectId: string;
+  } | null;
+  onGoToAssessments: (context: MarkbookContext) => void;
 }) {
-  const [yearId, setYearId] = useState<number | "">("");
-  const [termId, setTermId] = useState<number | "">("");
-  const [gradeId, setGradeId] = useState<number | "">("");
+  const [yearId, setYearId] = useState<number | "">(initialContext?.yearId ?? "");
+  const [termId, setTermId] = useState<number | "">(initialContext?.termId ?? "");
+  const [gradeId, setGradeId] = useState<number | "">(initialContext?.gradeId ?? "");
   const [sectionId, setSectionId] = useState<number | "">("");
-  const [subjectId, setSubjectId] = useState<string>("");
+  const [subjectId, setSubjectId] = useState<string>(initialContext?.subjectId ?? "");
   const [matrix, setMatrix] = useState<MarksMatrix | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -3269,11 +3301,11 @@ function MarksEntryPanel({
   }, [activeYear, yearId]);
 
   useEffect(() => {
-    if (yearObj) {
+    if (yearObj && termId === "") {
       const cur = yearObj.terms?.find((tm) => tm.is_current) || yearObj.terms?.[0];
       if (cur) setTermId(cur.id);
     }
-  }, [yearObj?.id]);
+  }, [yearObj, termId]);
 
   const cellKey = (studentId: string, assessmentId: string) =>
     `${studentId}__${assessmentId}`;
@@ -3303,10 +3335,12 @@ function MarksEntryPanel({
       }
       setDraft(d);
       toast.success(
-        `Markbook ready: ${(data.preset || []).join(" · ") || data.columns.map((c) => c.name).join(" · ")}`
+        data.columns.length
+          ? `Markbook ready: ${data.columns.map((column) => column.name).join(" · ")}`
+          : "Markbook opened. Create assessment plans to add mark columns."
       );
-    } catch (e: any) {
-      toast.error(e?.response?.data?.detail || "Could not load markbook");
+    } catch (e: unknown) {
+      toast.error(getApiErrorDetail(e) || "Could not load markbook");
       setMatrix(null);
     } finally {
       setBusy(false);
@@ -3359,10 +3393,33 @@ function MarksEntryPanel({
       );
       toast.success(`Saved ${res.saved} mark(s)`);
       await load();
-    } catch (e: any) {
-      toast.error(e?.response?.data?.detail || "Save failed");
+    } catch (e: unknown) {
+      toast.error(getApiErrorDetail(e) || "Save failed");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const useDefaultPlan = async () => {
+    if (!yearId || !termId || !gradeId || !subjectId) {
+      toast.message("Select year, term, grade and subject");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await createDefaultAssessmentPlan({
+        academic_year: Number(yearId),
+        term: Number(termId),
+        grade_level: Number(gradeId),
+        subject: subjectId,
+        section: sectionId || undefined,
+      });
+      toast.success(`Standard plan added: ${result.assessment_names.join(" · ")}`);
+      await load();
+    } catch (e: unknown) {
+      toast.error(getApiErrorDetail(e) || "Could not create the standard plan");
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -3377,8 +3434,9 @@ function MarksEntryPanel({
         const score = Number(raw);
         if (Number.isNaN(score) || !col.max_score) continue;
         const pct = (score / col.max_score) * 100;
-        weighted += pct * (col.weight || 1);
-        wsum += col.weight || 1;
+        const weight = col.weight ?? 1;
+        weighted += pct * weight;
+        wsum += weight;
       }
       const average = wsum > 0 ? Math.round((weighted / wsum) * 10) / 10 : null;
       return { ...row, liveAverage: average };
@@ -3395,44 +3453,45 @@ function MarksEntryPanel({
   }, [matrix, draft, sortBy]);
 
   const labelFor = (avg: number | null) => {
-    if (avg == null || !matrix) return "—";
-    const sys = (matrix.grading_system || "percentage").toLowerCase();
-    const pass = matrix.passing_mark || 50;
-    if (sys === "cbc" || sys === "competency" || sys === "competency_based") {
-      if (avg >= 80) return "EE";
-      if (avg >= 60) return "ME";
-      if (avg >= 40) return "AE";
-      return "BE";
-    }
-    if (sys === "mastery") {
-      if (avg >= 80) return "Mastery";
-      if (avg >= 60) return "Approaching";
-      return "Beginning";
-    }
-    if (sys === "pass_fail" || sys === "pass/fail") {
-      return avg >= pass ? "Pass" : "Fail";
-    }
-    if (avg >= 80) return "A";
-    if (avg >= 70) return "B";
-    if (avg >= 60) return "C";
-    if (avg >= 50) return "D";
-    return "E";
+    return gradeLabelFor(avg, matrix?.grading_system || "percentage", matrix?.passing_mark ?? 50);
   };
+  const classAverage = useMemo(() => {
+    const averages = liveRows
+      .map((row) => row.liveAverage)
+      .filter((average): average is number => average != null);
+    if (!averages.length) return null;
+    return Math.round((averages.reduce((sum, average) => sum + average, 0) / averages.length) * 10) / 10;
+  }, [liveRows]);
+  const classAssessmentAverages = useMemo(() => {
+    if (!matrix) return [];
+    return matrix.columns.map((column) => {
+      const scores = matrix.rows
+        .filter((row) => !row.cells[column.id]?.is_absent)
+        .map((row) => draft[cellKey(row.student_id, column.id)])
+        .filter((raw) => raw != null && raw.trim() !== "")
+        .map(Number)
+        .filter((score) => Number.isFinite(score));
+      const average = scores.length
+        ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+        : null;
+      return { id: column.id, average };
+    });
+  }, [matrix, draft]);
 
   return (
     <div className="flex flex-col gap-2 h-[min(78vh,calc(100vh-11rem))] min-h-[28rem]">
       <div className="shrink-0 relative z-40 rounded-xl border bg-white shadow-sm p-2.5 sm:p-3 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground max-w-xl">
-            Preset columns: <strong>CAT 1–3</strong>, <strong>End of Term</strong>
-            {subjectId ? " (+ Practical for science/ICT)" : ""}. Averages update as you type.
+            Columns come from the assessment plans for the selected class, subject, and term.
+            Averages update as you type.
           </p>
           <div className="flex gap-2 shrink-0">
             <Button size="sm" variant="outline" disabled={busy || loading} onClick={load}>
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
               {matrix ? "Reload" : "Open markbook"}
             </Button>
-            {matrix ? (
+            {matrix?.columns.length ? (
               <Button size="sm" className="bg-primary" disabled={saving} onClick={save}>
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
                 Save all
@@ -3446,7 +3505,10 @@ function MarksEntryPanel({
             <select
               className="w-full mt-0.5 h-9 rounded-md border px-2 text-sm bg-background"
               value={yearId === "" ? "" : String(yearId)}
-              onChange={(e) => setYearId(e.target.value ? Number(e.target.value) : "")}
+              onChange={(e) => {
+                setYearId(e.target.value ? Number(e.target.value) : "");
+                setTermId("");
+              }}
             >
               {years.map((y) => (
                 <option key={y.id} value={y.id}>
@@ -3540,7 +3602,36 @@ function MarksEntryPanel({
       </div>
 
       <div className="flex-1 min-h-0 relative z-0 rounded-xl border bg-white overflow-hidden flex flex-col">
-        {matrix ? (
+        {matrix && matrix.columns.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
+            <div className="max-w-xl space-y-1">
+              <p className="font-medium">No assessment plan is set up for this markbook yet.</p>
+              <p className="text-sm text-muted-foreground">
+                Use the familiar standard plan (CAT 1–3 and End of Term
+                {subjectId ? "; Practical is included for relevant subjects" : ""}), or customize
+                your assessment columns.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button disabled={busy} onClick={useDefaultPlan}>
+                Use standard plan
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  onGoToAssessments({
+                    yearId: Number(yearId),
+                    termId: Number(termId),
+                    gradeId: Number(gradeId),
+                    subjectId,
+                  })
+                }
+              >
+                Customize plan
+              </Button>
+            </div>
+          </div>
+        ) : matrix ? (
           <div className="flex-1 min-h-0 overflow-auto">
             <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground sticky top-0 z-[1] shadow-sm">
@@ -3603,6 +3694,32 @@ function MarksEntryPanel({
                   </tr>
                 ) : null}
               </tbody>
+              <tfoot className="border-t-2 bg-slate-50 font-semibold text-xs">
+                <tr>
+                  <th
+                    colSpan={2}
+                    className="px-2 py-2 text-left sticky left-0 bg-slate-50 z-[1] whitespace-nowrap"
+                  >
+                    Class average
+                  </th>
+                  {classAssessmentAverages.map((assessment) => {
+                    const column = matrix.columns.find((item) => item.id === assessment.id);
+                    return (
+                      <td key={assessment.id} className="px-1.5 py-2 text-center tabular-nums">
+                        {assessment.average == null
+                          ? "—"
+                          : `${assessment.average.toFixed(1)}/${column?.max_score ?? ""}`}
+                      </td>
+                    );
+                  })}
+                  <td className="px-2 py-2 text-right tabular-nums">
+                    {classAverage == null ? "—" : `${classAverage.toFixed(1)}%`}
+                  </td>
+                  <td className="px-2 py-2 text-center text-primary">
+                    {labelFor(classAverage)}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         ) : (

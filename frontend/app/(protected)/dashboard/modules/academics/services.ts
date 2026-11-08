@@ -487,6 +487,7 @@ export type AssessmentItem = {
   subject_name?: string;
   section?: number | null;
   max_score: string | number;
+  weight?: string | number;
   assessment_date?: string | null;
   is_published?: boolean;
   marks_count?: number;
@@ -569,6 +570,8 @@ export type ReportCard = {
     phone?: string;
     email?: string;
     logo?: string | null;
+    grading_system?: string;
+    passing_mark?: number;
   };
   academic_year: { id: number; name: string } | null;
   term: { id: number; name: string } | null;
@@ -642,6 +645,7 @@ export type MarksMatrix = {
   passing_mark: number;
   columns: MarksMatrixColumn[];
   rows: MarksMatrixRow[];
+  assessment_names: string[];
   preset: string[];
 };
 
@@ -654,6 +658,17 @@ export async function fetchMarksMatrix(params: {
 }) {
   const { data } = await api.get("/assessments/marks-matrix/", { params });
   return data as MarksMatrix;
+}
+
+export async function createDefaultAssessmentPlan(params: {
+  academic_year: number;
+  term: number;
+  grade_level: number;
+  subject: number | string;
+  section?: number | string;
+}) {
+  const { data } = await api.post("/assessments/assessment-plans/default/", params);
+  return data as { created: number; assessment_names: string[] };
 }
 
 export async function saveMarksMatrix(

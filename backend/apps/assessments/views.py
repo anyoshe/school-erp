@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.school.support import accessible_school_ids, selected_school
+from .grading import grade_label, grading_system_for_school
 from .models import Assessment, Mark
 from .serializers import AssessmentSerializer, AssessmentWriteSerializer, MarkSerializer
 
@@ -47,7 +48,10 @@ class AssessmentViewSet(viewsets.ModelViewSet):
         ):
             val = self.request.query_params.get(key)
             if val:
-                qs = qs.filter(**{field: val})
+                if key == "term":
+                    qs = qs.filter(Q(term_id=val) | Q(term__isnull=True))
+                else:
+                    qs = qs.filter(**{field: val})
         return qs.order_by("-assessment_date", "-created_at")
 
     def perform_create(self, serializer):
@@ -76,7 +80,11 @@ class AssessmentViewSet(viewsets.ModelViewSet):
 
             existing = {
                 str(m.student_id): m
-                for m in Mark.objects.filter(assessment=assessment).select_related("student")
+                for m in Mark.objects.filter(assessment=assessment).select_related(
+                    "student",
+                    "school",
+                    "assessment__grade_level__curriculum",
+                )
             }
             rows = []
             for s in students[:500]:
@@ -179,7 +187,13 @@ class ClassResultsView(APIView):
 
         marks = (
             Mark.objects.filter(assessment__in=assessments, is_absent=False, score__isnull=False)
-            .select_related("assessment", "student", "assessment__subject")
+            .select_related(
+                "school",
+                "assessment",
+                "assessment__grade_level__curriculum",
+                "assessment__subject",
+                "student",
+            )
         )
 
         by_student = {}
@@ -224,21 +238,6 @@ class ClassResultsView(APIView):
         )
 
 
-def _letter_from_pct(p):
-    if p is None:
-        return None
-    p = float(p)
-    if p >= 80:
-        return "A"
-    if p >= 70:
-        return "B"
-    if p >= 60:
-        return "C"
-    if p >= 50:
-        return "D"
-    return "E"
-
-
 def _build_student_report(student, school, academic_year_id=None, term_id=None):
     """Aggregate marks into a printable report-card payload."""
     from apps.academics.models import AcademicYear, Term, GradeLevelSubject
@@ -272,7 +271,12 @@ def _build_student_report(student, school, academic_year_id=None, term_id=None):
             is_absent=False,
             score__isnull=False,
         )
-        .select_related("assessment", "assessment__subject")
+        .select_related(
+            "school",
+            "assessment",
+            "assessment__grade_level__curriculum",
+            "assessment__subject",
+        )
         .order_by("assessment__subject__name", "assessment__assessment_date")
     )
 
@@ -293,7 +297,7 @@ def _build_student_report(student, school, academic_year_id=None, term_id=None):
         pct = m.percentage
         if pct is None:
             continue
-        weight = Decimal(str(m.assessment.weight or 1))
+        weight = Decimal(str(m.assessment.weight))
         bucket["entries"].append(
             {
                 "assessment": m.assessment.name,
@@ -323,7 +327,14 @@ def _build_student_report(student, school, academic_year_id=None, term_id=None):
                 "subject_name": b["subject_name"],
                 "entries": b["entries"],
                 "average": round(avg, 1) if avg is not None else None,
-                "grade_letter": _letter_from_pct(avg),
+                "grade_letter": grade_label(
+                    avg,
+                    grading_system_for_school(
+                        school,
+                        grade.curriculum if grade else None,
+                    ),
+                    school.passing_mark,
+                ),
             }
         )
 
@@ -373,6 +384,11 @@ def _build_student_report(student, school, academic_year_id=None, term_id=None):
             "phone": getattr(school, "phone", "") or "",
             "email": getattr(school, "email", "") or "",
             "logo": None,
+            "grading_system": grading_system_for_school(
+                school,
+                grade.curriculum if grade else None,
+            ),
+            "passing_mark": school.passing_mark,
         },
         "academic_year": (
             {"id": year.id, "name": year.name} if year else None
@@ -387,7 +403,14 @@ def _build_student_report(student, school, academic_year_id=None, term_id=None):
         "class_teacher_name": class_teacher_name,
         "subjects": subjects,
         "overall_average": round(overall, 1) if overall is not None else None,
-        "overall_grade": _letter_from_pct(overall),
+        "overall_grade": grade_label(
+            overall,
+            grading_system_for_school(
+                school,
+                grade.curriculum if grade else None,
+            ),
+            school.passing_mark,
+        ),
         "subjects_with_marks": overall_n,
     }
 
@@ -412,6 +435,7 @@ class ReportCardView(APIView):
             )
             .select_related(
                 "current_class",
+                "current_class__curriculum",
                 "section",
                 "section__class_teacher",
                 "section__class_teacher__user",
@@ -459,6 +483,7 @@ class ClassReportCardsView(APIView):
             .exclude(status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED", "PENDING_CLEARANCE"])
             .select_related(
                 "current_class",
+                "current_class__curriculum",
                 "section",
                 "section__class_teacher",
                 "section__class_teacher__user",
@@ -470,7 +495,7 @@ class ClassReportCardsView(APIView):
             qs = qs.filter(section_id=section_id)
 
         cards = []
-        for student in qs[:200]:
+        for student in qs[:400]:
             card = _build_student_report(
                 student,
                 school,
@@ -491,11 +516,9 @@ class ClassReportCardsView(APIView):
 
 class MarksMatrixView(APIView):
     """
-    Preset term markbook for a class + subject.
+    Term markbook for a class + subject, using the configured assessment plan.
 
-    GET  ?academic_year=&term=&grade_level=&subject=&section=
-         Ensures CAT 1–3, End of Term (+ Practical when relevant) exist,
-         returns columns + student rows with scores.
+    GET returns the configured assessment columns and student rows with scores.
 
     POST same query filters + body:
          { "marks": [ { "student", "assessment", "score", "is_absent" }, ... ] }
@@ -538,23 +561,30 @@ class MarksMatrixView(APIView):
             "section_id": section_id,
         }, None
 
+    def _get_assessments(self, ctx):
+        assessments = Assessment.objects.filter(
+            school=ctx["school"],
+            academic_year=ctx["year"],
+            grade_level=ctx["grade"],
+            subject=ctx["subject"],
+        ).filter(Q(term=ctx["term"]) | Q(term__isnull=True))
+        if ctx["section_id"]:
+            assessments = assessments.filter(
+                Q(section__isnull=True) | Q(section_id=ctx["section_id"])
+            )
+        else:
+            assessments = assessments.filter(section__isnull=True)
+        return assessments.order_by("assessment_date", "created_at", "name")
+
     def get(self, request):
         from apps.students.models import Student
-        from .presets import ensure_term_assessments, grade_label
 
         ctx, err = self._resolve_context(request)
         if err:
             return err
 
         school = ctx["school"]
-        assessments = ensure_term_assessments(
-            school=school,
-            academic_year=ctx["year"],
-            term=ctx["term"],
-            grade_level=ctx["grade"],
-            subject=ctx["subject"],
-            created_by=request.user if request.user.is_authenticated else None,
-        )
+        assessments = list(self._get_assessments(ctx))
 
         sort = (request.query_params.get("sort") or "name").lower()
         students = Student.objects.filter(
@@ -589,7 +619,10 @@ class MarksMatrixView(APIView):
             for a in assessments
         ]
 
-        grading_system = getattr(school, "grading_system", None) or "percentage"
+        grading_system = grading_system_for_school(
+            school,
+            ctx["grade"].curriculum,
+        )
         passing_mark = int(getattr(school, "passing_mark", None) or 50)
 
         rows = []
@@ -605,7 +638,7 @@ class MarksMatrixView(APIView):
                 if score is not None and a.max_score:
                     pct = round(float(score) / float(a.max_score) * 100, 1)
                     if not is_absent:
-                        w = Decimal(str(a.weight or 1))
+                        w = Decimal(str(a.weight))
                         weighted_sum += Decimal(str(pct)) * w
                         weight_total += w
                 cells[str(a.id)] = {
@@ -636,27 +669,20 @@ class MarksMatrixView(APIView):
                 "passing_mark": passing_mark,
                 "columns": columns,
                 "rows": rows,
+                "assessment_names": [c["name"] for c in columns],
                 "preset": [c["name"] for c in columns],
             }
         )
 
     def post(self, request):
         from apps.students.models import Student
-        from .presets import ensure_term_assessments, grade_label
 
         ctx, err = self._resolve_context(request)
         if err:
             return err
 
         school = ctx["school"]
-        assessments = ensure_term_assessments(
-            school=school,
-            academic_year=ctx["year"],
-            term=ctx["term"],
-            grade_level=ctx["grade"],
-            subject=ctx["subject"],
-            created_by=request.user if request.user.is_authenticated else None,
-        )
+        assessments = list(self._get_assessments(ctx))
         assessment_ids = {str(a.id) for a in assessments}
         by_id = {str(a.id): a for a in assessments}
 
@@ -675,9 +701,12 @@ class MarksMatrixView(APIView):
                     continue
                 assessment = by_id[aid]
                 # Ensure student belongs to school/grade
-                if not Student.objects.filter(
+                student_query = Student.objects.filter(
                     pk=sid, school=school, current_class=ctx["grade"]
-                ).exists():
+                )
+                if ctx["section_id"]:
+                    student_query = student_query.filter(section_id=ctx["section_id"])
+                if not student_query.exists():
                     errors.append({"row": row, "detail": "student not in class"})
                     continue
 
@@ -713,3 +742,57 @@ class MarksMatrixView(APIView):
                 saved += 1
 
         return Response({"saved": saved, "errors": errors[:20]})
+
+
+class DefaultAssessmentPlanView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from .presets import preset_columns_for_subject
+
+        matrix_view = MarksMatrixView()
+        ctx, err = matrix_view._resolve_context(request)
+        if err:
+            return err
+
+        school = ctx["school"]
+        if ctx["section_id"]:
+            from apps.academics.models import Section
+
+            if not Section.objects.filter(
+                pk=ctx["section_id"], grade_level=ctx["grade"]
+            ).exists():
+                return Response({"detail": "Invalid section"}, status=400)
+
+        with transaction.atomic():
+            if matrix_view._get_assessments(ctx).exists():
+                return Response(
+                    {"detail": "Assessment plans already exist for this markbook."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            columns = preset_columns_for_subject(ctx["subject"])
+            assessments = [
+                Assessment.objects.create(
+                    school=school,
+                    academic_year=ctx["year"],
+                    term=ctx["term"],
+                    grade_level=ctx["grade"],
+                    subject=ctx["subject"],
+                    section=None,
+                    name=column["name"],
+                    kind=column["kind"],
+                    max_score=column["max_score"],
+                    weight=column["weight"],
+                    created_by=request.user if request.user.is_authenticated else None,
+                )
+                for column in columns
+            ]
+
+        return Response(
+            {
+                "created": len(assessments),
+                "assessment_names": [assessment.name for assessment in assessments],
+            },
+            status=status.HTTP_201_CREATED,
+        )

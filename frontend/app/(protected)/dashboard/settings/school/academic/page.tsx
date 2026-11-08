@@ -448,27 +448,39 @@ Academic Year Section */}
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="cbc">Kenya CBC / KJSEA (EE1–BE2)</SelectItem>
+                      <SelectItem value="kenya_844">Kenya 8-4-4 (A–E)</SelectItem>
                       <SelectItem value="percentage">Percentage (0–100)</SelectItem>
                       <SelectItem value="points">Points scale</SelectItem>
                       <SelectItem value="letter">Letter Grades</SelectItem>
                     </SelectContent>
                   </Select>
+                  {formData.gradingSystem === "cbc" && (
+                    <p className="text-xs text-muted-foreground">
+                      Uses reported KJSEA percentage bands: EE1 90–100, EE2 75–89, ME1 58–74,
+                      ME2 41–57, AE1 31–40, AE2 21–30, BE1 11–20, BE2 0–10. KNEC defines the
+                      achievement levels; these percentage cutoffs are reported guidance, not
+                      universal KNEC rules for school-based marks.
+                    </p>
+                  )}
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Passing Mark (%)</Label>
-                  <div className="relative">
-                    <Percent className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={formData.passingMark}
-                      onChange={(e) => handleChange("passingMark", Number(e.target.value))}
-                      className="h-12 rounded-xl pr-12"
-                    />
+                {formData.gradingSystem !== "cbc" && (
+                  <div className="space-y-2">
+                    <Label>Passing Mark (%)</Label>
+                    <div className="relative">
+                      <Percent className="absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={formData.passingMark}
+                        onChange={(e) => handleChange("passingMark", Number(e.target.value))}
+                        className="h-12 rounded-xl pr-12"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
 

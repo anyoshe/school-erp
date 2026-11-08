@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from django.db import transaction
 
+from .grading import grade_label
 from .models import Assessment
 
 # Standard term structure for most CBC / 8-4-4 schools
@@ -97,45 +98,3 @@ def ensure_term_assessments(
     order = {c["name"]: i for i, c in enumerate(columns)}
     result.sort(key=lambda a: order.get(a.name, 99))
     return result
-
-
-def grade_label(percentage, grading_system: str = "percentage", passing_mark: int = 50) -> str | None:
-    """Map a percentage to a display label for the school's grading system."""
-    if percentage is None:
-        return None
-    try:
-        p = float(percentage)
-    except (TypeError, ValueError):
-        return None
-
-    system = (grading_system or "percentage").lower().strip()
-
-    if system in ("cbc", "competency", "competency_based"):
-        if p >= 80:
-            return "EE — Exceeds Expectations"
-        if p >= 60:
-            return "ME — Meets Expectations"
-        if p >= 40:
-            return "AE — Approaches Expectations"
-        return "BE — Below Expectations"
-
-    if system in ("mastery",):
-        if p >= 80:
-            return "Mastery"
-        if p >= 60:
-            return "Approaching mastery"
-        return "Beginning"
-
-    if system in ("pass_fail", "pass/fail", "passfail"):
-        return "Pass" if p >= float(passing_mark or 50) else "Fail"
-
-    # Default letter / percentage
-    if p >= 80:
-        return "A"
-    if p >= 70:
-        return "B"
-    if p >= 60:
-        return "C"
-    if p >= 50:
-        return "D"
-    return "E"
