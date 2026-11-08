@@ -143,6 +143,30 @@ class StaffViewSet(ModelViewSet):
         )
 
 
+
+    @action(detail=True, methods=["get"], url_path="teaching-load")
+    def teaching_load(self, request, pk=None):
+        """Subject assignments + class-teacher sections for this staff member."""
+        staff = self.get_object()
+        from apps.academics.models import SubjectTeacher, Section
+        from apps.academics.serializers import SubjectTeacherSerializer, SectionSerializer
+
+        assigns = (
+            SubjectTeacher.objects.filter(teacher=staff, is_active=True)
+            .select_related("subject", "grade_level", "academic_year")
+            .order_by("academic_year__name", "grade_level__order", "subject__name")
+        )
+        sections = (
+            Section.objects.filter(class_teacher=staff, is_active=True)
+            .select_related("grade_level", "class_teacher", "class_teacher__user")
+            .order_by("grade_level__order", "name")
+        )
+        return Response({
+            "staff_id": str(staff.id),
+            "subject_assignments": SubjectTeacherSerializer(assigns, many=True).data,
+            "class_sections": SectionSerializer(sections, many=True).data,
+        })
+
 class PayrollViewSet(ModelViewSet):
     queryset = Payroll.objects.select_related("staff__user").all().order_by("-month")
     permission_classes = [IsAuthenticated]

@@ -237,8 +237,16 @@ class GradeLevelViewSet(viewsets.ModelViewSet):
                 "id", "name", "short_name", "order", "code", "curriculum_id", "school_id"
             )
 
+        from django.db.models import Prefetch
+        from .models import Section
         return queryset.select_related("curriculum", "school").prefetch_related(
-            "sections", "streams"
+            Prefetch(
+                "sections",
+                queryset=Section.objects.select_related(
+                    "class_teacher", "class_teacher__user"
+                ),
+            ),
+            "streams",
         ).order_by("order", "name")
 
     def perform_create(self, serializer):
@@ -581,7 +589,7 @@ class SectionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = Section.objects.filter(
             grade_level__school_id__in=accessible_school_ids(self.request)
-        ).select_related("grade_level")
+        ).select_related("grade_level", "class_teacher", "class_teacher__user")
         grade_id = self.request.query_params.get("grade_level")
         if grade_id:
             qs = qs.filter(grade_level_id=grade_id)
@@ -592,6 +600,17 @@ class SectionViewSet(viewsets.ModelViewSet):
         if grade.school_id not in set(accessible_school_ids(self.request)):
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Invalid grade level for this school.")
+        teacher = serializer.validated_data.get("class_teacher")
+        if teacher and teacher.school_id not in set(accessible_school_ids(self.request)):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Class teacher must belong to this school.")
+        serializer.save()
+
+    def perform_update(self, serializer):
+        teacher = serializer.validated_data.get("class_teacher")
+        if teacher and teacher.school_id not in set(accessible_school_ids(self.request)):
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied("Class teacher must belong to this school.")
         serializer.save()
 
 
@@ -998,4 +1017,65 @@ class SubjectTeacherViewSet(viewsets.ModelViewSet):
             "unassigned_subjects": len(rows) - assigned_count,
             "rows": rows,
             "extra_assignments": SubjectTeacherSerializer(unmapped_assigned, many=True).data,
+        })
+
+    @action(detail=False, methods=["post"], url_path="assign-all-subjects")
+    def assign_all_subjects(self, request):
+        """Assign one teacher to every mapped subject for a grade + year (class-teacher shortcut)."""
+        from .models import SubjectTeacher, GradeLevelSubject, GradeLevel, AcademicYear, Subject
+        from apps.staff.models import Staff
+        from apps.school.support import selected_school
+
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+
+        grade_id = request.data.get("grade_level")
+        year_id = request.data.get("academic_year")
+        teacher_id = request.data.get("teacher")
+        if not grade_id or not year_id or not teacher_id:
+            return Response(
+                {"detail": "grade_level, academic_year and teacher are required"},
+                status=400,
+            )
+
+        try:
+            grade = GradeLevel.objects.get(pk=grade_id, school=school)
+        except GradeLevel.DoesNotExist:
+            return Response({"detail": "Grade not found"}, status=404)
+        try:
+            year = AcademicYear.objects.get(pk=year_id, school=school)
+        except AcademicYear.DoesNotExist:
+            return Response({"detail": "Academic year not found"}, status=404)
+        try:
+            teacher = Staff.objects.get(pk=teacher_id, school=school)
+        except Staff.DoesNotExist:
+            return Response({"detail": "Teacher/staff not found for this school"}, status=404)
+
+        mapped = GradeLevelSubject.objects.filter(grade_level=grade).select_related("subject")
+        created = 0
+        existing = 0
+        for m in mapped:
+            obj, was_created = SubjectTeacher.objects.get_or_create(
+                school=school,
+                subject=m.subject,
+                grade_level=grade,
+                teacher=teacher,
+                academic_year=year,
+                defaults={"is_active": True},
+            )
+            if was_created:
+                created += 1
+            else:
+                if not obj.is_active:
+                    obj.is_active = True
+                    obj.save(update_fields=["is_active"])
+                existing += 1
+
+        return Response({
+            "created": created,
+            "existing": existing,
+            "grade": grade.name,
+            "teacher": str(teacher.id),
+            "subjects": mapped.count(),
         })

@@ -42,6 +42,9 @@ export type Section = {
   capacity?: number | null;
   is_active: boolean;
   student_count?: number;
+  class_teacher?: string | null;
+  class_teacher_name?: string | null;
+  class_teacher_email?: string | null;
 };
 
 export type Subject = {
@@ -375,7 +378,17 @@ export type CoverageRow = {
 };
 
 export async function fetchTeachers(): Promise<StaffMember[]> {
-  const { data } = await api.get("/staff/staff/", { params: { role: "TEACHER" } });
+  // Prefer dedicated active-teachers endpoint; fall back to filtered list
+  try {
+    const { data } = await api.get("/staff/staff/teachers/");
+    const list = data.results ?? data;
+    if (Array.isArray(list)) return list as StaffMember[];
+  } catch {
+    /* fall through */
+  }
+  const { data } = await api.get("/staff/staff/", {
+    params: { role: "TEACHER", is_active: "true" },
+  });
   const list = data.results ?? data;
   return (Array.isArray(list) ? list : []) as StaffMember[];
 }
@@ -422,6 +435,41 @@ export async function assignSubjectTeacher(payload: {
 
 export async function removeSubjectTeacher(id: number | string) {
   await api.delete(`/academics/subject-teachers/${id}/`);
+}
+
+export async function updateSection(
+  id: number | string,
+  payload: Partial<{
+    name: string;
+    capacity: number | null;
+    is_active: boolean;
+    class_teacher: string | null;
+  }>
+) {
+  const { data } = await api.patch(`/academics/sections/${id}/`, payload);
+  return data as Section;
+}
+
+/** Assign one teacher to every subject mapped for the grade/year */
+export async function assignTeacherAllSubjects(payload: {
+  grade_level: number;
+  academic_year: number;
+  teacher: string;
+}) {
+  const { data } = await api.post(
+    "/academics/subject-teachers/assign-all-subjects/",
+    payload
+  );
+  return data as { created: number; existing: number; subjects: number };
+}
+
+export async function fetchStaffTeachingLoad(staffId: string) {
+  const { data } = await api.get(`/staff/staff/${staffId}/teaching-load/`);
+  return data as {
+    staff_id: string;
+    subject_assignments: SubjectTeacherAssignment[];
+    class_sections: Section[];
+  };
 }
 
 // —— Assessments (A6) ——

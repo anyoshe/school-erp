@@ -47,16 +47,45 @@ class CurriculumCreateUpdateSerializer(serializers.ModelSerializer):
 
 class SectionSerializer(serializers.ModelSerializer):
     student_count = serializers.SerializerMethodField()
+    class_teacher_name = serializers.SerializerMethodField()
+    class_teacher_email = serializers.SerializerMethodField()
 
     class Meta:
         model = Section
-        fields = ['id', 'grade_level', 'name', 'description', 'capacity', 'is_active', 'student_count']
+        fields = [
+            "id",
+            "grade_level",
+            "name",
+            "description",
+            "capacity",
+            "is_active",
+            "student_count",
+            "class_teacher",
+            "class_teacher_name",
+            "class_teacher_email",
+        ]
 
     def get_student_count(self, obj):
         try:
             return obj.students.exclude(status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED"]).count()
         except Exception:
             return 0
+
+    def get_class_teacher_name(self, obj):
+        st = getattr(obj, "class_teacher", None)
+        if not st:
+            return None
+        u = getattr(st, "user", None)
+        if not u:
+            return str(st.id)
+        name = f"{getattr(u, 'first_name', '') or ''} {getattr(u, 'last_name', '') or ''}".strip()
+        return name or getattr(u, "email", None) or str(st.id)
+
+    def get_class_teacher_email(self, obj):
+        st = getattr(obj, "class_teacher", None)
+        if not st or not getattr(st, "user", None):
+            return None
+        return st.user.email
 
 
 class StreamSerializer(serializers.ModelSerializer):

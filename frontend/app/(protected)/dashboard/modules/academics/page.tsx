@@ -28,7 +28,7 @@ import {
   fetchCurriculumTemplates, adoptCurriculumTemplate,
   type AcademicYear, type GradeLevel, type CurriculumTemplate, type Term,
   type ClassRegisterStudent, type Subject, type GradeSubject,
-  fetchTeachers, syncTeachersFromUsers, fetchTeacherCoverage, assignSubjectTeacher, removeSubjectTeacher,
+  fetchTeachers, syncTeachersFromUsers, fetchTeacherCoverage, assignSubjectTeacher, removeSubjectTeacher, updateSection, assignTeacherAllSubjects,
   fetchAssessments, createAssessment, fetchMarksheet, saveMarksheet, fetchClassResults,
 } from "./services";
 
@@ -611,6 +611,31 @@ function ClassesPanel({
   const [roster, setRoster] = useState<ClassRegisterStudent[]>([]);
   const [rosterLoading, setRosterLoading] = useState(false);
   const [rosterMeta, setRosterMeta] = useState<{ count: number; title: string }>({ count: 0, title: "" });
+  const [teachers, setTeachers] = useState<
+    { id: string; full_name?: string; user_email?: string }[]
+  >([]);
+  const [savingTeacher, setSavingTeacher] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetchTeachers()
+      .then((list) => setTeachers(list))
+      .catch(() => setTeachers([]));
+  }, []);
+
+  const setClassTeacher = async (sectionId: number, teacherId: string) => {
+    setSavingTeacher(sectionId);
+    try {
+      await updateSection(sectionId, {
+        class_teacher: teacherId ? teacherId : null,
+      });
+      toast.success(teacherId ? "Class teacher saved" : "Class teacher cleared");
+      onRefresh();
+    } catch {
+      toast.error("Could not set class teacher");
+    } finally {
+      setSavingTeacher(null);
+    }
+  };
 
   const createMut = useMutation({
     mutationFn: () =>
@@ -750,18 +775,43 @@ function ClassesPanel({
                       </span>
                     ) : (
                       sections.map((s) => (
-                        <button
+                        <div
                           key={s.id}
-                          type="button"
-                          onClick={() => openRegister(g, s.id, s.name)}
-                          className="text-xs px-2.5 py-1 rounded-full border border-border bg-white hover:border-primary/50 hover:bg-primary-50 transition-colors"
+                          className="flex flex-col gap-1 rounded-xl border border-border bg-white px-2.5 py-1.5 min-w-[9rem]"
                         >
-                          <span className="font-medium">{s.name}</span>
-                          <span className="text-muted-foreground ml-1">
-                            {s.student_count ?? 0}
-                            {s.capacity != null ? `/${s.capacity}` : ""}
-                          </span>
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => openRegister(g, s.id, s.name)}
+                            className="text-left text-xs hover:text-primary transition-colors"
+                          >
+                            <span className="font-medium">{s.name}</span>
+                            <span className="text-muted-foreground ml-1">
+                              {s.student_count ?? 0}
+                              {s.capacity != null ? `/${s.capacity}` : ""}
+                            </span>
+                          </button>
+                          <select
+                            className="h-7 text-[11px] rounded-md border border-input bg-background px-1 max-w-[12rem]"
+                            value={s.class_teacher ? String(s.class_teacher) : ""}
+                            disabled={savingTeacher === s.id}
+                            onChange={(e) => setClassTeacher(s.id, e.target.value)}
+                            title="Class / form teacher"
+                          >
+                            <option value="">Class teacher…</option>
+                            {teachers.map((tch) => (
+                              <option key={tch.id} value={tch.id}>
+                                {tch.full_name || tch.user_email || tch.id}
+                              </option>
+                            ))}
+                          </select>
+                          {s.class_teacher_name ? (
+                            <span className="text-[10px] text-emerald-700 truncate">
+                              {s.class_teacher_name}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-amber-700">No class teacher</span>
+                          )}
+                        </div>
                       ))
                     )}
                   </div>
@@ -1777,6 +1827,49 @@ function TeachersPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gradeId, yearId]);
 
+  const assignAllSubjects = async () => {
+    if (!gradeId || !yearId) {
+      toast.message("Select grade and year first");
+      return;
+    }
+    const teacherId =
+      Object.values(pick).find((v) => v) ||
+      (teachers[0] && teachers[0].id) ||
+      "";
+    // Prefer explicit pick from a dedicated select if present
+    const selected =
+      (document.getElementById("bulk-teacher-pick") as HTMLSelectElement | null)
+        ?.value || teacherId;
+    if (!selected) {
+      toast.message("Choose a teacher for bulk assign");
+      return;
+    }
+    if (
+      !confirm(
+        "Assign this teacher to ALL subjects mapped for this grade and year?"
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      const r = await assignTeacherAllSubjects({
+        grade_level: Number(gradeId),
+        academic_year: Number(yearId),
+        teacher: selected,
+      });
+      toast.success(
+        r.created
+          ? `Assigned ${r.created} subject(s) (${r.existing} already linked)`
+          : `All ${r.existing} subjects already assigned to this teacher`
+      );
+      await loadCoverage();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Bulk assign failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const assign = async (subjectId: number | string) => {
     const teacher = pick[String(subjectId)];
     const y = yearId || activeYear?.id;
@@ -1900,7 +1993,8 @@ function TeachersPanel({
         </p>
       ) : coverage ? (
         <div className="space-y-3">
-          <div className="flex flex-wrap gap-2 text-sm">
+          <div className="flex flex-wrap gap-2 items-end justify-between">
+            <div className="flex flex-wrap gap-2 text-sm items-center">
             <Badge variant="secondary">
               {coverage.assigned_subjects}/{coverage.total_subjects} subjects covered
             </Badge>
@@ -1912,6 +2006,31 @@ function TeachersPanel({
             {coverage.academic_year && (
               <Badge variant="outline">Year {coverage.academic_year.name}</Badge>
             )}
+            </div>
+            <div className="flex flex-wrap gap-2 items-end">
+              <div>
+                <Label className="text-xs">Bulk assign</Label>
+                <select
+                  id="bulk-teacher-pick"
+                  className="mt-1 h-9 rounded-md border px-2 text-sm min-w-[12rem] block"
+                >
+                  <option value="">Select teacher…</option>
+                  {teachers.map((tch) => (
+                    <option key={tch.id} value={tch.id}>
+                      {tch.full_name || tch.user_email || tch.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={busy || !yearId}
+                onClick={assignAllSubjects}
+              >
+                Assign to all subjects
+              </Button>
+            </div>
           </div>
           <div className="overflow-x-auto rounded-xl border">
             <table className="w-full text-sm">

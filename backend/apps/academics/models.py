@@ -253,6 +253,16 @@ class Section(models.Model):
         default=True
     )
 
+    # Class / form teacher (homeroom) — links HR staff into academics
+    class_teacher = models.ForeignKey(
+        "staff.Staff",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="class_sections",
+        help_text="Homeroom / class teacher responsible for this section",
+    )
+
     class Meta:
 
         unique_together = (

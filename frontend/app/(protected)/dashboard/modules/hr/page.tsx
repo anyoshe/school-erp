@@ -84,6 +84,20 @@ export default function HRPage() {
   const [editing, setEditing] = useState<StaffMember | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [teachingLoad, setTeachingLoad] = useState<{
+    subject_assignments: {
+      id: string | number;
+      subject_name?: string;
+      grade_name?: string;
+      academic_year_name?: string;
+    }[];
+    class_sections: {
+      id: number;
+      name: string;
+      grade_level?: number;
+      class_teacher_name?: string;
+    }[];
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -113,12 +127,20 @@ export default function HRPage() {
 
   const openCreate = () => {
     setEditing(null);
+    setTeachingLoad(null);
     setForm(emptyForm);
     setOpen(true);
   };
 
-  const openEdit = (s: StaffMember) => {
+  const openEdit = async (s: StaffMember) => {
     setEditing(s);
+    setTeachingLoad(null);
+    try {
+      const { data } = await api.get(`/staff/staff/${s.id}/teaching-load/`);
+      setTeachingLoad(data);
+    } catch {
+      setTeachingLoad({ subject_assignments: [], class_sections: [] });
+    }
     setForm({
       first_name: s.first_name || "",
       last_name: s.last_name || "",
@@ -489,6 +511,44 @@ export default function HRPage() {
               Active (available for teaching / duties)
             </label>
           </div>
+          {editing && teachingLoad && (
+            <div className="rounded-xl border bg-slate-50 p-3 space-y-2 text-sm">
+              <p className="font-medium text-xs uppercase tracking-wide text-muted-foreground">
+                Teaching load
+              </p>
+              {teachingLoad.class_sections?.length ? (
+                <div>
+                  <p className="text-xs font-medium mb-1">Class teacher for</p>
+                  <ul className="list-disc pl-5 text-xs space-y-0.5">
+                    {teachingLoad.class_sections.map((sec) => (
+                      <li key={sec.id}>
+                        Section {sec.name}
+                        {sec.grade_level != null ? ` (grade #${sec.grade_level})` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Not set as class teacher on any section.</p>
+              )}
+              {teachingLoad.subject_assignments?.length ? (
+                <div>
+                  <p className="text-xs font-medium mb-1">Subject assignments</p>
+                  <ul className="list-disc pl-5 text-xs space-y-0.5 max-h-28 overflow-y-auto">
+                    {teachingLoad.subject_assignments.map((a) => (
+                      <li key={a.id}>
+                        {a.subject_name || "Subject"}
+                        {a.grade_name ? ` · ${a.grade_name}` : ""}
+                        {a.academic_year_name ? ` · ${a.academic_year_name}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No subject assignments yet (set under Academics → Teachers).</p>
+              )}
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
