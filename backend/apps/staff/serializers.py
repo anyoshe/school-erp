@@ -203,6 +203,8 @@ class PayrollSerializer(serializers.ModelSerializer):
             "payment_method",
             "paid_from_account",
             "expense",
+            "related_fee_category",
+            "expense_category",
             "created_at",
             "updated_at",
         )
@@ -227,6 +229,8 @@ class PayrollCreateUpdateSerializer(serializers.ModelSerializer):
             "notes",
             "payment_method",
             "paid_from_account",
+            "related_fee_category",
+            "expense_category",
         )
 
     def validate(self, attrs):

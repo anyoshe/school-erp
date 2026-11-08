@@ -112,6 +112,24 @@ class Payroll(models.Model):
         blank=True,
         related_name="payroll_rows",
     )
+    # Cost allocation — which fee income group "funds" this salary
+    related_fee_category = models.ForeignKey(
+        "finance.FeeCategory",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payroll_allocations",
+        help_text="Fee group this salary is charged against (e.g. Tuition, ICT).",
+    )
+    # Expense grouping for P&amp;L (Staff salaries, Administration, etc.)
+    expense_category = models.ForeignKey(
+        "finance.ExpenseCategory",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payroll_rows",
+        help_text="Expense category for reporting (defaults to Staff salaries).",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -222,10 +222,14 @@ class PayrollViewSet(ModelViewSet):
     def _pay_one(self, row, request):
         """Mark paid + post expense/GL. Returns (row, error_str|None)."""
         from apps.finance.ledger import post_payroll
-        from apps.finance.models import Account
+        from apps.finance.models import Account, FeeCategory, ExpenseCategory
 
         if row.status == Payroll.Status.CANCELLED:
             return row, "cancelled"
+        # Never double-pay / double-post
+        if row.status == Payroll.Status.PAID and row.expense_id:
+            return row, "already_paid"
+
         method = (request.data.get("payment_method") or row.payment_method or "BANK").upper()
         account_id = request.data.get("paid_from_account")
         account = None
@@ -233,6 +237,18 @@ class PayrollViewSet(ModelViewSet):
             account = Account.objects.filter(
                 pk=account_id, school_id=row.staff.school_id
             ).first()
+
+        fee_cat_id = request.data.get("related_fee_category") or request.data.get("fee_category")
+        exp_cat_id = request.data.get("expense_category")
+        if fee_cat_id:
+            fc = FeeCategory.objects.filter(pk=fee_cat_id, school_id=row.staff.school_id).first()
+            if fc:
+                row.related_fee_category = fc
+        if exp_cat_id:
+            ec = ExpenseCategory.objects.filter(pk=exp_cat_id, school_id=row.staff.school_id).first()
+            if ec:
+                row.expense_category = ec
+
         paid_at = request.data.get("paid_at") or date.today()
         if isinstance(paid_at, str) and len(paid_at) >= 10:
             from datetime import datetime
@@ -262,21 +278,25 @@ class PayrollViewSet(ModelViewSet):
     def mark_paid(self, request, pk=None):
         row = self.get_object()
         row, err = self._pay_one(row, request)
-        if err and err != "cancelled":
+        if err == "already_paid":
+            return Response(
+                {"detail": "Already paid — not posted again", "payroll": PayrollSerializer(row).data}
+            )
+        if err == "cancelled":
+            return Response({"detail": "Cannot pay a cancelled row"}, status=400)
+        if err:
             return Response(
                 {"detail": f"Marked paid but GL post issue: {err}", "payroll": PayrollSerializer(row).data},
                 status=200,
             )
-        if err == "cancelled":
-            return Response({"detail": "Cannot pay a cancelled row"}, status=400)
         return Response(PayrollSerializer(row).data)
 
     @action(detail=False, methods=["post"], url_path="run")
     def run_payroll(self, request):
         """
-        Full payroll run for a month: mark all DRAFT/APPROVED rows paid
-        and post each to Finance (expense + GL 5100 / cash).
-        Body: { month: "2026-11" or "2026-11-01", payment_method?, paid_from_account? }
+        Pay only unpaid rows (DRAFT/APPROVED) for a month and post to Finance once.
+        Already PAID rows are skipped (no double expense / GL).
+        Body: month, payment_method?, paid_from_account?, related_fee_category?, expense_category?
         """
         school = selected_school(request)
         if not school:
@@ -285,29 +305,28 @@ class PayrollViewSet(ModelViewSet):
         if not month_raw:
             return Response({"detail": "month is required (YYYY-MM)"}, status=400)
         prefix = str(month_raw)[:7]
-        qs = self.get_queryset().filter(
-            staff__school=school,
-            month__startswith=prefix,
-            status__in=[Payroll.Status.DRAFT, Payroll.Status.APPROVED, Payroll.Status.PAID],
+        qs = (
+            self.get_queryset()
+            .filter(
+                staff__school=school,
+                month__startswith=prefix,
+                status__in=[Payroll.Status.DRAFT, Payroll.Status.APPROVED],
+            )
+            .select_related("staff__user", "staff__school")
         )
-        # Only re-post unpaid or allow force
-        force = str(request.data.get("force") or "").lower() in ("1", "true", "yes")
         paid = 0
+        skipped = (
+            self.get_queryset()
+            .filter(staff__school=school, month__startswith=prefix, status=Payroll.Status.PAID)
+            .count()
+        )
         errors = []
-        for row in qs.select_related("staff__user", "staff__school"):
-            if row.status == Payroll.Status.PAID and row.expense_id and not force:
-                continue
-            if row.status == Payroll.Status.PAID and not force:
-                # try GL only if missing
-                from apps.finance.ledger import post_payroll
-                try:
-                    post_payroll(row, payment_method=request.data.get("payment_method"), user=request.user)
-                    paid += 1
-                except Exception as e:
-                    errors.append({"id": str(row.id), "detail": str(e)})
-                continue
+        for row in qs:
             row, err = self._pay_one(row, request)
-            if err and err != "cancelled":
+            if err in ("already_paid", "cancelled"):
+                skipped += 1
+                continue
+            if err:
                 errors.append({"id": str(row.id), "staff": str(row.staff_id), "detail": err})
             else:
                 paid += 1
@@ -315,10 +334,12 @@ class PayrollViewSet(ModelViewSet):
             {
                 "month": prefix,
                 "posted": paid,
+                "skipped_already_paid": skipped,
                 "errors": errors[:20],
                 "error_count": len(errors),
             }
         )
+
 
     @action(detail=True, methods=["get"], url_path="payslip")
     def payslip(self, request, pk=None):

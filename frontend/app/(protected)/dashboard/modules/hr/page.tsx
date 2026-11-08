@@ -187,6 +187,10 @@ export default function HRPage() {
   const [payMethod, setPayMethod] = useState("BANK");
   const [runMonth, setRunMonth] = useState("");
   const [payslip, setPayslip] = useState<any>(null);
+  const [feeCategories, setFeeCategories] = useState<{ id: string | number; name: string }[]>([]);
+  const [expenseCategories, setExpenseCategories] = useState<{ id: string | number; name: string }[]>([]);
+  const [feeCategoryId, setFeeCategoryId] = useState("");
+  const [expenseCategoryId, setExpenseCategoryId] = useState("");
 
   const loadStaff = useCallback(async () => {
     setLoading(true);
@@ -212,18 +216,29 @@ export default function HRPage() {
 
   const loadPayroll = useCallback(async () => {
     try {
-      const [listRes, sumRes] = await Promise.all([
+      const [listRes, sumRes, feeRes, expRes] = await Promise.all([
         api.get("/staff/payroll/"),
         api.get("/staff/payroll/summary/"),
+        api.get("/finance/categories/"),
+        api.get("/finance/expense-categories/"),
       ]);
       const list = listRes.data?.results ?? listRes.data;
       setPayroll(Array.isArray(list) ? list : []);
       setPayrollSummary(sumRes.data);
+      const fees = feeRes.data?.results ?? feeRes.data;
+      const exps = expRes.data?.results ?? expRes.data;
+      setFeeCategories(Array.isArray(fees) ? fees : []);
+      setExpenseCategories(Array.isArray(exps) ? exps : []);
+      // Prefer Staff salaries as default expense category once
+      if (!expenseCategoryId && Array.isArray(exps)) {
+        const sal = exps.find((c: any) => /salar/i.test(c.name || ""));
+        if (sal) setExpenseCategoryId(String(sal.id));
+      }
     } catch {
       toast.error("Could not load payroll");
       setPayroll([]);
     }
-  }, []);
+  }, [expenseCategoryId]);
 
   const loadLeave = useCallback(async () => {
     try {
@@ -365,6 +380,8 @@ export default function HRPage() {
     try {
       await api.post(`/staff/payroll/${id}/mark-paid/`, {
         payment_method: payMethod,
+        related_fee_category: feeCategoryId || undefined,
+        expense_category: expenseCategoryId || undefined,
       });
       toast.success("Paid · posted to Finance (salaries expense + GL)");
       loadPayroll();
@@ -383,9 +400,13 @@ export default function HRPage() {
       const { data } = await api.post("/staff/payroll/run/", {
         month: runMonth,
         payment_method: payMethod,
+        related_fee_category: feeCategoryId || undefined,
+        expense_category: expenseCategoryId || undefined,
       });
+      const skipped = data.skipped_already_paid || 0;
       toast.success(
         `Payroll run ${data.month}: posted ${data.posted}` +
+          (skipped ? ` · skipped ${skipped} already paid` : "") +
           (data.error_count ? ` · ${data.error_count} issue(s)` : "")
       );
       if (data.errors?.length) console.warn(data.errors);
@@ -653,15 +674,45 @@ export default function HRPage() {
             </div>
             <div className="flex flex-wrap gap-2 items-end print:hidden">
               <div>
-                <Label className="text-xs">Pay from</Label>
+                <Label className="text-xs">Pay from (cash pot)</Label>
                 <select
-                  className="h-9 border rounded-md px-2 text-sm"
+                  className="h-9 border rounded-md px-2 text-sm min-w-[7rem]"
                   value={payMethod}
                   onChange={(e) => setPayMethod(e.target.value)}
                 >
                   <option value="BANK">Bank</option>
                   <option value="CASH">Cash</option>
                   <option value="MPESA">M-Pesa</option>
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs">Funded by fee group</Label>
+                <select
+                  className="h-9 border rounded-md px-2 text-sm min-w-[9rem]"
+                  value={feeCategoryId}
+                  onChange={(e) => setFeeCategoryId(e.target.value)}
+                >
+                  <option value="">— optional —</option>
+                  {feeCategories.map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs">Expense category</Label>
+                <select
+                  className="h-9 border rounded-md px-2 text-sm min-w-[9rem]"
+                  value={expenseCategoryId}
+                  onChange={(e) => setExpenseCategoryId(e.target.value)}
+                >
+                  <option value="">Staff salaries (default)</option>
+                  {expenseCategories.map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
@@ -675,10 +726,11 @@ export default function HRPage() {
               </div>
               <Button size="sm" disabled={saving} onClick={runPayrollMonth}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                Run payroll → Finance
+                Run unpaid → Finance
               </Button>
-              <p className="text-xs text-muted-foreground max-w-xs self-center">
-                Marks DRAFT/APPROVED rows paid, creates Staff salaries expenses, posts GL 5100.
+              <p className="text-xs text-muted-foreground max-w-sm self-center">
+                Only unpaid (DRAFT/APPROVED) rows are paid. Already paid months are skipped — no double GL.
+                Fee group links the salary cost to Tuition / ICT / etc.
               </p>
             </div>
           </CardHeader>

@@ -284,7 +284,10 @@ def post_payroll(payroll, *, payment_method=None, paid_from_account=None, user=N
     if not exp_gl:
         raise ValueError("Staff salaries GL account (5100) missing")
 
-    cat = ExpenseCategory.objects.filter(school=school, name__icontains="salar").first()
+    cat = getattr(payroll, "expense_category", None)
+    if cat is None:
+        cat = ExpenseCategory.objects.filter(school=school, name__icontains="salar").first()
+    fee_cat = getattr(payroll, "related_fee_category", None)
     u = staff.user
     name = f"{getattr(u, 'first_name', '') or ''} {getattr(u, 'last_name', '') or ''}".strip() or u.email
     month_label = payroll.month.strftime("%b %Y") if payroll.month else ""
@@ -295,11 +298,13 @@ def post_payroll(payroll, *, payment_method=None, paid_from_account=None, user=N
         expense = Expense.objects.create(
             school=school,
             category=cat,
+            related_fee_category=fee_cat,
             paid_from_account=asset,
             title=title[:200],
             description=(
                 f"Payroll net pay. Basic {payroll.basic_salary}, "
                 f"allowances {payroll.allowances}, deductions {payroll.deductions}."
+                + (f" Funded from fee group: {fee_cat.name}." if fee_cat else "")
             ),
             amount=amount,
             expense_date=payroll.paid_at or timezone.now().date(),
@@ -312,6 +317,11 @@ def post_payroll(payroll, *, payment_method=None, paid_from_account=None, user=N
         payroll.paid_from_account = asset
         payroll.payment_method = method
         payroll.save(update_fields=["expense", "paid_from_account", "payment_method", "updated_at"])
+    elif fee_cat and not expense.related_fee_category_id:
+        expense.related_fee_category = fee_cat
+        if cat and not expense.category_id:
+            expense.category = cat
+        expense.save(update_fields=["related_fee_category", "category"])
 
     # Prefer dedicated payroll source so we don't double-post as generic expense
     if not _already_posted("payroll", payroll.pk):
