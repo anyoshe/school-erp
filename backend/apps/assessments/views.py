@@ -1,3 +1,5 @@
+import csv
+import io
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
@@ -898,4 +900,243 @@ class PrepareGradeAssessmentsView(APIView):
                 "detail": subjects_done,
             },
             status=status.HTTP_201_CREATED if created_total else status.HTTP_200_OK,
+        )
+
+
+class MarksCsvImportView(APIView):
+    """
+    Bulk marks via CSV for one class + subject + term markbook.
+
+    GET  ?academic_year=&term=&grade_level=&subject=&section=
+         → download template with admission numbers and assessment columns
+
+    POST same filters + multipart file field "file" (or body text "csv")
+         CSV header: admission_number, <assessment name>, <assessment name>, ...
+         Optional columns: name (ignored), student_id
+         Empty cells are skipped; "A" or "ABS" marks absent.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _context(self, request):
+        matrix = MarksMatrixView()
+        return matrix._resolve_context(request)
+
+    def _assessments(self, ctx):
+        from .presets import ensure_term_assessments
+
+        qs = Assessment.objects.filter(
+            school=ctx["school"],
+            academic_year=ctx["year"],
+            term=ctx["term"],
+            grade_level=ctx["grade"],
+            subject=ctx["subject"],
+        )
+        if not qs.exists():
+            ensure_term_assessments(
+                school=ctx["school"],
+                academic_year=ctx["year"],
+                term=ctx["term"],
+                grade_level=ctx["grade"],
+                subject=ctx["subject"],
+                created_by=None,
+            )
+            qs = Assessment.objects.filter(
+                school=ctx["school"],
+                academic_year=ctx["year"],
+                term=ctx["term"],
+                grade_level=ctx["grade"],
+                subject=ctx["subject"],
+            )
+        return list(qs.order_by("name"))
+
+    def _students(self, ctx):
+        from apps.students.models import Student
+
+        qs = (
+            Student.objects.filter(school=ctx["school"], current_class=ctx["grade"])
+            .exclude(status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED", "PENDING_CLEARANCE"])
+            .order_by("admission_number", "last_name", "first_name")
+        )
+        if ctx.get("section_id"):
+            qs = qs.filter(section_id=ctx["section_id"])
+        return list(qs[:500])
+
+    def get(self, request):
+        from django.http import HttpResponse
+
+        ctx, err = self._context(request)
+        if err:
+            return err
+        assessments = self._assessments(ctx)
+        students = self._students(ctx)
+        headers = ["admission_number", "name"] + [a.name for a in assessments]
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(headers)
+        for s in students:
+            name = f"{s.first_name or ''} {s.last_name or ''}".strip()
+            writer.writerow([s.admission_number or "", name] + [""] * len(assessments))
+        filename = (
+            f"marks_{ctx['grade'].name}_{ctx['subject'].name}_{ctx['term'].name}.csv"
+            .replace(" ", "_")
+        )
+        resp = HttpResponse(buf.getvalue(), content_type="text/csv; charset=utf-8")
+        resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return resp
+
+    def post(self, request):
+        from decimal import Decimal, InvalidOperation
+        from apps.students.models import Student
+
+        ctx, err = self._context(request)
+        if err:
+            return err
+
+        assessments = self._assessments(ctx)
+        by_name = {a.name.strip().lower(): a for a in assessments}
+
+        raw = None
+        upload = request.FILES.get("file")
+        if upload:
+            raw = upload.read().decode("utf-8-sig", errors="replace")
+        elif isinstance(request.data.get("csv"), str):
+            raw = request.data.get("csv")
+        if not raw or not raw.strip():
+            return Response(
+                {"detail": "Upload a CSV file (field name: file) or send csv text."},
+                status=400,
+            )
+
+        reader = csv.DictReader(io.StringIO(raw))
+        if not reader.fieldnames:
+            return Response({"detail": "CSV has no header row"}, status=400)
+
+        field_map = {}
+        skip_fields = {
+            "admission_number",
+            "admission",
+            "adm",
+            "adm_no",
+            "adm_number",
+            "name",
+            "student",
+            "student_name",
+            "student_id",
+            "id",
+        }
+        for h in reader.fieldnames:
+            key = (h or "").strip()
+            if not key:
+                continue
+            low = key.lower().replace(" ", "_")
+            if low in skip_fields or low in (
+                "admission_number",
+                "admission",
+                "adm_no",
+            ):
+                continue
+            assessment = by_name.get(key.lower()) or by_name.get(key.strip().lower())
+            if assessment:
+                field_map[key] = assessment
+
+        if not field_map:
+            return Response(
+                {
+                    "detail": "No assessment columns matched. Use assessment names as headers "
+                    f"(e.g. {', '.join(a.name for a in assessments)})."
+                },
+                status=400,
+            )
+
+        # Index students by admission number (case-insensitive)
+        students = self._students(ctx)
+        by_adm = {}
+        for s in students:
+            adm = (s.admission_number or "").strip().upper()
+            if adm:
+                by_adm[adm] = s
+
+        saved = 0
+        skipped = 0
+        errors = []
+        for i, row in enumerate(reader, start=2):
+            adm = (
+                row.get("admission_number")
+                or row.get("Admission Number")
+                or row.get("admission")
+                or row.get("adm")
+                or row.get("Adm")
+                or row.get("ADM")
+                or ""
+            ).strip().upper()
+            if not adm:
+                # try first column
+                for k, v in row.items():
+                    if k and "adm" in k.lower() and v:
+                        adm = str(v).strip().upper()
+                        break
+            if not adm:
+                errors.append({"row": i, "detail": "missing admission_number"})
+                continue
+            student = by_adm.get(adm)
+            if not student:
+                errors.append({"row": i, "admission_number": adm, "detail": "student not found in class"})
+                continue
+
+            for header, assessment in field_map.items():
+                cell = row.get(header)
+                if cell is None:
+                    continue
+                text = str(cell).strip()
+                if text == "":
+                    skipped += 1
+                    continue
+                is_absent = text.upper() in ("A", "ABS", "ABSENT", "-")
+                score = None
+                if not is_absent:
+                    try:
+                        score = Decimal(text.replace(",", ""))
+                    except (InvalidOperation, ValueError):
+                        errors.append(
+                            {
+                                "row": i,
+                                "admission_number": adm,
+                                "assessment": assessment.name,
+                                "detail": f"invalid score '{text}'",
+                            }
+                        )
+                        continue
+                    if score < 0 or score > assessment.max_score:
+                        errors.append(
+                            {
+                                "row": i,
+                                "admission_number": adm,
+                                "assessment": assessment.name,
+                                "detail": f"score must be 0–{assessment.max_score}",
+                            }
+                        )
+                        continue
+                Mark.objects.update_or_create(
+                    assessment=assessment,
+                    student=student,
+                    defaults={
+                        "school": ctx["school"],
+                        "score": score,
+                        "is_absent": is_absent,
+                        "recorded_by": request.user
+                        if request.user.is_authenticated
+                        else None,
+                    },
+                )
+                saved += 1
+
+        return Response(
+            {
+                "saved": saved,
+                "skipped_empty": skipped,
+                "errors": errors[:50],
+                "error_count": len(errors),
+                "assessments_matched": [a.name for a in field_map.values()],
+            }
         )

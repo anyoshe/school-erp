@@ -3354,6 +3354,7 @@ function MarksEntryPanel({
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+    const csvInputRef = useRef<HTMLInputElement>(null);
   const [sortBy, setSortBy] = useState<"name" | "admission">("name");
 
   const activeYear = years.find((y) => y.is_active) || years[0];
@@ -3377,7 +3378,72 @@ function MarksEntryPanel({
     `${studentId}__${assessmentId}`;
 
   
-  const prepareAllSubjects = async () => {
+  
+  const downloadTemplate = async () => {
+    if (!yearId || !termId || !gradeId || !subjectId) {
+      toast.message("Select year, term, grade and subject first");
+      return;
+    }
+    try {
+      const blob = await downloadMarksCsvTemplate({
+        academic_year: Number(yearId),
+        term: Number(termId),
+        grade_level: Number(gradeId),
+        subject: subjectId,
+        section: sectionId || undefined,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "marks_template.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Template downloaded — fill scores and import");
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Could not download template");
+    }
+  };
+
+  const onCsvSelected = async (file: File | null) => {
+    if (!file) return;
+    if (!yearId || !termId || !gradeId || !subjectId) {
+      toast.message("Select year, term, grade and subject first");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await importMarksCsv(
+        {
+          academic_year: Number(yearId),
+          term: Number(termId),
+          grade_level: Number(gradeId),
+          subject: subjectId,
+          section: sectionId || undefined,
+        },
+        file
+      );
+      const errN = res.error_count || 0;
+      if (res.saved) {
+        toast.success(
+          `Imported ${res.saved} mark(s)` +
+            (errN ? ` · ${errN} row issue(s)` : "")
+        );
+      } else {
+        toast.message(errN ? `${errN} issue(s) — nothing saved` : "No marks imported");
+      }
+      if (res.errors?.length) {
+        console.warn("marks csv errors", res.errors);
+      }
+      await load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "CSV import failed");
+    } finally {
+      setBusy(false);
+      if (csvInputRef.current) csvInputRef.current.value = "";
+    }
+  };
+
+const prepareAllSubjects = async () => {
     if (!yearId || !termId || !gradeId) {
       toast.message("Select year, term and grade first");
       return;
@@ -3588,6 +3654,29 @@ const load = async () => {
             >
               Prepare all subjects
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || !yearId || !termId || !gradeId || !subjectId}
+              onClick={downloadTemplate}
+            >
+              CSV template
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || !yearId || !termId || !gradeId || !subjectId}
+              onClick={() => csvInputRef.current?.click()}
+            >
+              Import CSV
+            </Button>
+            <input
+              ref={csvInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => onCsvSelected(e.target.files?.[0] || null)}
+            />
             <Button size="sm" variant="outline" disabled={busy || loading} onClick={load}>
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
               {matrix ? "Reload" : "Open markbook"}

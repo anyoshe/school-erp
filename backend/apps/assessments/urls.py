@@ -8,12 +8,18 @@ from .views import (
     MarksMatrixView,
     DefaultAssessmentPlanView,
     PrepareGradeAssessmentsView,
+    MarksCsvImportView,
 )
 
 router = DefaultRouter()
 router.register(r"assessments", AssessmentViewSet, basename="assessment")
 
 urlpatterns = [
+    path(
+        "marks-import/",
+        MarksCsvImportView.as_view(),
+        name="marks-csv-import",
+    ),
     path(
         "prepare-grade-assessments/",
         PrepareGradeAssessmentsView.as_view(),

@@ -705,3 +705,48 @@ export async function prepareGradeAssessments(params: {
     detail: { subject_id: string; subject_name: string; created: number; columns: number }[];
   };
 }
+
+
+export async function downloadMarksCsvTemplate(params: {
+  academic_year: number;
+  term: number;
+  grade_level: number;
+  subject: number | string;
+  section?: number | string;
+}) {
+  const res = await api.get("/assessments/marks-import/", {
+    params,
+    responseType: "blob",
+  });
+  return res.data as Blob;
+}
+
+export async function importMarksCsv(
+  params: {
+    academic_year: number;
+    term: number;
+    grade_level: number;
+    subject: number | string;
+    section?: number | string;
+  },
+  file: File
+) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("academic_year", String(params.academic_year));
+  form.append("term", String(params.term));
+  form.append("grade_level", String(params.grade_level));
+  form.append("subject", String(params.subject));
+  if (params.section) form.append("section", String(params.section));
+  const { data } = await api.post("/assessments/marks-import/", form, {
+    headers: { "Content-Type": "multipart/form-data" },
+    params, // also on query for _resolve_context
+  });
+  return data as {
+    saved: number;
+    skipped_empty: number;
+    errors: { row?: number; detail: string; admission_number?: string }[];
+    error_count: number;
+    assessments_matched: string[];
+  };
+}
