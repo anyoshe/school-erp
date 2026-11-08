@@ -128,7 +128,7 @@ function GradeSelect({
       <SelectTrigger className={className || "h-10 w-full mt-1 bg-background"}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContent position="popper" sideOffset={4} className="z-[300] max-h-[min(20rem,var(--radix-select-content-available-height))]">
+      <SelectContent position="popper" sideOffset={4} className="z-[9999] max-h-[min(20rem,var(--radix-select-content-available-height))]">
         {emptyLabel != null ? (
           <SelectItem value="__empty__">{emptyLabel}</SelectItem>
         ) : null}
@@ -174,7 +174,7 @@ function SubjectSelect({
       <SelectContent
         position="popper"
         sideOffset={4}
-        className="z-[300] max-h-[min(20rem,var(--radix-select-content-available-height))]"
+        className="z-[9999] max-h-[min(20rem,var(--radix-select-content-available-height))]"
       >
         <SelectItem value="__empty__">{emptyLabel}</SelectItem>
         {sorted.map((s) => (
@@ -3219,45 +3219,10 @@ function MarksEntryPanel({
     });
     const sorted = rows.slice().sort((a, b) => {
       if (sortBy === "admission") {
-        return (a.admission_number || "").localeCompare(b.admission_number || "", undefined, {
-          numeric: true,
-          sensitivity: "base",
-        });
-      }
-      return (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
-    });
-    return sorted;
-  }, [matrix, draft, sortBy]);
-
-  const labelFor = (avg: number | null) => {
-    if (avg == null || !matrix) return "—";
-    const sys = (matrix.grading_system || "percentage").toLowerCase();
-    const pass = matrix.passing_mark || 50;
-    if (sys === "cbc" || sys === "competency" || sys === "competency_based") {
-      if (avg >= 80) return "EE";
-      if (avg >= 60) return "ME";
-      if (avg >= 40) return "AE";
-      return "BE";
-    }
-    if (sys === "mastery") {
-      if (avg >= 80) return "Mastery";
-      if (avg >= 60) return "Approaching";
-      return "Beginning";
-    }
-    if (sys === "pass_fail" || sys === "pass/fail") {
-      return avg >= pass ? "Pass" : "Fail";
-    }
-    if (avg >= 80) return "A";
-    if (avg >= 70) return "B";
-    if (avg >= 60) return "C";
-    if (avg >= 50) return "D";
-    return "E";
-  };
-
-  return (
-    <div className="flex flex-col gap-2 min-h-0">
-      {/* Sticky control strip — stays visible above the grid */}
-      <div className="sticky top-[3.25rem] z-10 rounded-xl border bg-white/95 backdrop-blur shadow-sm p-2.5 sm:p-3 space-y-2">
+        return (
+    <div className="flex flex-col gap-2 h-[min(78vh,calc(100vh-11rem))] min-h-[28rem]">
+      {/* Filters always ABOVE the grid — not overlapping the table */}
+      <div className="shrink-0 relative z-40 rounded-xl border bg-white shadow-sm p-2.5 sm:p-3 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground max-w-xl">
             Preset columns: <strong>CAT 1–3</strong>, <strong>End of Term</strong>
@@ -3375,9 +3340,10 @@ function MarksEntryPanel({
         )}
       </div>
 
-      {matrix ? (
-        <div className="rounded-xl border bg-white overflow-hidden flex flex-col max-h-[min(70vh,calc(100vh-16rem))]">
-          <div className="overflow-auto flex-1">
+      {/* Table scrolls in remaining space only — never covers filters */}
+      <div className="flex-1 min-h-0 relative z-0 rounded-xl border bg-white overflow-hidden flex flex-col">
+        {matrix ? (
+          <div className="flex-1 min-h-0 overflow-auto">
             <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground sticky top-0 z-[1] shadow-sm">
                 <tr>
@@ -3443,14 +3409,18 @@ function MarksEntryPanel({
               </tbody>
             </table>
           </div>
-        </div>
-      ) : (
-        !busy && (
-          <div className="rounded-xl border border-dashed bg-slate-50/50 py-10 text-center text-sm text-muted-foreground">
-            Select year, term, grade and subject, then open the markbook.
+        ) : (
+          <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground px-4 py-8">
+            {busy ? (
+              <span className="inline-flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading markbook…
+              </span>
+            ) : (
+              "Select year, term, grade and subject above, then open the markbook."
+            )}
           </div>
-        )
-      )}
+        )}
+      </div>
     </div>
   );
 }
