@@ -200,10 +200,13 @@ class PayrollSerializer(serializers.ModelSerializer):
             "status_display",
             "paid_at",
             "notes",
+            "payment_method",
+            "paid_from_account",
+            "expense",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("id", "net_salary", "created_at", "updated_at")
+        read_only_fields = ("id", "net_salary", "expense", "created_at", "updated_at")
 
     def get_staff_name(self, obj):
         u = obj.staff.user
@@ -222,6 +225,8 @@ class PayrollCreateUpdateSerializer(serializers.ModelSerializer):
             "status",
             "paid_at",
             "notes",
+            "payment_method",
+            "paid_from_account",
         )
 
     def validate(self, attrs):

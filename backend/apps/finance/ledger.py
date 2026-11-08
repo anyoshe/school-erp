@@ -238,3 +238,98 @@ def post_income_receipt(receipt) -> bool:
         source_id=receipt.pk,
     )
     return True
+
+
+
+def post_payroll(payroll, *, payment_method=None, paid_from_account=None, user=None) -> bool:
+    """
+    Mark a payroll row as paid in the GL:
+      Dr 5100 Staff salaries
+      Cr Cash/Bank/M-Pesa (asset)
+
+    Also creates a Finance Expense under "Staff salaries" so P&L and expense
+    register stay aligned. Idempotent via JournalEntry source_type=payroll.
+    """
+    from apps.finance.models import Expense, ExpenseCategory, Account
+    from apps.finance.seed_defaults import (
+        ensure_school_expense_categories,
+        ensure_school_cash_accounts,
+        asset_account_for_payment_method,
+    )
+
+    staff = payroll.staff
+    school = getattr(staff, "school", None)
+    amount = _d(payroll.net_salary)
+    if not school or amount <= 0:
+        return False
+    if _already_posted("payroll", payroll.pk):
+        return True
+
+    ensure_school_expense_categories(school)
+    ensure_school_cash_accounts(school)
+
+    method = (payment_method or getattr(payroll, "payment_method", None) or "BANK").upper()
+    if method in ("BANK_TRANSFER", "TRANSFER"):
+        method = "BANK"
+    if method in ("M-PESA", "MOBILE"):
+        method = "MPESA"
+
+    asset = paid_from_account or getattr(payroll, "paid_from_account", None)
+    if not asset:
+        asset = asset_account_for_payment_method(school, method)
+    if not asset:
+        raise ValueError("No cash/bank account configured for payroll payment")
+
+    exp_gl = _account(school, "5100") or _account(school, "5000")
+    if not exp_gl:
+        raise ValueError("Staff salaries GL account (5100) missing")
+
+    cat = ExpenseCategory.objects.filter(school=school, name__icontains="salar").first()
+    u = staff.user
+    name = f"{getattr(u, 'first_name', '') or ''} {getattr(u, 'last_name', '') or ''}".strip() or u.email
+    month_label = payroll.month.strftime("%b %Y") if payroll.month else ""
+    title = f"Salary — {name} — {month_label}".strip(" —")
+
+    expense = getattr(payroll, "expense", None)
+    if expense is None:
+        expense = Expense.objects.create(
+            school=school,
+            category=cat,
+            paid_from_account=asset,
+            title=title[:200],
+            description=(
+                f"Payroll net pay. Basic {payroll.basic_salary}, "
+                f"allowances {payroll.allowances}, deductions {payroll.deductions}."
+            ),
+            amount=amount,
+            expense_date=payroll.paid_at or timezone.now().date(),
+            payment_method=method if method in dict(Expense.PaymentMethod.choices) else Expense.PaymentMethod.BANK,
+            reference_number=f"PAY-{str(payroll.pk)[:8].upper()}",
+            paid_to=name[:200],
+            created_by=user if user and getattr(user, "is_authenticated", False) else None,
+        )
+        payroll.expense = expense
+        payroll.paid_from_account = asset
+        payroll.payment_method = method
+        payroll.save(update_fields=["expense", "paid_from_account", "payment_method", "updated_at"])
+
+    # Prefer dedicated payroll source so we don't double-post as generic expense
+    if not _already_posted("payroll", payroll.pk):
+        post_journal(
+            school,
+            expense.expense_date,
+            f"Payroll: {title}",
+            [
+                {"account": exp_gl, "debit": amount, "credit": 0},
+                {
+                    "account": asset,
+                    "debit": 0,
+                    "credit": amount,
+                    "reference": expense.reference_number or "",
+                },
+            ],
+            source_type="payroll",
+            source_id=payroll.pk,
+        )
+    # Also skip re-posting the expense-level journal if something else posts expenses
+    return True

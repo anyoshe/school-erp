@@ -93,6 +93,25 @@ class Payroll(models.Model):
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
     paid_at = models.DateField(null=True, blank=True)
     notes = models.CharField(max_length=255, blank=True, default="")
+    payment_method = models.CharField(
+        max_length=20,
+        default="BANK",
+        help_text="CASH / BANK / MPESA — draws from matching asset account",
+    )
+    paid_from_account = models.ForeignKey(
+        "finance.Account",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payroll_payments",
+    )
+    expense = models.ForeignKey(
+        "finance.Expense",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payroll_rows",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

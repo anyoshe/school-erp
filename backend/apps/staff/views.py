@@ -219,13 +219,155 @@ class PayrollViewSet(ModelViewSet):
         }
         return Response({**agg, "by_status": by_status})
 
+    def _pay_one(self, row, request):
+        """Mark paid + post expense/GL. Returns (row, error_str|None)."""
+        from apps.finance.ledger import post_payroll
+        from apps.finance.models import Account
+
+        if row.status == Payroll.Status.CANCELLED:
+            return row, "cancelled"
+        method = (request.data.get("payment_method") or row.payment_method or "BANK").upper()
+        account_id = request.data.get("paid_from_account")
+        account = None
+        if account_id:
+            account = Account.objects.filter(
+                pk=account_id, school_id=row.staff.school_id
+            ).first()
+        paid_at = request.data.get("paid_at") or date.today()
+        if isinstance(paid_at, str) and len(paid_at) >= 10:
+            from datetime import datetime
+            try:
+                paid_at = datetime.strptime(paid_at[:10], "%Y-%m-%d").date()
+            except ValueError:
+                paid_at = date.today()
+        row.paid_at = paid_at
+        row.payment_method = method
+        if account:
+            row.paid_from_account = account
+        row.status = Payroll.Status.PAID
+        row.save()
+        try:
+            post_payroll(
+                row,
+                payment_method=method,
+                paid_from_account=account,
+                user=request.user,
+            )
+            row.refresh_from_db()
+        except Exception as e:
+            return row, str(e)
+        return row, None
+
     @action(detail=True, methods=["post"], url_path="mark-paid")
     def mark_paid(self, request, pk=None):
         row = self.get_object()
-        row.status = Payroll.Status.PAID
-        row.paid_at = request.data.get("paid_at") or date.today()
-        row.save()
+        row, err = self._pay_one(row, request)
+        if err and err != "cancelled":
+            return Response(
+                {"detail": f"Marked paid but GL post issue: {err}", "payroll": PayrollSerializer(row).data},
+                status=200,
+            )
+        if err == "cancelled":
+            return Response({"detail": "Cannot pay a cancelled row"}, status=400)
         return Response(PayrollSerializer(row).data)
+
+    @action(detail=False, methods=["post"], url_path="run")
+    def run_payroll(self, request):
+        """
+        Full payroll run for a month: mark all DRAFT/APPROVED rows paid
+        and post each to Finance (expense + GL 5100 / cash).
+        Body: { month: "2026-11" or "2026-11-01", payment_method?, paid_from_account? }
+        """
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+        month_raw = request.data.get("month") or ""
+        if not month_raw:
+            return Response({"detail": "month is required (YYYY-MM)"}, status=400)
+        prefix = str(month_raw)[:7]
+        qs = self.get_queryset().filter(
+            staff__school=school,
+            month__startswith=prefix,
+            status__in=[Payroll.Status.DRAFT, Payroll.Status.APPROVED, Payroll.Status.PAID],
+        )
+        # Only re-post unpaid or allow force
+        force = str(request.data.get("force") or "").lower() in ("1", "true", "yes")
+        paid = 0
+        errors = []
+        for row in qs.select_related("staff__user", "staff__school"):
+            if row.status == Payroll.Status.PAID and row.expense_id and not force:
+                continue
+            if row.status == Payroll.Status.PAID and not force:
+                # try GL only if missing
+                from apps.finance.ledger import post_payroll
+                try:
+                    post_payroll(row, payment_method=request.data.get("payment_method"), user=request.user)
+                    paid += 1
+                except Exception as e:
+                    errors.append({"id": str(row.id), "detail": str(e)})
+                continue
+            row, err = self._pay_one(row, request)
+            if err and err != "cancelled":
+                errors.append({"id": str(row.id), "staff": str(row.staff_id), "detail": err})
+            else:
+                paid += 1
+        return Response(
+            {
+                "month": prefix,
+                "posted": paid,
+                "errors": errors[:20],
+                "error_count": len(errors),
+            }
+        )
+
+    @action(detail=True, methods=["get"], url_path="payslip")
+    def payslip(self, request, pk=None):
+        """JSON payload for official payslip print."""
+        row = self.get_object()
+        school = row.staff.school
+        u = row.staff.user
+        name = f"{u.first_name or ''} {u.last_name or ''}".strip() or u.email
+        return Response(
+            {
+                "document": "PAYSLIP",
+                "school": {
+                    "name": getattr(school, "name", "") or "",
+                    "short_name": getattr(school, "short_name", "") or "",
+                    "address": getattr(school, "address", "") or "",
+                    "phone": getattr(school, "phone", "") or "",
+                    "email": getattr(school, "email", "") or "",
+                    "logo": getattr(school, "logo", None) and str(school.logo.url) if getattr(school, "logo", None) else None,
+                },
+                "employee": {
+                    "name": name,
+                    "email": u.email,
+                    "role": row.staff.get_role_display(),
+                    "department": row.staff.department or "",
+                    "job_title": row.staff.job_title or "",
+                    "employee_number": row.staff.employee_number or "",
+                    "tsc_number": row.staff.tsc_number or "",
+                    "national_id": row.staff.national_id or "",
+                    "bank_name": row.staff.bank_name or "",
+                    "bank_account": row.staff.bank_account or "",
+                },
+                "pay": {
+                    "id": str(row.id),
+                    "month": row.month.isoformat() if row.month else None,
+                    "month_label": row.month.strftime("%B %Y") if row.month else "",
+                    "basic_salary": str(row.basic_salary),
+                    "allowances": str(row.allowances),
+                    "deductions": str(row.deductions),
+                    "net_salary": str(row.net_salary),
+                    "status": row.status,
+                    "status_display": row.get_status_display(),
+                    "paid_at": row.paid_at.isoformat() if row.paid_at else None,
+                    "payment_method": row.payment_method,
+                    "notes": row.notes or "",
+                    "reference": f"PAY-{str(row.id)[:8].upper()}",
+                },
+                "certification": "This is a computer-generated payslip from the school ERP.",
+            }
+        )
 
 
 class LeaveRequestViewSet(ModelViewSet):

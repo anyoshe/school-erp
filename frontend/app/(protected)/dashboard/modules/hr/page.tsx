@@ -184,6 +184,9 @@ export default function HRPage() {
     end_date: "",
     reason: "",
   });
+  const [payMethod, setPayMethod] = useState("BANK");
+  const [runMonth, setRunMonth] = useState("");
+  const [payslip, setPayslip] = useState<any>(null);
 
   const loadStaff = useCallback(async () => {
     setLoading(true);
@@ -360,11 +363,46 @@ export default function HRPage() {
 
   const markPaid = async (id: string) => {
     try {
-      await api.post(`/staff/payroll/${id}/mark-paid/`);
-      toast.success("Marked paid");
+      await api.post(`/staff/payroll/${id}/mark-paid/`, {
+        payment_method: payMethod,
+      });
+      toast.success("Paid · posted to Finance (salaries expense + GL)");
       loadPayroll();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Could not mark paid");
+    }
+  };
+
+  const runPayrollMonth = async () => {
+    if (!runMonth) {
+      toast.message("Choose a month for the payroll run");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data } = await api.post("/staff/payroll/run/", {
+        month: runMonth,
+        payment_method: payMethod,
+      });
+      toast.success(
+        `Payroll run ${data.month}: posted ${data.posted}` +
+          (data.error_count ? ` · ${data.error_count} issue(s)` : "")
+      );
+      if (data.errors?.length) console.warn(data.errors);
+      loadPayroll();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Payroll run failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const openPayslip = async (id: string) => {
+    try {
+      const { data } = await api.get(`/staff/payroll/${id}/payslip/`);
+      setPayslip(data);
     } catch {
-      toast.error("Could not mark paid");
+      toast.error("Could not load payslip");
     }
   };
 
@@ -603,14 +641,46 @@ export default function HRPage() {
 
       {tab === "payroll" && (
         <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Monthly payroll</CardTitle>
-            {payrollSummary && (
-              <p className="text-sm text-muted-foreground">
-                Net total: <strong>KSh {money(payrollSummary.total_net)}</strong> ·{" "}
-                {payrollSummary.count || 0} rows
+          <CardHeader className="pb-2 space-y-3">
+            <div className="flex flex-row items-center justify-between gap-2 flex-wrap">
+              <CardTitle className="text-base">Monthly payroll</CardTitle>
+              {payrollSummary && (
+                <p className="text-sm text-muted-foreground">
+                  Net total: <strong>KSh {money(payrollSummary.total_net)}</strong> ·{" "}
+                  {payrollSummary.count || 0} rows
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 items-end print:hidden">
+              <div>
+                <Label className="text-xs">Pay from</Label>
+                <select
+                  className="h-9 border rounded-md px-2 text-sm"
+                  value={payMethod}
+                  onChange={(e) => setPayMethod(e.target.value)}
+                >
+                  <option value="BANK">Bank</option>
+                  <option value="CASH">Cash</option>
+                  <option value="MPESA">M-Pesa</option>
+                </select>
+              </div>
+              <div>
+                <Label className="text-xs">Run month</Label>
+                <Input
+                  type="month"
+                  className="h-9"
+                  value={runMonth}
+                  onChange={(e) => setRunMonth(e.target.value)}
+                />
+              </div>
+              <Button size="sm" disabled={saving} onClick={runPayrollMonth}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Run payroll → Finance
+              </Button>
+              <p className="text-xs text-muted-foreground max-w-xs self-center">
+                Marks DRAFT/APPROVED rows paid, creates Staff salaries expenses, posts GL 5100.
               </p>
-            )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto rounded-xl border">
@@ -639,12 +709,15 @@ export default function HRPage() {
                         {money(p.net_salary)}
                       </td>
                       <td className="px-3 py-2 text-xs">{p.status_display || p.status}</td>
-                      <td className="px-3 py-2 text-right">
+                      <td className="px-3 py-2 text-right space-x-1 whitespace-nowrap">
                         {p.status !== "PAID" && (
                           <Button size="sm" variant="outline" onClick={() => markPaid(p.id)}>
                             Mark paid
                           </Button>
                         )}
+                        <Button size="sm" variant="ghost" onClick={() => openPayslip(p.id)}>
+                          Payslip
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -1094,6 +1167,88 @@ export default function HRPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Payslip print */}
+      <Dialog open={!!payslip} onOpenChange={(o) => !o && setPayslip(null)}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto print:max-w-none print:shadow-none">
+          <DialogHeader className="print:hidden">
+            <DialogTitle>Payslip</DialogTitle>
+          </DialogHeader>
+          {payslip && (
+            <div id="payslip-print" className="space-y-4 text-sm border rounded-xl p-5 bg-white">
+              <div className="text-center border-b pb-3">
+                <p className="text-xs uppercase tracking-widest text-muted-foreground">Payslip</p>
+                <h2 className="text-lg font-bold">{payslip.school?.name}</h2>
+                <p className="text-xs text-muted-foreground">{payslip.school?.address}</p>
+                <p className="text-xs">{payslip.school?.phone} {payslip.school?.email}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">Employee</p>
+                  <p className="font-semibold">{payslip.employee?.name}</p>
+                  <p className="text-xs">{payslip.employee?.job_title || payslip.employee?.role}</p>
+                  <p className="text-xs">{payslip.employee?.department}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">Pay period</p>
+                  <p className="font-semibold">{payslip.pay?.month_label}</p>
+                  <p className="text-xs font-mono">{payslip.pay?.reference}</p>
+                  <p className="text-xs">Status: {payslip.pay?.status_display}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <p>Emp no: {payslip.employee?.employee_number || "—"}</p>
+                <p>TSC: {payslip.employee?.tsc_number || "—"}</p>
+                <p>ID: {payslip.employee?.national_id || "—"}</p>
+                <p>
+                  Bank: {payslip.employee?.bank_name || "—"}{" "}
+                  {payslip.employee?.bank_account ? `· ${payslip.employee.bank_account}` : ""}
+                </p>
+              </div>
+              <table className="w-full text-sm border">
+                <tbody>
+                  <tr className="border-b">
+                    <td className="px-3 py-2">Basic salary</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {money(payslip.pay?.basic_salary)}
+                    </td>
+                  </tr>
+                  <tr className="border-b">
+                    <td className="px-3 py-2">Allowances</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {money(payslip.pay?.allowances)}
+                    </td>
+                  </tr>
+                  <tr className="border-b">
+                    <td className="px-3 py-2">Deductions</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      ({money(payslip.pay?.deductions)})
+                    </td>
+                  </tr>
+                  <tr className="bg-slate-50 font-bold">
+                    <td className="px-3 py-2">Net pay</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      KSh {money(payslip.pay?.net_salary)}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <p className="text-xs text-muted-foreground">
+                Paid via {payslip.pay?.payment_method || "—"}
+                {payslip.pay?.paid_at ? ` on ${payslip.pay.paid_at}` : " (not marked paid yet)"}
+              </p>
+              <p className="text-[11px] italic text-muted-foreground">{payslip.certification}</p>
+            </div>
+          )}
+          <DialogFooter className="print:hidden">
+            <Button variant="outline" onClick={() => setPayslip(null)}>
+              Close
+            </Button>
+            <Button onClick={() => window.print()}>Print payslip</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
