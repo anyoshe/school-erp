@@ -67,6 +67,13 @@ export interface School {
   admission_number_format?: string;
   admission_prefix?: string;
   admission_seq_padding?: number;
+  // Banking / payment (offer letters, receipts)
+  bank_name?: string;
+  branch_name?: string;
+  bank_account_name?: string;
+  bank_account_number?: string;
+  paybill_number?: string;
+  payment_instructions?: string;
   logo?: string | null;
   module_ids?: number[];
   modules: Module[];

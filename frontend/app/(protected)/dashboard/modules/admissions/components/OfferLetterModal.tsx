@@ -785,11 +785,12 @@ export default function OfferLetterModal({
     doc.setFontSize(9).setFont("helvetica", "normal").setTextColor(0);
     let bankY = currentY + 7;
     
-    const bankName = pick(sch.bank_name, currentSchool?.bank_name, schoolProfile?.bank_name);
-    const branchName = pick(sch.branch_name, currentSchool?.branch_name, schoolProfile?.branch_name, "Main");
-    const accName = pick(sch.bank_account_name, currentSchool?.bank_account_name, schoolProfile?.bank_account_name, schoolName);
-    const accNo = pick(sch.bank_account_number, currentSchool?.bank_account_number, schoolProfile?.bank_account_number);
-    const paybill = pick(sch.paybill_number, currentSchool?.paybill_number, schoolProfile?.paybill_number);
+    const cs = (currentSchool || {}) as Record<string, any>;
+    const bankName = pick(sch.bank_name, cs.bank_name, schoolProfile?.bank_name);
+    const branchName = pick(sch.branch_name, cs.branch_name, schoolProfile?.branch_name, "Main");
+    const accName = pick(sch.bank_account_name, cs.bank_account_name, schoolProfile?.bank_account_name, schoolName);
+    const accNo = pick(sch.bank_account_number, cs.bank_account_number, schoolProfile?.bank_account_number);
+    const paybill = pick(sch.paybill_number, cs.paybill_number, schoolProfile?.paybill_number);
     if (bankName || accNo || paybill) {
       if (bankName) {
         doc.text(`Bank: ${bankName} (${branchName || "Main"})`, 20, bankY); bankY += 5;
