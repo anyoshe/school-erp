@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import { toast } from "sonner";
 import {
   BookOpen, CalendarRange, Layers, GraduationCap, Plus, Sparkles,
   CheckCircle2, Circle, ChevronRight, Users, Loader2, ClipboardList,
-  FileText,
+  FileText, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,6 +95,163 @@ function TabIcon({ id, className }: { id: Tab; className?: string }) {
 }
 
 
+function useMenuPosition(open: boolean, anchorRef: { current: HTMLElement | null }) {
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number; maxHeight: number; openUp: boolean } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open || !anchorRef.current) {
+      setCoords(null);
+      return;
+    }
+    const update = () => {
+      const el = anchorRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const gap = 4;
+      const spaceBelow = window.innerHeight - r.bottom - gap - 8;
+      const spaceAbove = r.top - gap - 8;
+      const openUp = spaceBelow < 180 && spaceAbove > spaceBelow;
+      const maxHeight = Math.min(320, Math.max(120, openUp ? spaceAbove : spaceBelow));
+      setCoords({
+        top: openUp ? r.top - gap : r.bottom + gap,
+        left: r.left,
+        width: Math.max(r.width, 160),
+        maxHeight,
+        openUp,
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open, anchorRef]);
+
+  return coords;
+}
+
+type MenuOption = { value: string; label: string };
+
+function PortalSelectMenu({
+  value,
+  onChange,
+  options,
+  placeholder,
+  emptyLabel,
+  className,
+  triggerClassName,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: MenuOption[];
+  placeholder?: string;
+  emptyLabel?: string;
+  className?: string;
+  triggerClassName?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const coords = useMenuPosition(open, btnRef);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const selected = options.find((o) => o.value === value);
+  const label = selected?.label || emptyLabel || placeholder || "Select…";
+
+  const menu =
+    open && coords && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={menuRef}
+            role="listbox"
+            className="fixed z-[10000] rounded-md border bg-white shadow-xl py-1 overflow-y-auto overscroll-contain"
+            style={{
+              left: coords.left,
+              width: coords.width,
+              maxHeight: coords.maxHeight,
+              top: coords.openUp ? undefined : coords.top,
+              bottom: coords.openUp ? window.innerHeight - coords.top : undefined,
+            }}
+          >
+            {emptyLabel != null ? (
+              <button
+                type="button"
+                role="option"
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-primary/10 ${value === "" ? "bg-primary/10 font-medium text-primary" : "text-foreground"}`}
+                onClick={() => {
+                  onChange("");
+                  setOpen(false);
+                }}
+              >
+                {emptyLabel}
+              </button>
+            ) : null}
+            {options.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                role="option"
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-primary/10 ${
+                  o.value === value ? "bg-primary/10 font-medium text-primary" : "text-foreground"
+                }`}
+                onClick={() => {
+                  onChange(o.value);
+                  setOpen(false);
+                }}
+              >
+                {o.label}
+              </button>
+            ))}
+            {options.length === 0 ? (
+              <p className="px-3 py-2 text-sm text-muted-foreground">No options</p>
+            ) : null}
+          </div>,
+          document.body
+        )
+      : null;
+
+  return (
+    <div className={className || "relative w-full"}>
+      <button
+        ref={btnRef}
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className={
+          triggerClassName ||
+          "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+        }
+      >
+        <span className={`truncate text-left ${selected ? "text-foreground" : "text-muted-foreground"}`}>
+          {label}
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 opacity-50 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {menu}
+    </div>
+  );
+}
+
 function GradeSelect({
   grades,
   value,
@@ -107,7 +265,6 @@ function GradeSelect({
   value: number | "";
   onChange: (v: number | "") => void;
   placeholder?: string;
-  /** When set, shows an empty option (e.g. "All grades" or "Select grade…") */
   emptyLabel?: string;
   className?: string;
   getLabel?: (g: GradeLevel) => string;
@@ -116,32 +273,29 @@ function GradeSelect({
     () => grades.slice().sort((a, b) => a.order - b.order),
     [grades]
   );
-  const selectValue = value === "" ? "__empty__" : String(value);
+  const options = useMemo(
+    () =>
+      sorted.map((g) => ({
+        value: String(g.id),
+        label: getLabel ? getLabel(g) : g.name,
+      })),
+    [sorted, getLabel]
+  );
   return (
-    <Select
-      value={selectValue}
-      onValueChange={(v) => {
-        if (v === "__empty__") onChange("");
-        else onChange(Number(v));
-      }}
-    >
-      <SelectTrigger className={className || "h-10 w-full mt-1 bg-background"}>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent position="popper" sideOffset={4} className="z-[9999] max-h-[min(20rem,var(--radix-select-content-available-height))]">
-        {emptyLabel != null ? (
-          <SelectItem value="__empty__">{emptyLabel}</SelectItem>
-        ) : null}
-        {sorted.map((g) => (
-          <SelectItem key={g.id} value={String(g.id)}>
-            {getLabel ? getLabel(g) : g.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <PortalSelectMenu
+      value={value === "" ? "" : String(value)}
+      onChange={(v) => onChange(v === "" ? "" : Number(v))}
+      options={options}
+      placeholder={placeholder}
+      emptyLabel={emptyLabel}
+      triggerClassName={
+        className
+          ? `${className} flex items-center justify-between rounded-md border border-input px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring`
+          : undefined
+      }
+    />
   );
 }
-
 
 function SubjectSelect({
   subjects,
@@ -158,33 +312,30 @@ function SubjectSelect({
   emptyLabel?: string;
   className?: string;
 }) {
-  const sorted = useMemo(
-    () => subjects.slice().sort((a, b) => a.name.localeCompare(b.name)),
+  const options = useMemo(
+    () =>
+      subjects
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((s) => ({
+          value: String(s.id),
+          label: s.code ? `${s.name} (${s.code})` : s.name,
+        })),
     [subjects]
   );
-  const selectValue = value === "" ? "__empty__" : value;
   return (
-    <Select
-      value={selectValue}
-      onValueChange={(v) => onChange(v === "__empty__" ? "" : v)}
-    >
-      <SelectTrigger className={className || "h-10 w-full mt-1 bg-background"}>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent
-        position="popper"
-        sideOffset={4}
-        className="z-[9999] max-h-[min(20rem,var(--radix-select-content-available-height))]"
-      >
-        <SelectItem value="__empty__">{emptyLabel}</SelectItem>
-        {sorted.map((s) => (
-          <SelectItem key={s.id} value={String(s.id)}>
-            {s.name}
-            {s.code ? ` (${s.code})` : ""}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <PortalSelectMenu
+      value={value}
+      onChange={onChange}
+      options={options}
+      placeholder={placeholder}
+      emptyLabel={emptyLabel}
+      triggerClassName={
+        className
+          ? `${className} flex items-center justify-between rounded-md border border-input px-3 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring`
+          : undefined
+      }
+    />
   );
 }
 
