@@ -1990,7 +1990,7 @@ function TeachersPanel({
           ? `Assigned ${r.created} subject(s) (${r.existing} already linked)`
           : `All ${r.existing} subjects already assigned to this teacher`
       );
-      await loadCoverage();
+      await loadCoverage(Number(gradeId), yearId);
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || "Bulk assign failed");
     } finally {
@@ -2015,7 +2015,7 @@ function TeachersPanel({
         is_active: true,
       });
       toast.success("Teacher assigned");
-      await loadCoverage();
+      await loadCoverage(Number(gradeId), yearId);
     } catch (err: any) {
       const d = err?.response?.data;
       toast.error(
@@ -2034,7 +2034,7 @@ function TeachersPanel({
     try {
       await removeSubjectTeacher(id);
       toast.success("Assignment removed");
-      await loadCoverage();
+      await loadCoverage(Number(gradeId), yearId);
     } catch {
       toast.error("Could not remove assignment");
     } finally {
