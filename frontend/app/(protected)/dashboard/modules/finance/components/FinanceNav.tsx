@@ -8,56 +8,52 @@ import { Menu, X } from "lucide-react";
 export const FINANCE_NAV_LINKS = [
   { href: "/dashboard/modules/finance", label: "Dashboard", exact: true },
   { href: "/dashboard/modules/finance/clearance", label: "Clearance" },
-  { href: "/dashboard/modules/finance/payments", label: "Record payment" },
+  { href: "/dashboard/modules/finance/payments", label: "Payments" },
   { href: "/dashboard/modules/finance/receipts", label: "Receipts" },
   { href: "/dashboard/modules/finance/invoices", label: "Invoices" },
-  { href: "/dashboard/modules/finance/fee-structures", label: "Fee structures" },
+  { href: "/dashboard/modules/finance/fee-structures", label: "Structures" },
   { href: "/dashboard/modules/finance/standing", label: "P&L" },
   { href: "/dashboard/modules/finance/reconcile", label: "Reconcile" },
   { href: "/dashboard/modules/finance/expenses", label: "Expenses" },
   { href: "/dashboard/modules/finance/bills", label: "Bills" },
-  { href: "/dashboard/modules/finance/income-receipts", label: "Pre-enroll income" },
+  { href: "/dashboard/modules/finance/income-receipts", label: "Pre-enroll" },
 ] as const;
 
 export function FinanceNavLinks() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
-  const linkClass = (href: string, exact?: boolean) => {
-    const active = exact
-      ? pathname === href
-      : pathname === href || (pathname?.startsWith(href + "/") ?? false) || pathname === href;
-    // For non-exact, avoid marking Dashboard active on every sub-route
-    const isActive = exact
-      ? pathname === href
-      : Boolean(
-          pathname === href ||
-            (href !== "/dashboard/modules/finance" && pathname?.startsWith(href))
-        );
-    return [
-      "whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition no-underline",
-      isActive
+  const isActive = (href: string, exact?: boolean) => {
+    if (exact) return pathname === href;
+    if (href === "/dashboard/modules/finance") return pathname === href;
+    return Boolean(pathname === href || pathname?.startsWith(href + "/") || pathname?.startsWith(href));
+  };
+
+  const linkClass = (href: string, exact?: boolean) =>
+    [
+      "shrink-0 whitespace-nowrap rounded-md px-2.5 py-1.5 text-[13px] font-medium transition no-underline",
+      isActive(href, exact)
         ? "bg-teal-700 text-white shadow-sm"
         : "text-slate-700 hover:bg-teal-50 hover:text-teal-900",
     ].join(" ");
-  };
 
   return (
     <nav className="sticky top-0 z-10 mb-5 rounded-xl border border-slate-200 bg-white/95 backdrop-blur-md shadow-sm supports-[backdrop-filter]:bg-white/90">
-      <div className="flex items-center justify-between gap-3 px-3 py-2 sm:px-4">
+      {/* Single row: brand + scrollable links (desktop) / hamburger (mobile) */}
+      <div className="flex h-12 items-center gap-2 px-2 sm:px-3">
         <Link
           href="/dashboard/modules/finance"
-          className="min-w-0 no-underline hover:opacity-90"
+          className="shrink-0 no-underline hover:opacity-90 pr-1 border-r border-slate-100 mr-0.5"
         >
-          <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">
+          <span className="text-xs font-bold uppercase tracking-wide text-teal-800">
             Finance
-          </p>
-          <p className="truncate text-[11px] text-muted-foreground">
-            Dashboard · collect · bill · report
-          </p>
+          </span>
         </Link>
 
-        <div className="hidden md:flex flex-wrap items-center justify-end gap-1">
+        <div
+          className="hidden md:flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto overflow-y-hidden py-1
+            [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        >
           {FINANCE_NAV_LINKS.map((l) => (
             <Link
               key={l.href}
@@ -71,7 +67,7 @@ export function FinanceNavLinks() {
 
         <button
           type="button"
-          className="md:hidden inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-800 hover:bg-teal-50 hover:text-teal-900"
+          className="md:hidden ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-800 hover:bg-teal-50 hover:text-teal-900"
           aria-label={open ? "Close finance menu" : "Open finance menu"}
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
@@ -81,7 +77,7 @@ export function FinanceNavLinks() {
       </div>
 
       {open ? (
-        <div className="md:hidden border-t border-slate-100 bg-slate-50/80 px-2 py-2">
+        <div className="md:hidden border-t border-slate-100 bg-slate-50/90 px-2 py-2">
           <ul className="flex flex-col gap-0.5">
             {FINANCE_NAV_LINKS.map((l) => (
               <li key={l.href}>
