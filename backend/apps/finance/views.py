@@ -289,16 +289,20 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
 
 
 def _cash_positions_for_schools(school_ids):
-    """Cash / Bank / M-Pesa balances from journal (asset accounts)."""
+    """Cash / Bank / M-Pesa balances from journal (asset accounts).
+
+    Prefer JournalLine (double-entry). If journal is empty but CashLedgerEntry
+    has movements (legacy / partial backfill), fall back to the cash ledger.
+    """
     from decimal import Decimal
-    from django.db.models import Sum as DjSum
+    from django.db.models import Sum as DjSum, Q as DjQ
     from apps.school.models import School
     from apps.finance.seed_defaults import ensure_school_finance_defaults
-    from apps.finance.models import Account, JournalLine
+    from apps.finance.models import Account, JournalLine, CashLedgerEntry
 
     rows = []
     total = Decimal("0")
-    for sid in school_ids or []:
+    for sid in list(school_ids or []):
         school = School.objects.filter(pk=sid).first()
         if not school:
             continue
@@ -306,16 +310,31 @@ def _cash_positions_for_schools(school_ids):
             ensure_school_finance_defaults(school)
         except Exception:
             pass
-        for acc in Account.objects.filter(
-            school=school,
-            account_type=Account.AccountType.ASSET,
-            is_active=True,
-        ).order_by("code"):
+        accounts = list(
+            Account.objects.filter(
+                school=school,
+                account_type=Account.AccountType.ASSET,
+                is_active=True,
+            ).order_by("code")
+        )
+        preferred = {"1000", "1010", "1020"}
+        accounts = sorted(
+            accounts,
+            key=lambda a: (0 if a.code in preferred else 1, a.code or ""),
+        )
+        for acc in accounts:
             agg = JournalLine.objects.filter(account=acc).aggregate(
                 d=DjSum("debit"), c=DjSum("credit")
             )
             deb = Decimal(str(agg["d"] or 0))
             cre = Decimal(str(agg["c"] or 0))
+            if deb == 0 and cre == 0:
+                led = CashLedgerEntry.objects.filter(school=school, account=acc).aggregate(
+                    inn=DjSum("amount", filter=DjQ(direction=CashLedgerEntry.Direction.IN)),
+                    out=DjSum("amount", filter=DjQ(direction=CashLedgerEntry.Direction.OUT)),
+                )
+                deb = Decimal(str(led.get("inn") or 0))
+                cre = Decimal(str(led.get("out") or 0))
             bal = deb - cre
             total += bal
             rows.append({

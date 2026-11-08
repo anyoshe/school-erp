@@ -140,19 +140,48 @@ export default function FinanceDashboard() {
     totalCash: number;
   }>({ accounts: [], totalCash: 0 });
 
+  const schoolHeaders = useCallback(() => {
+    return currentSchool?.id
+      ? { "X-School-ID": String(currentSchool.id) }
+      : undefined;
+  }, [currentSchool?.id]);
+
+  const applyCashFromAccounts = useCallback((accounts: any[] | undefined | null) => {
+    const list = Array.isArray(accounts) ? accounts : [];
+    const assetish = list.filter(
+      (a) =>
+        !a.account_type ||
+        String(a.account_type).toUpperCase() === "ASSET" ||
+        ["1000", "1010", "1020"].includes(String(a.code || ""))
+    );
+    const rows = (assetish.length ? assetish : list).map((a) => ({
+      id: String(a.id || a.code || ""),
+      code: String(a.code || ""),
+      name: String(a.name || a.code || "Account"),
+      balance: Number(a.balance || 0),
+      inflow: Number(a.inflow || 0),
+      outflow: Number(a.outflow || 0),
+    }));
+    const totalCash = rows.reduce((s, r) => s + Number(r.balance || 0), 0);
+    setCashPositions({ accounts: rows, totalCash });
+    return { accounts: rows, totalCash };
+  }, []);
+
   const fetchDashboardData = useCallback(async () => {
     const params: Record<string, string> = {};
     if (filterTerm) params.term = filterTerm;
     if (filterYear) params.academic_year = filterYear;
-    const cacheKey = `erp_finance_summary_${currentSchool?.id || "x"}_${filterTerm || "auto"}_${filterYear || "auto"}`;
+    const cacheKey = `erp_finance_summary_v2_${currentSchool?.id || "x"}_${filterTerm || "auto"}_${filterYear || "auto"}`;
+    const headers = schoolHeaders();
 
     try {
       const raw = sessionStorage.getItem(cacheKey);
       if (raw) {
         const { at, data } = JSON.parse(raw);
-        if (Date.now() - at < 45_000 && data?.stats) {
+        // Only hydrate from cache when cash positions are present (avoids sticky zeros)
+        if (Date.now() - at < 45_000 && data?.stats && data?.cashPositions) {
           setStats(data.stats);
-      if (data.cashPositions) setCashPositions(data.cashPositions);
+          setCashPositions(data.cashPositions);
           setRevenueByPeriod(data.revenueByPeriod || revenueByPeriod);
           setDetectedTerm(data.detectedTerm || "Term 1");
           setDetectedYear(data.detectedYear || new Date().getFullYear().toString());
@@ -160,7 +189,6 @@ export default function FinanceDashboard() {
           setAvailableYears(data.availableYears || []);
           setYearCollected(Number(data.stats?.yearCollected || data.revenueByPeriod?.year || 0));
           setAllTimeCollected(Number(data.stats?.allTimeCollected || data.revenueByPeriod?.all || 0));
-      if (data.cashPositions) setCashPositions(data.cashPositions);
           setFeeItemTotals(data.feeGroupBreakdown || []);
           setLoading(false);
         }
@@ -169,13 +197,22 @@ export default function FinanceDashboard() {
 
     setLoading(true);
     try {
-      const response = await api.get<DashboardSummaryResponse>("/finance/dashboard-summary/", {
-        params,
-        headers: currentSchool?.id ? { "X-School-ID": String(currentSchool.id) } : undefined,
-      });
-      const data = response.data;
+      // Load summary + asset balances in parallel (balances = same source as Expenses page)
+      const [summaryRes, balancesRes] = await Promise.all([
+        api.get<DashboardSummaryResponse>("/finance/dashboard-summary/", {
+          params,
+          headers,
+        }),
+        api
+          .get("/finance/account-balances/", {
+            params: { type: "ASSET" },
+            headers,
+          })
+          .catch(() => null),
+      ]);
+
+      const data = summaryRes.data;
       setStats(data.stats);
-      if (data.cashPositions) setCashPositions(data.cashPositions);
       setRevenueByPeriod(data.revenueByPeriod);
       setDetectedTerm(data.detectedTerm || "Term 1");
       setDetectedYear(data.detectedYear || new Date().getFullYear().toString());
@@ -183,13 +220,41 @@ export default function FinanceDashboard() {
       setAvailableYears(data.availableYears || []);
       setYearCollected(Number(data.stats?.yearCollected || data.revenueByPeriod?.year || 0));
       setAllTimeCollected(Number(data.stats?.allTimeCollected || data.revenueByPeriod?.all || 0));
-      if (data.cashPositions) setCashPositions(data.cashPositions);
       setFeeItemTotals(data.feeGroupBreakdown || []);
+
+      // Prefer dedicated account-balances (matches Expenses / main pulse after backfill)
+      let positions = data.cashPositions;
+      const balAccounts =
+        (balancesRes as any)?.data?.accounts ||
+        (Array.isArray((balancesRes as any)?.data) ? (balancesRes as any).data : null);
+      if (Array.isArray(balAccounts) && balAccounts.length) {
+        positions = applyCashFromAccounts(balAccounts);
+      } else if (positions?.accounts?.length) {
+        setCashPositions(positions);
+      } else if (positions) {
+        setCashPositions(positions);
+      }
+
       try {
-        sessionStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), data }));
+        sessionStorage.setItem(
+          cacheKey,
+          JSON.stringify({
+            at: Date.now(),
+            data: { ...data, cashPositions: positions || data.cashPositions },
+          })
+        );
       } catch { /* */ }
     } catch (error: any) {
       console.error("Failed to fetch dashboard data:", error);
+      // Still try cash pots alone so the section is not stuck at zero
+      try {
+        const bal = await api.get("/finance/account-balances/", {
+          params: { type: "ASSET" },
+          headers,
+        });
+        const list = bal?.data?.accounts || bal?.data || [];
+        if (Array.isArray(list) && list.length) applyCashFromAccounts(list);
+      } catch { /* */ }
       const status = error?.response?.status;
       if (status === 401) {
         // interceptor will refresh or redirect
@@ -206,7 +271,7 @@ export default function FinanceDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [currentSchool?.id, filterTerm, filterYear]);
+  }, [currentSchool?.id, filterTerm, filterYear, schoolHeaders, applyCashFromAccounts]);
 
   useEffect(() => {
     fetchDashboardData();
