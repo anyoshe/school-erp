@@ -33,12 +33,61 @@ import {
   fetchAssessments, createAssessment, fetchMarksheet, saveMarksheet, fetchClassResults, fetchReportCard, fetchClassReportCards, type ReportCard,
 } from "./services";
 
-type Tab = "overview" | "years" | "classes" | "subjects" | "teachers" | "assessments" | "report-cards" | "promotion";
+type Tab =
+  | "overview"
+  | "years"
+  | "classes"
+  | "subjects"
+  | "teachers"
+  | "assessments"
+  | "report-cards"
+  | "promotion";
+
+/** Stable tab list (module scope) — avoids SSR/client icon identity mismatches. */
+const ACADEMICS_TABS: { id: Tab; label: string }[] = [
+  { id: "overview", label: "Structure Map" },
+  { id: "years", label: "Years & Terms" },
+  { id: "classes", label: "Classes" },
+  { id: "subjects", label: "Subjects" },
+  { id: "teachers", label: "Teachers" },
+  { id: "assessments", label: "Assessments" },
+  { id: "report-cards", label: "Report cards" },
+  { id: "promotion", label: "Promotion" },
+];
+
+function TabIcon({ id, className }: { id: Tab; className?: string }) {
+  const cn = className || "h-4 w-4";
+  switch (id) {
+    case "overview":
+      return <Sparkles className={cn} />;
+    case "years":
+      return <CalendarRange className={cn} />;
+    case "classes":
+      return <Layers className={cn} />;
+    case "subjects":
+      return <BookOpen className={cn} />;
+    case "teachers":
+      return <Users className={cn} />;
+    case "assessments":
+      return <ClipboardList className={cn} />;
+    case "report-cards":
+      return <FileText className={cn} />;
+    case "promotion":
+      return <GraduationCap className={cn} />;
+    default:
+      return <BookOpen className={cn} />;
+  }
+}
 
 export default function AcademicsPage() {
   const { currentSchool } = useCurrentSchool();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("overview");
+  const [tabsReady, setTabsReady] = useState(false);
+
+  useEffect(() => {
+    setTabsReady(true);
+  }, []);
 
   const yearsQ = useQuery({ queryKey: ["academic-years"], queryFn: fetchAcademicYears });
   const calendarQ = useQuery({ queryKey: ["current-calendar"], queryFn: fetchCurrentCalendar });
@@ -71,17 +120,6 @@ export default function AcademicsPage() {
     return { checks, score };
   }, [curricula, grades, years, subjects]);
 
-  const tabs: { id: Tab; label: string; icon: typeof BookOpen }[] = [
-    { id: "overview", label: "Structure Map", icon: Sparkles },
-    { id: "years", label: "Years & Terms", icon: CalendarRange },
-    { id: "classes", label: "Classes", icon: Layers },
-    { id: "subjects", label: "Subjects", icon: BookOpen },
-    { id: "teachers", label: "Teachers", icon: Users },
-    { id: "assessments", label: "Assessments", icon: ClipboardList },
-    { id: "report-cards", label: "Report cards", icon: FileText },
-    { id: "promotion", label: "Promotion", icon: GraduationCap },
-  ];
-
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -113,11 +151,15 @@ export default function AcademicsPage() {
         />
       )}
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-2 border-b border-border pb-2">
-        {tabs.map(({ id, label, icon: Icon }) => (
+      {/* Tabs — icons rendered after mount to avoid lucide SSR/client path mismatches */}
+      <div
+        className="flex flex-wrap gap-2 border-b border-border pb-2"
+        suppressHydrationWarning
+      >
+        {ACADEMICS_TABS.map(({ id, label }) => (
           <button
             key={id}
+            type="button"
             onClick={() => setTab(id)}
             className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
               tab === id
@@ -125,7 +167,11 @@ export default function AcademicsPage() {
                 : "text-textMuted hover:bg-primary-50 hover:text-primary"
             }`}
           >
-            <Icon className="h-4 w-4" />
+            {tabsReady ? (
+              <TabIcon id={id} className="h-4 w-4" />
+            ) : (
+              <span className="inline-block h-4 w-4" aria-hidden />
+            )}
             {label}
           </button>
         ))}
@@ -229,7 +275,7 @@ function ReadinessRing({ score }: { score: number }) {
   const offset = c - (score / 100) * c;
   const color = score >= 80 ? "#0F766E" : score >= 50 ? "#D97706" : "#EA580C";
   return (
-    <div className="flex items-center gap-3 bg-white border border-border rounded-2xl px-4 py-3 shadow-card">
+    <div suppressHydrationWarning className="flex items-center gap-3 bg-white border border-border rounded-2xl px-4 py-3 shadow-card">
       <svg width="88" height="88" className="-rotate-90">
         <circle cx="44" cy="44" r={r} fill="none" stroke="#E7E5E4" strokeWidth="8" />
         <circle
