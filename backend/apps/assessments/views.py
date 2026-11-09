@@ -240,9 +240,21 @@ class ClassResultsView(APIView):
         )
 
 
-def _build_student_report(student, school, academic_year_id=None, term_id=None):
-    """Aggregate marks into a printable report-card payload."""
-    from apps.academics.models import AcademicYear, Term, GradeLevelSubject
+def _build_student_report(
+    student,
+    school,
+    academic_year_id=None,
+    term_id=None,
+    grade_level_id=None,
+):
+    """Aggregate marks into a printable report-card payload.
+
+    grade_level_id: when set (class report cards / historical class), load marks
+    for *that* grade — not student.current_class — so promoted learners still
+    show prior-term results.
+    """
+    from apps.academics.models import AcademicYear, Term, GradeLevel, GradeLevelSubject
+    from apps.students.models import Enrollment
 
     year = None
     term = None
@@ -251,20 +263,35 @@ def _build_student_report(student, school, academic_year_id=None, term_id=None):
     if not year:
         year = AcademicYear.objects.filter(school=school, is_active=True).first()
     if term_id:
-        term = Term.objects.filter(pk=term_id).first()
+        term = Term.objects.filter(pk=term_id, academic_year__school=school).first()
     if not term and year:
         term = year.terms.filter(is_current=True).first() or year.terms.order_by("order").first()
 
-    grade = student.current_class
+    grade = None
+    if grade_level_id:
+        grade = GradeLevel.objects.filter(pk=grade_level_id, school=school).first()
+
     section = getattr(student, "section", None)
+    if year and grade:
+        enr = (
+            Enrollment.objects.filter(
+                student=student,
+                academic_year=year,
+                grade_level=grade,
+            )
+            .select_related("section", "section__class_teacher", "section__class_teacher__user")
+            .first()
+        )
+        if enr and enr.section_id:
+            section = enr.section
 
     assessments = Assessment.objects.filter(school=school)
-    if grade:
-        assessments = assessments.filter(grade_level=grade)
     if year:
         assessments = assessments.filter(academic_year=year)
     if term:
         assessments = assessments.filter(Q(term=term) | Q(term__isnull=True))
+    if grade:
+        assessments = assessments.filter(grade_level=grade)
 
     marks = (
         Mark.objects.filter(
@@ -313,6 +340,15 @@ def _build_student_report(student, school, academic_year_id=None, term_id=None):
         )
         bucket["weighted_sum"] += Decimal(str(pct)) * weight
         bucket["weight_total"] += weight
+
+    # Historical cards: if grade was not passed, use the grade on the marks
+    if grade is None and by_subject:
+        # Prefer grade from first mark in queryset
+        sample = marks[0] if marks else None
+        if sample is not None:
+            grade = sample.assessment.grade_level
+    if grade is None:
+        grade = student.current_class
 
     subjects = []
     overall_sum = Decimal("0")
@@ -494,6 +530,7 @@ class ReportCardView(APIView):
             school,
             academic_year_id=request.query_params.get("academic_year"),
             term_id=request.query_params.get("term"),
+            grade_level_id=request.query_params.get("grade_level"),
         )
         # logo absolute if possible
         if getattr(school, "logo", None):
@@ -549,6 +586,7 @@ class ClassReportCardsView(APIView):
                 school,
                 academic_year_id=request.query_params.get("academic_year"),
                 term_id=request.query_params.get("term"),
+                grade_level_id=grade.id,
             )
             cards.append(card)
 
