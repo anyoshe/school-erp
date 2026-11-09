@@ -47,6 +47,11 @@ class StaffSerializer(serializers.ModelSerializer):
             "bank_account",
             "next_of_kin",
             "next_of_kin_phone",
+            "default_basic_salary",
+            "default_allowances",
+            "default_deductions",
+            "default_fee_category",
+            "default_expense_category",
             "created_at",
             "updated_at",
         )
@@ -84,6 +89,17 @@ class StaffWriteSerializer(serializers.Serializer):
     bank_account = serializers.CharField(required=False, allow_blank=True, max_length=40)
     next_of_kin = serializers.CharField(required=False, allow_blank=True, max_length=120)
     next_of_kin_phone = serializers.CharField(required=False, allow_blank=True, max_length=30)
+    default_basic_salary = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, default=Decimal("0")
+    )
+    default_allowances = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, default=Decimal("0")
+    )
+    default_deductions = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, default=Decimal("0")
+    )
+    default_fee_category = serializers.UUIDField(required=False, allow_null=True)
+    default_expense_category = serializers.UUIDField(required=False, allow_null=True)
 
     def create(self, validated_data):
         school = self.context["school"]
@@ -130,6 +146,11 @@ class StaffWriteSerializer(serializers.Serializer):
             bank_account=validated_data.get("bank_account") or "",
             next_of_kin=validated_data.get("next_of_kin") or "",
             next_of_kin_phone=validated_data.get("next_of_kin_phone") or "",
+            default_basic_salary=validated_data.get("default_basic_salary") or Decimal("0"),
+            default_allowances=validated_data.get("default_allowances") or Decimal("0"),
+            default_deductions=validated_data.get("default_deductions") or Decimal("0"),
+            default_fee_category_id=validated_data.get("default_fee_category"),
+            default_expense_category_id=validated_data.get("default_expense_category"),
         )
         if hasattr(school, "users"):
             try:
@@ -172,9 +193,16 @@ class StaffWriteSerializer(serializers.Serializer):
             "bank_account",
             "next_of_kin",
             "next_of_kin_phone",
+            "default_basic_salary",
+            "default_allowances",
+            "default_deductions",
         ):
             if field in validated_data:
                 setattr(instance, field, validated_data[field])
+        if "default_fee_category" in validated_data:
+            instance.default_fee_category_id = validated_data.get("default_fee_category")
+        if "default_expense_category" in validated_data:
+            instance.default_expense_category_id = validated_data.get("default_expense_category")
         instance.save()
         return instance
 
@@ -183,6 +211,12 @@ class PayrollSerializer(serializers.ModelSerializer):
     staff_name = serializers.SerializerMethodField()
     staff_role = serializers.CharField(source="staff.role", read_only=True)
     status_display = serializers.CharField(source="get_status_display", read_only=True)
+    related_fee_category_name = serializers.CharField(
+        source="related_fee_category.name", read_only=True, allow_null=True
+    )
+    expense_category_name = serializers.CharField(
+        source="expense_category.name", read_only=True, allow_null=True
+    )
 
     class Meta:
         model = Payroll
@@ -204,7 +238,9 @@ class PayrollSerializer(serializers.ModelSerializer):
             "paid_from_account",
             "expense",
             "related_fee_category",
+            "related_fee_category_name",
             "expense_category",
+            "expense_category_name",
             "created_at",
             "updated_at",
         )

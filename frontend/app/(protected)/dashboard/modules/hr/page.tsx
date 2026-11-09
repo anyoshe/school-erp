@@ -50,6 +50,11 @@ type StaffMember = {
   bank_account?: string;
   next_of_kin?: string;
   next_of_kin_phone?: string;
+  default_basic_salary?: string | number;
+  default_allowances?: string | number;
+  default_deductions?: string | number;
+  default_fee_category?: string | null;
+  default_expense_category?: string | null;
 };
 
 type PayrollRow = {
@@ -66,6 +71,10 @@ type PayrollRow = {
   status_display?: string;
   paid_at?: string | null;
   notes?: string;
+  related_fee_category?: string | null;
+  related_fee_category_name?: string | null;
+  expense_category?: string | null;
+  expense_category_name?: string | null;
 };
 
 type LeaveRow = {
@@ -133,6 +142,12 @@ const emptyForm = {
   bank_account: "",
   next_of_kin: "",
   next_of_kin_phone: "",
+,
+  default_basic_salary: "",
+  default_allowances: "0",
+  default_deductions: "0",
+  default_fee_category: "",
+  default_expense_category: "",
 };
 
 function money(n: string | number | undefined) {
@@ -214,11 +229,28 @@ export default function HRPage() {
     }
   }, [q, roleFilter, activeOnly]);
 
+  const loadFinanceCats = useCallback(async () => {
+    try {
+      const [feeRes, expRes] = await Promise.all([
+        api.get("/finance/categories/"),
+        api.get("/finance/expense-categories/"),
+      ]);
+      const fees = feeRes.data?.results ?? feeRes.data;
+      const exps = expRes.data?.results ?? expRes.data;
+      setFeeCategories(Array.isArray(fees) ? fees : []);
+      setExpenseCategories(Array.isArray(exps) ? exps : []);
+    } catch {
+      /* optional */
+    }
+  }, []);
+
   const loadPayroll = useCallback(async () => {
     try {
+      const params: Record<string, string> = {};
+      if (runMonth) params.month = runMonth;
       const [listRes, sumRes, feeRes, expRes] = await Promise.all([
-        api.get("/staff/payroll/"),
-        api.get("/staff/payroll/summary/"),
+        api.get("/staff/payroll/", { params }),
+        api.get("/staff/payroll/summary/", { params }),
         api.get("/finance/categories/"),
         api.get("/finance/expense-categories/"),
       ]);
@@ -249,7 +281,7 @@ export default function HRPage() {
       toast.error("Could not load leave");
       setLeaves([]);
     }
-  }, []);
+  }, [runMonth]);
 
   useEffect(() => {
     if (!currentSchool?.id) return;
@@ -258,9 +290,10 @@ export default function HRPage() {
 
   useEffect(() => {
     if (!currentSchool?.id) return;
+    loadFinanceCats();
     if (tab === "payroll") loadPayroll();
     if (tab === "leave") loadLeave();
-  }, [tab, currentSchool?.id, loadPayroll, loadLeave]);
+  }, [tab, currentSchool?.id, loadPayroll, loadLeave, loadFinanceCats]);
 
   const openCreate = () => {
     setEditing(null);
@@ -293,6 +326,11 @@ export default function HRPage() {
       bank_account: s.bank_account || "",
       next_of_kin: s.next_of_kin || "",
       next_of_kin_phone: s.next_of_kin_phone || "",
+      default_basic_salary: s.default_basic_salary != null ? String(s.default_basic_salary) : "",
+      default_allowances: s.default_allowances != null ? String(s.default_allowances) : "0",
+      default_deductions: s.default_deductions != null ? String(s.default_deductions) : "0",
+      default_fee_category: s.default_fee_category ? String(s.default_fee_category) : "",
+      default_expense_category: s.default_expense_category ? String(s.default_expense_category) : "",
     });
     setOpen(true);
     try {
@@ -310,6 +348,11 @@ export default function HRPage() {
         ...form,
         hire_date: form.hire_date || null,
         exit_date: form.exit_date || null,
+        default_basic_salary: (form as any).default_basic_salary || 0,
+        default_allowances: (form as any).default_allowances || 0,
+        default_deductions: (form as any).default_deductions || 0,
+        default_fee_category: (form as any).default_fee_category || null,
+        default_expense_category: (form as any).default_expense_category || null,
       };
       if (!payload.password) delete payload.password;
       if (editing) {
@@ -378,34 +421,50 @@ export default function HRPage() {
 
   const markPaid = async (id: string) => {
     try {
+      // Categories come from the payslip row (per staff). Global selects are fallback only.
       await api.post(`/staff/payroll/${id}/mark-paid/`, {
         payment_method: payMethod,
         related_fee_category: feeCategoryId || undefined,
         expense_category: expenseCategoryId || undefined,
       });
-      toast.success("Paid · posted to Finance (salaries expense + GL)");
+      toast.success("Paid · posted to Finance using this staff's fee group & expense class");
       loadPayroll();
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || "Could not mark paid");
     }
   };
 
-  const runPayrollMonth = async () => {
+  const patchPayrollRow = async (id: string, patch: Record<string, any>) => {
+    try {
+      await api.patch(`/staff/payroll/${id}/`, patch);
+      loadPayroll();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Could not update payslip");
+    }
+  };
+
+  const runPayrollMonth = async (opts?: { pay?: boolean }) => {
     if (!runMonth) {
-      toast.message("Choose a month for the payroll run");
+      toast.message("Choose a month (YYYY-MM)");
       return;
     }
     setSaving(true);
     try {
+      const pay = opts?.pay !== false;
       const { data } = await api.post("/staff/payroll/run/", {
         month: runMonth,
         payment_method: payMethod,
+        generate: true,
+        pay,
+        // Fallback only when a staff member has no personal fee/expense setting
         related_fee_category: feeCategoryId || undefined,
         expense_category: expenseCategoryId || undefined,
       });
       const skipped = data.skipped_already_paid || 0;
+      const gen = data.generated || 0;
       toast.success(
-        `Payroll run ${data.month}: posted ${data.posted}` +
+        `${data.month}: ${gen} payslip(s) generated` +
+          (pay ? ` · posted ${data.posted}` : " (not paid yet)") +
           (skipped ? ` · skipped ${skipped} already paid` : "") +
           (data.error_count ? ` · ${data.error_count} issue(s)` : "")
       );
@@ -664,7 +723,7 @@ export default function HRPage() {
         <Card>
           <CardHeader className="pb-2 space-y-3">
             <div className="flex flex-row items-center justify-between gap-2 flex-wrap">
-              <CardTitle className="text-base">Monthly payroll</CardTitle>
+              <CardTitle className="text-base">Monthly payslips</CardTitle>
               {payrollSummary && (
                 <p className="text-sm text-muted-foreground">
                   Net total: <strong>KSh {money(payrollSummary.total_net)}</strong> ·{" "}
@@ -686,7 +745,7 @@ export default function HRPage() {
                 </select>
               </div>
               <div>
-                <Label className="text-xs">Funded by fee group</Label>
+                <Label className="text-xs">Fallback fee group (only if staff has none)</Label>
                 <select
                   className="h-9 border rounded-md px-2 text-sm min-w-[9rem]"
                   value={feeCategoryId}
@@ -701,7 +760,7 @@ export default function HRPage() {
                 </select>
               </div>
               <div>
-                <Label className="text-xs">Expense category</Label>
+                <Label className="text-xs">Fallback expense class (only if staff has none)</Label>
                 <select
                   className="h-9 border rounded-md px-2 text-sm min-w-[9rem]"
                   value={expenseCategoryId}
@@ -724,13 +783,21 @@ export default function HRPage() {
                   onChange={(e) => setRunMonth(e.target.value)}
                 />
               </div>
-              <Button size="sm" disabled={saving} onClick={runPayrollMonth}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-                Run unpaid → Finance
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={saving}
+                onClick={() => runPayrollMonth({ pay: false })}
+              >
+                Generate payslips
               </Button>
-              <p className="text-xs text-muted-foreground max-w-sm self-center">
-                Only unpaid (DRAFT/APPROVED) rows are paid. Already paid months are skipped — no double GL.
-                Fee group links the salary cost to Tuition / ICT / etc.
+              <Button size="sm" disabled={saving} onClick={() => runPayrollMonth({ pay: true })}>
+                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Generate + pay unpaid
+              </Button>
+              <p className="text-xs text-muted-foreground max-w-md self-center">
+                Standing salaries create one payslip per staff for the month. Fee group and expense class
+                are per staff (not one for everyone). Already-paid rows are never paid twice.
               </p>
             </div>
           </CardHeader>
@@ -742,9 +809,9 @@ export default function HRPage() {
                     <th className="px-3 py-2">Staff</th>
                     <th className="px-3 py-2">Month</th>
                     <th className="px-3 py-2 text-right">Basic</th>
-                    <th className="px-3 py-2 text-right">Allow.</th>
-                    <th className="px-3 py-2 text-right">Deduct.</th>
                     <th className="px-3 py-2 text-right">Net</th>
+                    <th className="px-3 py-2">Fee group</th>
+                    <th className="px-3 py-2">Expense class</th>
                     <th className="px-3 py-2">Status</th>
                     <th className="px-3 py-2"></th>
                   </tr>
@@ -755,10 +822,56 @@ export default function HRPage() {
                       <td className="px-3 py-2 font-medium">{p.staff_name}</td>
                       <td className="px-3 py-2 text-xs">{String(p.month).slice(0, 7)}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{money(p.basic_salary)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{money(p.allowances)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{money(p.deductions)}</td>
                       <td className="px-3 py-2 text-right font-semibold tabular-nums">
                         {money(p.net_salary)}
+                      </td>
+                      <td className="px-3 py-2">
+                        {p.status === "PAID" ? (
+                          <span className="text-xs text-muted-foreground">
+                            {p.related_fee_category_name || "—"}
+                          </span>
+                        ) : (
+                          <select
+                            className="h-8 max-w-[140px] rounded border px-1 text-xs"
+                            value={p.related_fee_category ? String(p.related_fee_category) : ""}
+                            onChange={(e) =>
+                              patchPayrollRow(p.id, {
+                                related_fee_category: e.target.value || null,
+                              })
+                            }
+                          >
+                            <option value="">— fee group —</option>
+                            {feeCategories.map((c) => (
+                              <option key={c.id} value={String(c.id)}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
+                        {p.status === "PAID" ? (
+                          <span className="text-xs text-muted-foreground">
+                            {p.expense_category_name || "—"}
+                          </span>
+                        ) : (
+                          <select
+                            className="h-8 max-w-[140px] rounded border px-1 text-xs"
+                            value={p.expense_category ? String(p.expense_category) : ""}
+                            onChange={(e) =>
+                              patchPayrollRow(p.id, {
+                                expense_category: e.target.value || null,
+                              })
+                            }
+                          >
+                            <option value="">— expense class —</option>
+                            {expenseCategories.map((c) => (
+                              <option key={c.id} value={String(c.id)}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-xs">{p.status_display || p.status}</td>
                       <td className="px-3 py-2 text-right space-x-1 whitespace-nowrap">
@@ -776,7 +889,7 @@ export default function HRPage() {
                   {!payroll.length && (
                     <tr>
                       <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
-                        No payroll rows yet. Add a monthly pay row per staff member.
+                        No payslips for this view. Set standing salaries on each staff profile, pick a month, then Generate payslips.
                       </td>
                     </tr>
                   )}
@@ -1016,6 +1129,81 @@ export default function HRPage() {
                 />
               </div>
             )}
+            <div className="sm:col-span-2 rounded-lg border border-teal-100 bg-teal-50/40 p-3 space-y-2">
+              <p className="text-xs font-semibold text-teal-900">Standing monthly pay (auto payslips)</p>
+              <p className="text-[11px] text-muted-foreground">
+                Set salary once per staff. Each month, Generate payslips copies these amounts.
+                Fee group and expense class are per person (e.g. teachers from Tuition, ICT from ICT — not one group for all).
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label className="text-xs">Basic</Label>
+                  <Input
+                    type="number"
+                    value={(form as any).default_basic_salary || ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, default_basic_salary: e.target.value } as any))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Allowances</Label>
+                  <Input
+                    type="number"
+                    value={(form as any).default_allowances || "0"}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, default_allowances: e.target.value } as any))
+                    }
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Deductions</Label>
+                  <Input
+                    type="number"
+                    value={(form as any).default_deductions || "0"}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, default_deductions: e.target.value } as any))
+                    }
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Paid from fee group</Label>
+                  <select
+                    className="w-full h-9 border rounded-md px-2 text-sm"
+                    value={(form as any).default_fee_category || ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, default_fee_category: e.target.value } as any))
+                    }
+                  >
+                    <option value="">— select —</option>
+                    {feeCategories.map((c) => (
+                      <option key={c.id} value={String(c.id)}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs">Expense class</Label>
+                  <select
+                    className="w-full h-9 border rounded-md px-2 text-sm"
+                    value={(form as any).default_expense_category || ""}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, default_expense_category: e.target.value } as any))
+                    }
+                  >
+                    <option value="">— select —</option>
+                    {expenseCategories.map((c) => (
+                      <option key={c.id} value={String(c.id)}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
             <div className="sm:col-span-2">
               <Label>Notes</Label>
               <Input

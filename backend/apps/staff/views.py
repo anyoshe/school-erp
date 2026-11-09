@@ -1,3 +1,4 @@
+from decimal import Decimal
 from datetime import date
 
 from django.db.models import Q, Sum, Count
@@ -238,16 +239,24 @@ class PayrollViewSet(ModelViewSet):
                 pk=account_id, school_id=row.staff.school_id
             ).first()
 
+        # Per-staff / per-row categories win. Request body is only a fallback
+        # when the payslip row has none set (never force one group on everyone).
         fee_cat_id = request.data.get("related_fee_category") or request.data.get("fee_category")
         exp_cat_id = request.data.get("expense_category")
-        if fee_cat_id:
-            fc = FeeCategory.objects.filter(pk=fee_cat_id, school_id=row.staff.school_id).first()
-            if fc:
-                row.related_fee_category = fc
-        if exp_cat_id:
-            ec = ExpenseCategory.objects.filter(pk=exp_cat_id, school_id=row.staff.school_id).first()
-            if ec:
-                row.expense_category = ec
+        if not row.related_fee_category_id:
+            if fee_cat_id:
+                fc = FeeCategory.objects.filter(pk=fee_cat_id, school_id=row.staff.school_id).first()
+                if fc:
+                    row.related_fee_category = fc
+            elif getattr(row.staff, "default_fee_category_id", None):
+                row.related_fee_category_id = row.staff.default_fee_category_id
+        if not row.expense_category_id:
+            if exp_cat_id:
+                ec = ExpenseCategory.objects.filter(pk=exp_cat_id, school_id=row.staff.school_id).first()
+                if ec:
+                    row.expense_category = ec
+            elif getattr(row.staff, "default_expense_category_id", None):
+                row.expense_category_id = row.staff.default_expense_category_id
 
         paid_at = request.data.get("paid_at") or date.today()
         if isinstance(paid_at, str) and len(paid_at) >= 10:
@@ -291,12 +300,121 @@ class PayrollViewSet(ModelViewSet):
             )
         return Response(PayrollSerializer(row).data)
 
+    def _generate_month_rows(self, school, prefix, request=None):
+        """
+        Create DRAFT payslips for active staff who do not yet have a row this month.
+        Amounts/categories come from:
+          1) Staff standing defaults (default_basic_salary, default_fee_category, …)
+          2) Else last prior payroll row for that staff
+          3) Else optional request body defaults (only when staff has no setting)
+        """
+        from calendar import monthrange
+        from datetime import date as date_cls
+        from apps.staff.models import Staff
+        from apps.finance.models import FeeCategory, ExpenseCategory
+
+        year, month = int(prefix[:4]), int(prefix[5:7])
+        month_date = date_cls(year, month, 1)
+
+        fallback_fee = None
+        fallback_exp = None
+        if request is not None:
+            fid = request.data.get("related_fee_category") or request.data.get("fee_category")
+            eid = request.data.get("expense_category")
+            if fid:
+                fallback_fee = FeeCategory.objects.filter(pk=fid, school=school).first()
+            if eid:
+                fallback_exp = ExpenseCategory.objects.filter(pk=eid, school=school).first()
+
+        active = Staff.objects.filter(school=school, is_active=True).select_related(
+            "user", "default_fee_category", "default_expense_category"
+        )
+        existing_staff_ids = set(
+            self.get_queryset()
+            .filter(staff__school=school, month__startswith=prefix)
+            .values_list("staff_id", flat=True)
+        )
+        created = []
+        for st in active:
+            if st.id in existing_staff_ids:
+                continue
+            basic = Decimal(str(st.default_basic_salary or 0))
+            allow = Decimal(str(st.default_allowances or 0))
+            ded = Decimal(str(st.default_deductions or 0))
+            fee_id = st.default_fee_category_id
+            exp_id = st.default_expense_category_id
+
+            if basic <= 0:
+                prior = (
+                    Payroll.objects.filter(staff=st)
+                    .exclude(status=Payroll.Status.CANCELLED)
+                    .order_by("-month", "-created_at")
+                    .first()
+                )
+                if prior:
+                    basic = Decimal(str(prior.basic_salary or 0))
+                    allow = Decimal(str(prior.allowances or 0))
+                    ded = Decimal(str(prior.deductions or 0))
+                    if not fee_id:
+                        fee_id = prior.related_fee_category_id
+                    if not exp_id:
+                        exp_id = prior.expense_category_id
+
+            if basic <= 0:
+                # Nothing to pay for this staff — skip
+                continue
+
+            if not fee_id and fallback_fee:
+                fee_id = fallback_fee.id
+            if not exp_id and fallback_exp:
+                exp_id = fallback_exp.id
+
+            row = Payroll.objects.create(
+                staff=st,
+                month=month_date,
+                basic_salary=basic,
+                allowances=allow,
+                deductions=ded,
+                status=Payroll.Status.DRAFT,
+                related_fee_category_id=fee_id,
+                expense_category_id=exp_id,
+                notes=f"Auto-generated payslip for {prefix}",
+            )
+            created.append(row)
+        return created
+
+    @action(detail=False, methods=["post"], url_path="generate-month")
+    def generate_month(self, request):
+        """Create monthly payslips from standing salaries — does not mark paid."""
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+        month_raw = request.data.get("month") or ""
+        if not month_raw:
+            return Response({"detail": "month is required (YYYY-MM)"}, status=400)
+        prefix = str(month_raw)[:7]
+        created = self._generate_month_rows(school, prefix, request)
+        return Response(
+            {
+                "month": prefix,
+                "created": len(created),
+                "detail": (
+                    f"Created {len(created)} payslip(s) for {prefix} from standing salaries. "
+                    "Already-existing rows were left unchanged."
+                ),
+            },
+            status=201 if created else 200,
+        )
+
     @action(detail=False, methods=["post"], url_path="run")
     def run_payroll(self, request):
         """
-        Pay only unpaid rows (DRAFT/APPROVED) for a month and post to Finance once.
-        Already PAID rows are skipped (no double expense / GL).
-        Body: month, payment_method?, paid_from_account?, related_fee_category?, expense_category?
+        1) Auto-create missing payslips for the month from each staff's standing pay
+           and per-staff fee/expense categories.
+        2) Pay only unpaid rows (DRAFT/APPROVED) and post to Finance once each.
+        Already PAID rows are never re-posted.
+        Body defaults related_fee_category / expense_category apply only when a staff
+        member has no per-person setting.
         """
         school = selected_school(request)
         if not school:
@@ -305,6 +423,13 @@ class PayrollViewSet(ModelViewSet):
         if not month_raw:
             return Response({"detail": "month is required (YYYY-MM)"}, status=400)
         prefix = str(month_raw)[:7]
+
+        generate = request.data.get("generate", True)
+        created_n = 0
+        if generate is not False and str(generate).lower() not in ("0", "false", "no"):
+            created = self._generate_month_rows(school, prefix, request)
+            created_n = len(created)
+
         qs = (
             self.get_queryset()
             .filter(
@@ -312,8 +437,16 @@ class PayrollViewSet(ModelViewSet):
                 month__startswith=prefix,
                 status__in=[Payroll.Status.DRAFT, Payroll.Status.APPROVED],
             )
-            .select_related("staff__user", "staff__school")
+            .select_related(
+                "staff__user",
+                "staff__school",
+                "staff__default_fee_category",
+                "staff__default_expense_category",
+                "related_fee_category",
+                "expense_category",
+            )
         )
+        pay_now = request.data.get("pay", True)
         paid = 0
         skipped = (
             self.get_queryset()
@@ -321,18 +454,20 @@ class PayrollViewSet(ModelViewSet):
             .count()
         )
         errors = []
-        for row in qs:
-            row, err = self._pay_one(row, request)
-            if err in ("already_paid", "cancelled"):
-                skipped += 1
-                continue
-            if err:
-                errors.append({"id": str(row.id), "staff": str(row.staff_id), "detail": err})
-            else:
-                paid += 1
+        if pay_now is not False and str(pay_now).lower() not in ("0", "false", "no"):
+            for row in qs:
+                row, err = self._pay_one(row, request)
+                if err in ("already_paid", "cancelled"):
+                    skipped += 1
+                    continue
+                if err:
+                    errors.append({"id": str(row.id), "staff": str(row.staff_id), "detail": err})
+                else:
+                    paid += 1
         return Response(
             {
                 "month": prefix,
+                "generated": created_n,
                 "posted": paid,
                 "skipped_already_paid": skipped,
                 "errors": errors[:20],

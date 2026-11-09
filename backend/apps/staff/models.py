@@ -59,6 +59,34 @@ class Staff(models.Model):
     tsc_number = models.CharField(max_length=40, blank=True, default="", verbose_name="TSC number")
     bank_name = models.CharField(max_length=80, blank=True, default="")
     bank_account = models.CharField(max_length=40, blank=True, default="")
+
+    # Standing monthly pay (used to auto-generate payslips each month)
+    default_basic_salary = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0"),
+        help_text="Standing basic pay copied into each month's payslip",
+    )
+    default_allowances = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0"),
+    )
+    default_deductions = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0"),
+    )
+    default_fee_category = models.ForeignKey(
+        "finance.FeeCategory",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="staff_default_funding",
+        help_text="Fee group this staff is usually paid from (e.g. Tuition, ICT)",
+    )
+    default_expense_category = models.ForeignKey(
+        "finance.ExpenseCategory",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="staff_default_expense",
+        help_text="Expense class (Salaries, Administration, Security, …)",
+    )
     next_of_kin = models.CharField(max_length=120, blank=True, default="")
     next_of_kin_phone = models.CharField(max_length=30, blank=True, default="")
 
