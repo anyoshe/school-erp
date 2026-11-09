@@ -3036,18 +3036,13 @@ function MarksEntryPanel({
   grades: GradeLevel[];
   years: AcademicYear[];
   subjects: Subject[];
-  loading: boolean;
-  initialContext: {
-    yearId: number;
-    termId: number;
-    gradeId: number;
-    subjectId: string;
-  } | null;}) {
-  const [yearId, setYearId] = useState<number | "">(initialContext?.yearId ?? "");
-  const [termId, setTermId] = useState<number | "">(initialContext?.termId ?? "");
-  const [gradeId, setGradeId] = useState<number | "">(initialContext?.gradeId ?? "");
+  loading?: boolean;
+}) {
+  const [yearId, setYearId] = useState<number | "">("");
+  const [termId, setTermId] = useState<number | "">("");
+  const [gradeId, setGradeId] = useState<number | "">("");
   const [sectionId, setSectionId] = useState<number | "">("");
-  const [subjectId, setSubjectId] = useState<string>(initialContext?.subjectId ?? "");
+  const [subjectId, setSubjectId] = useState<string>("");
   const [matrix, setMatrix] = useState<MarksMatrix | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
