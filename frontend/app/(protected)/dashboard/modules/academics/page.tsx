@@ -2733,7 +2733,7 @@ function ReportCardsPanel({
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Overall class average</p>
                 <p className="font-bold tabular-nums">
-                  {classOverallAverage == null ? "—" : `${classOverallAverage.toFixed(1)}%`}
+                  {classOverallAverage == null ? "—" : `${classOverallAverage.toFixed(1)} / 100`}
                   {" · "}
                   {gradeLabelFor(
                     classOverallAverage,
@@ -2758,7 +2758,7 @@ function ReportCardsPanel({
                     <tr key={subject.id} className="border-t">
                       <td className="px-3 py-2 font-medium">{subject.name}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
-                        {subject.average == null ? "—" : `${subject.average.toFixed(1)}%`}
+                        {subject.average == null ? "—" : `${subject.average.toFixed(1)} / 100`}
                       </td>
                       <td className="px-3 py-2 text-center font-semibold text-primary">
                         {subject.grade}
@@ -2770,7 +2770,7 @@ function ReportCardsPanel({
                     <tr className="border-t bg-slate-50 font-semibold">
                       <td className="px-3 py-2">Overall class average</td>
                       <td className="px-3 py-2 text-right tabular-nums">
-                        {classOverallAverage.toFixed(1)}%
+                        {classOverallAverage.toFixed(1)} / 100
                       </td>
                       <td className="px-3 py-2 text-center text-primary">
                         {gradeLabelFor(
@@ -2805,7 +2805,7 @@ function ReportCardsPanel({
                     <th className="px-3 py-2">Pos</th>
                     <th className="px-3 py-2">Adm</th>
                     <th className="px-3 py-2">Learner</th>
-                    <th className="px-3 py-2 text-right">Average</th>
+                    <th className="px-3 py-2 text-right">Avg / 100</th>
                     <th className="px-3 py-2 text-center">Grade</th>
                   </tr>
                 </thead>
@@ -2833,7 +2833,7 @@ function ReportCardsPanel({
                           <td className="px-3 py-2 font-mono text-xs">{c.student.admission_number}</td>
                           <td className="px-3 py-2 font-medium">{c.student.full_name}</td>
                           <td className="px-3 py-2 text-right tabular-nums">
-                            {c.overall_average != null ? `${c.overall_average.toFixed(1)}%` : "—"}
+                            {c.overall_average != null ? `${c.overall_average.toFixed(1)} / 100` : "—"}
                           </td>
                           <td className="px-3 py-2 text-center font-semibold text-primary">
                             {c.overall_grade || "—"}
@@ -2923,7 +2923,7 @@ function ReportCardsPanel({
                       <th className="px-3 py-2">Subject</th>
                       <th className="px-3 py-2">Teacher</th>
                       <th className="px-3 py-2">Assessments</th>
-                      <th className="px-3 py-2 text-right">Average %</th>
+                      <th className="px-3 py-2 text-right">Avg / 100</th>
                       <th className="px-3 py-2 text-center">Grade</th>
                     </tr>
                   </thead>
@@ -2945,7 +2945,7 @@ function ReportCardsPanel({
                             : "—"}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {s.average != null ? s.average.toFixed(1) : "—"}
+                          {s.average != null ? `${s.average.toFixed(1)} / 100` : "—"}
                         </td>
                         <td className="px-3 py-2 text-center font-semibold">
                           {s.grade_letter || "—"}
@@ -2961,7 +2961,7 @@ function ReportCardsPanel({
                   <p className="text-xs text-muted-foreground">Overall average</p>
                   <p className="text-2xl font-bold tabular-nums">
                     {card.overall_average != null
-                      ? `${card.overall_average.toFixed(1)}%`
+                      ? `${card.overall_average.toFixed(1)} / 100`
                       : "—"}
                   </p>
                 </div>

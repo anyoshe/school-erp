@@ -110,14 +110,14 @@ export default function TranscriptPage() {
               <div key={idx} className="space-y-2 break-inside-avoid">
                 <h3 className="font-semibold border-b pb-1">
                   {t.academic_year?.name} · {t.term?.name}
-                  {t.overall_average != null ? ` — Avg ${t.overall_average}% (${t.overall_grade || "—"})` : ""}
+                  {t.overall_average != null ? ` — Avg ${t.overall_average} / 100 (${t.overall_grade || "—"})` : ""}
                 </h3>
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-muted-foreground border-b">
                       <th className="py-1">Subject</th>
                       <th className="py-1">Teacher</th>
-                      <th className="py-1 text-right">Average %</th>
+                      <th className="py-1 text-right">Avg / 100</th>
                       <th className="py-1 text-center">Grade</th>
                     </tr>
                   </thead>
@@ -126,7 +126,7 @@ export default function TranscriptPage() {
                       <tr key={s.subject_id} className="border-b border-dashed">
                         <td className="py-1">{s.subject_name}</td>
                         <td className="py-1 text-muted-foreground whitespace-nowrap">{s.teacher_name || "—"}</td>
-                        <td className="py-1 text-right tabular-nums">{s.average ?? "—"}</td>
+                        <td className="py-1 text-right tabular-nums">{s.average != null ? `${s.average} / 100` : "—"}</td>
                         <td className="py-1 text-center">{s.grade_letter || "—"}</td>
                       </tr>
                     ))}
@@ -139,7 +139,7 @@ export default function TranscriptPage() {
               <div>
                 <p className="text-xs text-muted-foreground">Cumulative average</p>
                 <p className="text-2xl font-bold">
-                  {doc.cumulative_average != null ? `${doc.cumulative_average}%` : "—"}{" "}
+                  {doc.cumulative_average != null ? `${doc.cumulative_average} / 100` : "—"}{" "}
                   <span className="text-base text-primary">{doc.cumulative_grade || ""}</span>
                 </p>
               </div>
