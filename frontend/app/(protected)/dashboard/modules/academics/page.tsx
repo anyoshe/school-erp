@@ -2923,7 +2923,7 @@ function ReportCardsPanel({
                       <th className="px-3 py-2">Subject</th>
                       <th className="px-3 py-2">Teacher</th>
                       <th className="px-3 py-2">Assessments</th>
-                      <th className="px-3 py-2 text-right">Avg / 100</th>
+                      <th className="px-3 py-2 text-right">Average %</th>
                       <th className="px-3 py-2 text-center">Grade</th>
                     </tr>
                   </thead>
@@ -2945,7 +2945,7 @@ function ReportCardsPanel({
                             : "—"}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
-                          {s.average != null ? `${s.average.toFixed(1)} / 100` : "—"}
+                          {s.average != null ? `${s.average.toFixed(1)}%` : "—"}
                         </td>
                         <td className="px-3 py-2 text-center font-semibold">
                           {s.grade_letter || "—"}
@@ -2958,7 +2958,12 @@ function ReportCardsPanel({
 
               <div className="flex flex-wrap justify-between items-center gap-3 pt-2 border-t">
                 <div>
-                  <p className="text-xs text-muted-foreground">Overall average</p>
+                  <p className="text-xs text-muted-foreground">
+                    Total average (all subjects)
+                    {card.subjects_with_marks
+                      ? ` · ${card.subjects_with_marks} subject${card.subjects_with_marks === 1 ? "" : "s"}`
+                      : ""}
+                  </p>
                   <p className="text-2xl font-bold tabular-nums">
                     {card.overall_average != null
                       ? `${card.overall_average.toFixed(1)} / 100`

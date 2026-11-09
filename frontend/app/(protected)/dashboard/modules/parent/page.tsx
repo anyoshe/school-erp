@@ -108,7 +108,7 @@ export default function ParentPortalPage() {
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-6">
                   <div>
-                    <p className="text-xs text-muted-foreground">Overall average</p>
+                    <p className="text-xs text-muted-foreground">Total average (all subjects)</p>
                     <p className="text-2xl font-bold tabular-nums">
                       {card.overall_average != null ? `${Number(card.overall_average).toFixed(1)} / 100` : "—"}
                     </p>
@@ -124,7 +124,7 @@ export default function ParentPortalPage() {
                       <tr>
                         <th className="px-3 py-2">Subject</th>
                         <th className="px-3 py-2">Teacher</th>
-                        <th className="px-3 py-2 text-right">Avg / 100</th>
+                        <th className="px-3 py-2 text-right">Average %</th>
                         <th className="px-3 py-2 text-center">Grade</th>
                       </tr>
                     </thead>
@@ -136,7 +136,7 @@ export default function ParentPortalPage() {
                             {s.teacher_name || "—"}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
-                            {s.average != null ? `${Number(s.average).toFixed(1)} / 100` : "—"}
+                            {s.average != null ? `${Number(s.average).toFixed(1)}%` : "—"}
                           </td>
                           <td className="px-3 py-2 text-center font-semibold text-primary">
                             {s.grade_letter || "—"}
