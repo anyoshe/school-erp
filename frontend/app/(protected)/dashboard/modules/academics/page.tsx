@@ -3260,6 +3260,7 @@ function ReportCardsPanel({
                   <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
                     <tr>
                       <th className="px-3 py-2">Subject</th>
+                      <th className="px-3 py-2">Teacher</th>
                       <th className="px-3 py-2">Assessments</th>
                       <th className="px-3 py-2 text-right">Average %</th>
                       <th className="px-3 py-2 text-center">Grade</th>
@@ -3269,6 +3270,9 @@ function ReportCardsPanel({
                     {card.subjects.map((s) => (
                       <tr key={s.subject_id} className="border-t">
                         <td className="px-3 py-2 font-medium">{s.subject_name}</td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                          {s.teacher_name || "—"}
+                        </td>
                         <td className="px-3 py-2 text-xs text-muted-foreground">
                           {s.entries.length
                             ? s.entries

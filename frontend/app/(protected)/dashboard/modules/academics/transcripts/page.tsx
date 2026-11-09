@@ -116,6 +116,7 @@ export default function TranscriptPage() {
                   <thead>
                     <tr className="text-left text-muted-foreground border-b">
                       <th className="py-1">Subject</th>
+                      <th className="py-1">Teacher</th>
                       <th className="py-1 text-right">Average %</th>
                       <th className="py-1 text-center">Grade</th>
                     </tr>
@@ -124,6 +125,7 @@ export default function TranscriptPage() {
                     {(t.subjects || []).map((s: any) => (
                       <tr key={s.subject_id} className="border-b border-dashed">
                         <td className="py-1">{s.subject_name}</td>
+                        <td className="py-1 text-muted-foreground whitespace-nowrap">{s.teacher_name || "—"}</td>
                         <td className="py-1 text-right tabular-nums">{s.average ?? "—"}</td>
                         <td className="py-1 text-center">{s.grade_letter || "—"}</td>
                       </tr>

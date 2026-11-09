@@ -583,6 +583,7 @@ export type ReportCard = {
   subjects: {
     subject_id: string;
     subject_name: string;
+    teacher_name?: string | null;
     entries: {
       assessment: string;
       kind: string;

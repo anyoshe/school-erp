@@ -327,6 +327,7 @@ def _build_student_report(student, school, academic_year_id=None, term_id=None):
             {
                 "subject_id": b["subject_id"],
                 "subject_name": b["subject_name"],
+                "teacher_name": None,
                 "entries": b["entries"],
                 "average": round(avg, 1) if avg is not None else None,
                 "grade_letter": grade_label(
@@ -355,11 +356,52 @@ def _build_student_report(student, school, academic_year_id=None, term_id=None):
                     {
                         "subject_id": sid,
                         "subject_name": m.subject.name,
+                        "teacher_name": None,
                         "entries": [],
                         "average": None,
                         "grade_letter": None,
                     }
                 )
+
+    # Attach subject teachers from SubjectTeacher allocations (grade + year)
+    if grade and year and subjects:
+        from apps.academics.models import SubjectTeacher
+
+        teacher_by_subject = {}
+        st_qs = (
+            SubjectTeacher.objects.filter(
+                school=school,
+                grade_level=grade,
+                academic_year=year,
+                is_active=True,
+            )
+            .select_related("teacher", "teacher__user", "subject", "stream")
+            .order_by("id")
+        )
+        student_stream_id = getattr(student, "stream_id", None)
+        for st in st_qs:
+            sid = str(st.subject_id)
+            # Prefer stream-specific assignment when student has a stream
+            if sid in teacher_by_subject and st.stream_id and student_stream_id:
+                if st.stream_id != student_stream_id:
+                    continue
+            elif sid in teacher_by_subject and not st.stream_id:
+                # Keep existing more-specific assignment if any
+                continue
+            u = getattr(st.teacher, "user", None)
+            if u:
+                name = f"{getattr(u, 'first_name', '') or ''} {getattr(u, 'last_name', '') or ''}".strip()
+                name = name or getattr(u, "email", "") or None
+            else:
+                name = None
+            if name:
+                # Upgrade to stream match if available
+                if student_stream_id and st.stream_id == student_stream_id:
+                    teacher_by_subject[sid] = name
+                elif sid not in teacher_by_subject:
+                    teacher_by_subject[sid] = name
+        for s in subjects:
+            s["teacher_name"] = teacher_by_subject.get(s["subject_id"])
 
     overall = float(overall_sum / overall_n) if overall_n else None
 
