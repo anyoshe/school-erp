@@ -126,22 +126,12 @@ export default function TranscriptPage() {
                       <tr key={s.subject_id} className="border-b border-dashed">
                         <td className="py-1">{s.subject_name}</td>
                         <td className="py-1 text-muted-foreground whitespace-nowrap">{s.teacher_name || "—"}</td>
-                        <td className="py-1 text-right tabular-nums">{s.average != null ? `${s.average}%` : "—"}</td>
+                        <td className="py-1 text-right tabular-nums">{s.average ?? "—"}</td>
                         <td className="py-1 text-center">{s.grade_letter || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {(() => {
-                  const scored = (t.subjects || []).filter((s: any) => s.average != null);
-                  if (!scored.length) return null;
-                  const total = scored.reduce((sum: number, s: any) => sum + Number(s.average || 0), 0);
-                  return (
-                    <p className="text-xs text-muted-foreground pt-1">
-                      Total marks: <span className="font-semibold text-foreground tabular-nums">{total.toFixed(1)} / {scored.length * 100}</span>
-                    </p>
-                  );
-                })()}
               </div>
             ))}
 

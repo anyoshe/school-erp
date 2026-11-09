@@ -110,18 +110,7 @@ export default function ParentPortalPage() {
                   <div>
                     <p className="text-xs text-muted-foreground">Overall average</p>
                     <p className="text-2xl font-bold tabular-nums">
-                      {card.overall_average != null ? `${Number(card.overall_average).toFixed(1)}%` : "—"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground">Total marks</p>
-                    <p className="text-2xl font-bold tabular-nums">
-                      {(() => {
-                        const scored = (card.subjects || []).filter((s: any) => s.average != null);
-                        if (!scored.length) return "—";
-                        const total = scored.reduce((sum: number, s: any) => sum + Number(s.average || 0), 0);
-                        return `${total.toFixed(1)} / ${scored.length * 100}`;
-                      })()}
+                      {card.overall_average != null ? `${card.overall_average}%` : "—"}
                     </p>
                   </div>
                   <div>
@@ -135,7 +124,7 @@ export default function ParentPortalPage() {
                       <tr>
                         <th className="px-3 py-2">Subject</th>
                         <th className="px-3 py-2">Teacher</th>
-                        <th className="px-3 py-2 text-right">Average %</th>
+                        <th className="px-3 py-2 text-right">Average</th>
                         <th className="px-3 py-2 text-center">Grade</th>
                       </tr>
                     </thead>
@@ -147,7 +136,7 @@ export default function ParentPortalPage() {
                             {s.teacher_name || "—"}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
-                            {s.average != null ? `${Number(s.average).toFixed(1)}%` : "—"}
+                            {s.average != null ? `${s.average}%` : "—"}
                           </td>
                           <td className="px-3 py-2 text-center font-semibold text-primary">
                             {s.grade_letter || "—"}
