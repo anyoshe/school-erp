@@ -601,6 +601,7 @@ class MarksMatrixView(APIView):
 
     def get(self, request):
         from apps.students.models import Student
+        from .presets import ensure_term_assessments
 
         ctx, err = self._resolve_context(request)
         if err:
@@ -608,6 +609,30 @@ class MarksMatrixView(APIView):
 
         school = ctx["school"]
         assessments = list(self._get_assessments(ctx))
+
+        # If this subject has no plan yet, but the same grade/year/term already
+        # has assessments for another subject, auto-apply the standard plan so
+        # teachers are not prompted again for every subject.
+        grade_has_plan = Assessment.objects.filter(
+            school=school,
+            academic_year=ctx["year"],
+            grade_level=ctx["grade"],
+        ).filter(
+            Q(term=ctx["term"]) | Q(term__isnull=True)
+        ).exists()
+        if not assessments and grade_has_plan:
+            ensure_term_assessments(
+                school=school,
+                academic_year=ctx["year"],
+                term=ctx["term"],
+                grade_level=ctx["grade"],
+                subject=ctx["subject"],
+                created_by=request.user if getattr(request.user, "is_authenticated", False) else None,
+            )
+            assessments = list(self._get_assessments(ctx))
+            grade_has_plan = True
+        elif assessments:
+            grade_has_plan = True
 
         sort = (request.query_params.get("sort") or "name").lower()
         students = Student.objects.filter(
@@ -691,6 +716,7 @@ class MarksMatrixView(APIView):
                 "grading_system": grading_system,
                 "passing_mark": passing_mark,
                 "columns": columns,
+                "grade_has_plan": grade_has_plan,
                 "rows": rows,
                 "assessment_names": [c["name"] for c in columns],
                 "preset": [c["name"] for c in columns],

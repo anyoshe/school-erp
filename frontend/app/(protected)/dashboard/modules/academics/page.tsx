@@ -3514,11 +3514,41 @@ const load = async () => {
         }
       }
       setDraft(d);
-      toast.success(
-        data.columns.length
-          ? `Markbook ready: ${data.columns.map((column) => column.name).join(" · ")}`
-          : "Markbook opened. Create assessment plans to add mark columns."
-      );
+      if (data.columns.length) {
+        toast.success(
+          `Markbook ready: ${data.columns.map((column) => column.name).join(" · ")}`
+        );
+      } else if ((data as any).grade_has_plan) {
+        // Backend should have auto-created; rare race — retry once quietly
+        try {
+          const retry = await fetchMarksMatrix({
+            academic_year: Number(yearId),
+            term: Number(termId),
+            grade_level: Number(gradeId),
+            subject: subjectId,
+            section: sectionId || undefined,
+          });
+          setMatrix(retry);
+          const d2: Record<string, string> = {};
+          for (const row of retry.rows) {
+            for (const col of retry.columns) {
+              const cell = row.cells[col.id];
+              d2[cellKey(row.student_id, col.id)] =
+                cell?.score != null && !cell?.is_absent ? String(cell.score) : "";
+            }
+          }
+          setDraft(d2);
+          if (retry.columns.length) {
+            toast.success(
+              `Markbook ready: ${retry.columns.map((c) => c.name).join(" · ")}`
+            );
+          }
+        } catch {
+          /* show empty plan UI */
+        }
+      } else {
+        // Fresh grade/term — show standard vs customize once
+      }
     } catch (e: unknown) {
       toast.error(getApiErrorDetail(e) || "Could not load markbook");
       setMatrix(null);
@@ -3581,21 +3611,35 @@ const load = async () => {
   };
 
   const useDefaultPlan = async () => {
-    if (!yearId || !termId || !gradeId || !subjectId) {
-      toast.message("Select year, term, grade and subject");
+    if (!yearId || !termId || !gradeId) {
+      toast.message("Select year, term and grade first");
       return;
     }
     setBusy(true);
     try {
-      const result = await createDefaultAssessmentPlan({
+      // Apply standard plan to EVERY subject for this grade/term so other subjects
+      // open the markbook directly without asking again.
+      const res = await prepareGradeAssessments({
         academic_year: Number(yearId),
         term: Number(termId),
         grade_level: Number(gradeId),
-        subject: subjectId,
-        section: sectionId || undefined,
       });
-      toast.success(`Standard plan added: ${result.assessment_names.join(" · ")}`);
-      await load();
+      // Also ensure current subject (in case not on grade-subject map yet)
+      if (subjectId) {
+        await createDefaultAssessmentPlan({
+          academic_year: Number(yearId),
+          term: Number(termId),
+          grade_level: Number(gradeId),
+          subject: subjectId,
+          section: sectionId || undefined,
+        }).catch(() => null);
+      }
+      toast.success(
+        res.assessments_created
+          ? `Standard plan ready for this grade (${res.subjects} subject(s)). Other subjects will open without asking again.`
+          : `Standard plan already in place for ${res.subjects || "this"} subject(s).`
+      );
+      if (subjectId) await load();
     } catch (e: unknown) {
       toast.error(getApiErrorDetail(e) || "Could not create the standard plan");
     } finally {
@@ -3817,11 +3861,11 @@ const load = async () => {
         {matrix && matrix.columns.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
             <div className="max-w-xl space-y-1">
-              <p className="font-medium">No assessment plan is set up for this markbook yet.</p>
+              <p className="font-medium">First markbook for this grade and term</p>
               <p className="text-sm text-muted-foreground">
-                Use the familiar standard plan (CAT 1–3 and End of Term
-                {subjectId ? "; Practical is included for relevant subjects" : ""}), or customize
-                your assessment columns.
+                Choose a plan once for this grade. Other subjects will open straight into the
+                markbook with the same columns (CAT 1–3 and End of Term
+                {subjectId ? "; Practical where relevant" : ""}).
               </p>
             </div>
             <div className="flex flex-wrap justify-center gap-2">
