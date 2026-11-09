@@ -111,23 +111,26 @@ export default function Welcome() {
   };
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: colors.lightBg }}>
+    <div
+      className="min-h-dvh min-h-screen w-full flex flex-col"
+      style={{ backgroundColor: colors.lightBg }}
+    >
       {/* Background Blobs */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
         <div
-          className="absolute -top-20 -right-20 w-64 h-64 rounded-full mix-blend-multiply filter blur-3xl opacity-20"
+          className="absolute -top-20 -right-20 w-64 h-64 max-w-[50vw] max-h-[50vw] rounded-full mix-blend-multiply filter blur-3xl opacity-20"
           style={{ backgroundColor: `${colors.primary}20` }}
         />
         <div
-          className="absolute -bottom-20 -left-20 w-64 h-64 rounded-full mix-blend-multiply filter blur-3xl opacity-20"
+          className="absolute -bottom-20 -left-20 w-64 h-64 max-w-[50vw] max-h-[50vw] rounded-full mix-blend-multiply filter blur-3xl opacity-20"
           style={{ backgroundColor: `${colors.accent}20` }}
         />
       </div>
 
-      <div className="w-full min-h-screen">
+      <div className="relative z-0 w-full flex-1 flex flex-col">
         {/* Mobile Header */}
-        <div className="lg:hidden w-full py-4 px-4">
-          <div className="flex items-center justify-center gap-3">
+        <div className="lg:hidden w-full py-5 px-4 sm:px-6">
+          <div className="flex items-center justify-center gap-3 mx-auto max-w-md sm:max-w-lg">
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center"
               style={{
@@ -147,10 +150,10 @@ export default function Welcome() {
           </div>
         </div>
 
-        {/* Main Content */}
-        <div className="w-full px-4 py-6 lg:px-8 lg:py-12">
-          <div className="max-w-6xl mx-auto">
-            <div className="flex flex-col lg:flex-row lg:items-center gap-8 lg:gap-12">
+        {/* Main Content — centered on mobile, split on desktop */}
+        <div className="w-full flex-1 flex flex-col justify-center px-4 sm:px-6 py-4 sm:py-8 lg:px-8 lg:py-12">
+          <div className="w-full max-w-md sm:max-w-lg lg:max-w-6xl mx-auto">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 sm:gap-8 lg:gap-12">
               {/* Left Side - Marketing (Desktop Only) */}
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -249,11 +252,11 @@ export default function Welcome() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5 }}
-                className="w-full lg:w-1/2"
+                className="w-full lg:w-1/2 lg:max-w-lg lg:ml-auto"
               >
-                <div className="w-full max-w-md mx-auto lg:mx-0">
+                <div className="w-full mx-auto">
                   <div
-                    className="rounded-2xl shadow-xl border overflow-hidden"
+                    className="rounded-2xl shadow-xl border overflow-hidden w-full"
                     style={{
                       backgroundColor: colors.surface,
                       borderColor: colors.borderLight,
