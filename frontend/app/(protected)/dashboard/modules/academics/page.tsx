@@ -2953,6 +2953,25 @@ function ReportCardsPanel({
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    {(() => {
+                      const scored = (card.subjects || []).filter((s) => s.average != null);
+                      if (!scored.length) return null;
+                      const total = scored.reduce((sum, s) => sum + Number(s.average || 0), 0);
+                      const max = scored.length * 100;
+                      return (
+                        <tr className="border-t bg-slate-50 font-semibold">
+                          <td className="px-3 py-2" colSpan={3}>
+                            Total
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums">
+                            {Math.round(total)} / {max}
+                          </td>
+                          <td className="px-3 py-2" />
+                        </tr>
+                      );
+                    })()}
+                  </tfoot>
                 </table>
               </div>
 
@@ -2979,9 +2998,6 @@ function ReportCardsPanel({
                       <span className="text-sm font-normal text-muted-foreground"> / {card.out_of}</span>
                     ) : null}
                   </p>
-                </div>
-                <div className="text-xs text-muted-foreground max-w-[12rem]">
-                  Based on {card.subjects_with_marks} subject(s) with marks entered.
                 </div>
               </div>
 
