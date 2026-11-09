@@ -3865,11 +3865,12 @@ const load = async () => {
         {matrix && matrix.columns.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
             <div className="max-w-xl space-y-1">
-              <p className="font-medium">First markbook for this grade and term</p>
+              <p className="font-medium">No assessment plan for this subject yet</p>
               <p className="text-sm text-muted-foreground">
-                Choose a plan once for this grade. Other subjects will open straight into the
-                markbook with the same columns (CAT 1–3 and End of Term
-                {subjectId ? "; Practical where relevant" : ""}).
+                Use the standard plan (CAT 1–3 and End of Term
+                {subjectId ? "; Practical where relevant" : ""}) to apply it across this
+                grade for every subject that is not customized. Customize only affects
+                this subject&apos;s markbook.
               </p>
             </div>
             <div className="flex flex-wrap justify-center gap-2">

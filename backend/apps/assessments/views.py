@@ -643,7 +643,7 @@ class MarksMatrixView(APIView):
 
     def get(self, request):
         from apps.students.models import Student
-        from .presets import ensure_term_assessments
+        from .presets import ensure_term_assessments, grade_uses_standard_plan
 
         ctx, err = self._resolve_context(request)
         if err:
@@ -652,17 +652,16 @@ class MarksMatrixView(APIView):
         school = ctx["school"]
         assessments = list(self._get_assessments(ctx))
 
-        # If this subject has no plan yet, but the same grade/year/term already
-        # has assessments for another subject, auto-apply the standard plan so
-        # teachers are not prompted again for every subject.
-        grade_has_plan = Assessment.objects.filter(
+        # Auto-apply standard plan only when this grade/term already adopted the
+        # *standard* column set on at least one subject. Custom plans on other
+        # subjects must not suppress the prompt or leak columns into new subjects.
+        grade_has_standard = grade_uses_standard_plan(
             school=school,
             academic_year=ctx["year"],
+            term=ctx["term"],
             grade_level=ctx["grade"],
-        ).filter(
-            Q(term=ctx["term"]) | Q(term__isnull=True)
-        ).exists()
-        if not assessments and grade_has_plan:
+        )
+        if not assessments and grade_has_standard:
             ensure_term_assessments(
                 school=school,
                 academic_year=ctx["year"],
@@ -672,9 +671,12 @@ class MarksMatrixView(APIView):
                 created_by=request.user if getattr(request.user, "is_authenticated", False) else None,
             )
             assessments = list(self._get_assessments(ctx))
-            grade_has_plan = True
-        elif assessments:
-            grade_has_plan = True
+            grade_has_standard = True
+
+        # Frontend uses grade_has_plan to skip the "standard vs customize" prompt.
+        # Only treat standard adoption as "has plan" so a lone custom subject
+        # still prompts for each new subject.
+        grade_has_plan = grade_has_standard or bool(assessments)
 
         sort = (request.query_params.get("sort") or "name").lower()
         students = Student.objects.filter(
@@ -927,14 +929,32 @@ class PrepareGradeAssessmentsView(APIView):
         )
         created_total = 0
         subjects_done = []
+        skipped_custom = 0
         for row in mapped:
-            before = Assessment.objects.filter(
+            before_qs = Assessment.objects.filter(
                 school=school,
                 academic_year=year,
                 term=term,
                 grade_level=grade,
                 subject=row.subject,
-            ).count()
+            )
+            before = before_qs.count()
+            # Skip subjects that already have a custom plan — do not overlay standard
+            from .presets import assessment_names_look_standard
+            if before:
+                names = set(before_qs.values_list("name", flat=True))
+                if not assessment_names_look_standard(names):
+                    skipped_custom += 1
+                    subjects_done.append(
+                        {
+                            "subject_id": str(row.subject_id),
+                            "subject_name": row.subject.name,
+                            "created": 0,
+                            "columns": before,
+                            "skipped": "custom_plan",
+                        }
+                    )
+                    continue
             ensure_term_assessments(
                 school=school,
                 academic_year=year,
@@ -965,6 +985,7 @@ class PrepareGradeAssessmentsView(APIView):
             {
                 "subjects": len(subjects_done),
                 "assessments_created": created_total,
+                "skipped_custom": skipped_custom,
                 "detail": subjects_done,
             },
             status=status.HTTP_201_CREATED if created_total else status.HTTP_200_OK,
