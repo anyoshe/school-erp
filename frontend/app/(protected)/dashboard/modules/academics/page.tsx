@@ -40,7 +40,7 @@ import {
   type AcademicYear, type GradeLevel, type CurriculumTemplate, type Term,
   type ClassRegisterStudent, type Subject, type GradeSubject,
   fetchTeachers, syncTeachersFromUsers, fetchTeacherCoverage, assignSubjectTeacher, removeSubjectTeacher, updateSection, assignTeacherAllSubjects,
-  fetchAssessments, createAssessment, fetchReportCard, fetchClassReportCards, type AssessmentItem, type ReportCard, fetchMarksMatrix, createDefaultAssessmentPlan, saveMarksMatrix, downloadMarksCsvTemplate, importMarksCsv, prepareGradeAssessments, type MarksMatrix,
+  fetchReportCard, fetchClassReportCards, type ReportCard, fetchMarksMatrix, saveMarksMatrix, downloadMarksCsvTemplate, importMarksCsv, prepareGradeAssessments, type MarksMatrix,
 } from "./services";
 
 type Tab =
@@ -50,16 +50,9 @@ type Tab =
   | "subjects"
   | "teachers"
   | "marks"
-  | "assessments"
   | "report-cards"
   | "promotion";
 
-type MarkbookContext = {
-  yearId: number;
-  termId: number;
-  gradeId: number;
-  subjectId: string;
-};
 
 function getApiErrorDetail(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null || !("response" in error)) return;
@@ -112,7 +105,6 @@ const ACADEMICS_TABS: { id: Tab; label: string }[] = [
   { id: "subjects", label: "Subjects" },
   { id: "teachers", label: "Teachers" },
   { id: "marks", label: "Marks entry" },
-  { id: "assessments", label: "Assessment plans" },
   { id: "report-cards", label: "Report cards" },
   { id: "promotion", label: "Promotion" },
 ];
@@ -131,8 +123,6 @@ function TabIcon({ id, className }: { id: Tab; className?: string }) {
     case "teachers":
       return <Users className={cn} />;
     case "marks":
-      return <ClipboardList className={cn} />;
-    case "assessments":
       return <ClipboardList className={cn} />;
     case "report-cards":
       return <FileText className={cn} />;
@@ -397,7 +387,6 @@ export default function AcademicsPage() {
   const { currentSchool } = useCurrentSchool();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>("overview");
-  const [markbookContext, setMarkbookContext] = useState<MarkbookContext | null>(null);
   const [tabsReady, setTabsReady] = useState(false);
   const [shellReady, setShellReady] = useState(false);
 
@@ -437,7 +426,7 @@ export default function AcademicsPage() {
     return { checks, score };
   }, [curricula, grades, years, subjects]);
 
-  const workTabs = tab === "marks" || tab === "assessments" || tab === "report-cards" || tab === "teachers";
+  const workTabs = tab === "marks" || tab === "report-cards" || tab === "teachers";
 
   if (!shellReady) {
     return (
@@ -460,8 +449,6 @@ export default function AcademicsPage() {
           <h1 className="text-xl sm:text-2xl font-bold text-textPrimary tracking-tight truncate">
             {tab === "marks"
               ? "Marks entry"
-              : tab === "assessments"
-                ? "Assessment plans"
                 : tab === "report-cards"
                   ? "Report cards"
                   : tab === "teachers"
@@ -609,23 +596,7 @@ export default function AcademicsPage() {
           grades={grades}
           years={years}
           subjects={subjects}
-          loading={gradesQ.isLoading || yearsQ.isLoading}
-          initialContext={markbookContext}
-          onGoToAssessments={(context) => {
-            setMarkbookContext(context);
-            setTab("assessments");
-          }}
-        />
-      )}
-      {tab === "assessments" && (
-        <AssessmentsPanel
-          grades={grades}
-          years={years}
-          subjects={subjects}
-          loading={gradesQ.isLoading || yearsQ.isLoading}
-          initialContext={markbookContext}
-          onGoToMarks={() => setTab("marks")}
-          onAssessmentCreated={(context) => setMarkbookContext(context)}
+          loading={gradesQ.isLoading || yearsQ.isLoading || subjectsQ.isLoading}
         />
       )}
 
@@ -2564,800 +2535,11 @@ function TeachersPanel({
 }
 
 
-function AssessmentsPanel({
-  grades,
-  years,
-  subjects,
-  loading,
-  initialContext,
-  onGoToMarks,
-  onAssessmentCreated,
-}: {
-  grades: GradeLevel[];
-  years: AcademicYear[];
-  subjects: Subject[];
-  loading: boolean;
-  initialContext: MarkbookContext | null;
-  onGoToMarks: () => void;
-  onAssessmentCreated: (context: MarkbookContext) => void;
-}) {
-  const [list, setList] = useState<AssessmentItem[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [yearId, setYearId] = useState<number | "">(initialContext?.yearId ?? "");
-  const [gradeId, setGradeId] = useState<number | "">(initialContext?.gradeId ?? "");
-  const [termId, setTermId] = useState<number | "">(initialContext?.termId ?? "");
-  const [openCreate, setOpenCreate] = useState(false);
-  const [form, setForm] = useState({
-    name: "CAT 1",
-    kind: "CAT",
-    subject: (initialContext?.subjectId ?? "") as string | number | "",
-    max_score: "100",
-    weight: "1",
-    assessment_date: "",
-  });
-
-  const activeYear = years.find((y) => y.is_active) || years[0];
-  const yearObj = years.find((y) => y.id === yearId) || activeYear;
-  const terms = yearObj?.terms || [];
-
-  useEffect(() => {
-    if (activeYear && yearId === "") setYearId(activeYear.id);
-  }, [activeYear, yearId]);
-
-  useEffect(() => {
-    if (yearObj && termId === "") {
-      const currentTerm = yearObj.terms?.find((term) => term.is_current) || yearObj.terms?.[0];
-      if (currentTerm) setTermId(currentTerm.id);
-    }
-  }, [yearObj, termId]);
-
-  const load = async () => {
-    setBusy(true);
-    try {
-      const data = await fetchAssessments({
-        academic_year: yearId ? Number(yearId) : undefined,
-        grade_level: gradeId ? Number(gradeId) : undefined,
-        term: termId ? Number(termId) : undefined,
-      });
-      setList(data);
-    } catch {
-      toast.error("Could not load assessments");
-      setList([]);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  useEffect(() => {
-    const handle = window.setTimeout(() => {
-      void load();
-    }, 200);
-    return () => window.clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [yearId, gradeId, termId]);
-
-  const create = async () => {
-    if (!yearId || !termId || !gradeId || !form.subject || !form.name.trim()) {
-      toast.message("Year, term, grade, subject and name are required");
-      return;
-    }
-    setBusy(true);
-    try {
-      await createAssessment({
-        name: form.name.trim(),
-        kind: form.kind,
-        academic_year: Number(yearId),
-        term: Number(termId),
-        grade_level: Number(gradeId),
-        subject: form.subject,
-        max_score: form.max_score || 100,
-        weight: form.weight || 1,
-        assessment_date: form.assessment_date || null,
-      });
-      toast.success("Assessment plan created");
-      setOpenCreate(false);
-      await load();
-      onAssessmentCreated({
-        yearId: Number(yearId),
-        termId: Number(termId),
-        gradeId: Number(gradeId),
-        subjectId: String(form.subject),
-      });
-      onGoToMarks();
-    } catch (err: unknown) {
-      toast.error(getApiErrorDetail(err) || "Create failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const gradeSubjects = subjects;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap justify-between gap-3">
-        <p className="text-sm text-muted-foreground max-w-2xl">
-          Define the assessments and weights for each class, subject, and term. Enter scores only
-          in Marks entry; each plan appears there as a markbook column.
-        </p>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onGoToMarks}>Marks entry</Button>
-          <Button className="bg-primary" onClick={() => setOpenCreate(true)} disabled={!gradeId}>
-            <Plus className="h-4 w-4 mr-1" /> New assessment plan
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid sm:grid-cols-3 gap-3 max-w-3xl">
-        <div>
-          <Label>Year</Label>
-          <select
-            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
-            value={yearId === "" ? "" : String(yearId)}
-            onChange={(e) => {
-              setYearId(e.target.value ? Number(e.target.value) : "");
-              setTermId("");
-            }}
-          >
-            {years.map((y) => (
-              <option key={y.id} value={y.id}>
-                {y.name}
-                {y.is_active ? " (active)" : ""}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <Label>Term</Label>
-          <select
-            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
-            value={termId === "" ? "" : String(termId)}
-            onChange={(e) => setTermId(e.target.value ? Number(e.target.value) : "")}
-          >
-            <option value="">Select term</option>
-            {terms.map((tm) => (
-              <option key={tm.id} value={tm.id}>
-                {tm.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <Label>Grade</Label>
-          <GradeSelect
-            grades={grades}
-            value={gradeId}
-            emptyLabel="All grades"
-            onChange={setGradeId}
-          />
-        </div>
-      </div>
-
-      {loading || busy ? (
-        <div className="flex justify-center py-10 text-muted-foreground gap-2">
-          <Loader2 className="h-5 w-5 animate-spin" /> Loading…
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl border">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Assessment</th>
-                <th className="px-3 py-2">Class</th>
-                <th className="px-3 py-2">Subject</th>
-                <th className="px-3 py-2">Term</th>
-                <th className="px-3 py-2">Max</th>
-                <th className="px-3 py-2">Weight</th>
-                <th className="px-3 py-2">Marks entered</th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
-                    No assessment plans match these filters. Create one to add columns to Marks entry.
-                  </td>
-                </tr>
-              ) : (
-                list.map((a) => (
-                  <tr key={a.id} className="border-t">
-                    <td className="px-3 py-2 font-medium">
-                      {a.name}
-                      <span className="ml-2 text-xs text-muted-foreground">{a.kind}</span>
-                    </td>
-                    <td className="px-3 py-2">{a.grade_name}</td>
-                    <td className="px-3 py-2">{a.subject_name}</td>
-                    <td className="px-3 py-2">{a.term_name || "All terms"}</td>
-                    <td className="px-3 py-2">{a.max_score}</td>
-                    <td className="px-3 py-2">{a.weight ?? 1}</td>
-                    <td className="px-3 py-2">
-                      {a.entered_count ?? 0}/{a.marks_count ?? 0}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <Dialog open={openCreate} onOpenChange={setOpenCreate}>
-        <DialogContent className="rounded-2xl sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>New assessment plan</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label>Name</Label>
-              <Input
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Type</Label>
-              <select
-                className="w-full h-10 rounded-md border px-3 text-sm"
-                value={form.kind}
-                onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
-              >
-                <option value="CAT">CAT / Continuous</option>
-                <option value="MIDTERM">Midterm</option>
-                <option value="END_TERM">End of term</option>
-                <option value="PRACTICAL">Practical</option>
-                <option value="PROJECT">Project</option>
-                <option value="OTHER">Other</option>
-              </select>
-            </div>
-            <div>
-              <Label>Subject</Label>
-              <select
-                className="w-full h-10 rounded-md border px-3 text-sm"
-                value={String(form.subject || "")}
-                onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
-              >
-                <option value="">Select…</option>
-                {gradeSubjects.map((s) => (
-                  <option key={String(s.id)} value={String(s.id)}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label>Max score</Label>
-                <Input
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  value={form.max_score}
-                  onChange={(e) => setForm((f) => ({ ...f, max_score: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label>Weight</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={form.weight}
-                  onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
-                />
-              </div>
-              <div>
-                <Label>Date</Label>
-                <Input
-                  type="date"
-                  value={form.assessment_date}
-                  onChange={(e) => setForm((f) => ({ ...f, assessment_date: e.target.value }))}
-                />
-              </div>
-            </div>
-            {(!gradeId || !termId) && (
-              <p className="text-xs text-amber-700">Select a grade and term in the filters first.</p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpenCreate(false)}>
-              Cancel
-            </Button>
-            <Button className="bg-primary" onClick={create} disabled={busy || !gradeId || !termId}>
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-    </div>
-  );
-}
-
-
-function ReportCardsPanel({
-  grades,
-  years,
-  loading,
-}: {
-  grades: GradeLevel[];
-  years: AcademicYear[];
-  loading: boolean;
-}) {
-  const [yearId, setYearId] = useState<number | "">("");
-  const [termId, setTermId] = useState<number | "">("");
-  const [gradeId, setGradeId] = useState<number | "">("");
-  const [sectionId, setSectionId] = useState<number | "">("");
-  const [cards, setCards] = useState<ReportCard[]>([]);
-  const [busy, setBusy] = useState(false);
-  const [selectedIdx, setSelectedIdx] = useState(0);
-
-  const sortedGrades = useMemo(
-    () => grades.slice().sort((a, b) => a.order - b.order),
-    [grades]
-  );
-  const activeYear = years.find((y) => y.is_active) || years[0];
-  const yearObj = years.find((y) => y.id === yearId) || activeYear;
-  const terms = yearObj?.terms || [];
-  const gradeObj = grades.find((g) => g.id === gradeId);
-  const sections = gradeObj?.sections || [];
-
-  useEffect(() => {
-    if (activeYear && yearId === "") setYearId(activeYear.id);
-  }, [activeYear, yearId]);
-
-  useEffect(() => {
-    if (yearObj) {
-      const cur = yearObj.terms?.find((t) => t.is_current) || yearObj.terms?.[0];
-      if (cur) setTermId(cur.id);
-    }
-  }, [yearObj?.id]);
-
-  const load = async () => {
-    if (!gradeId) {
-      toast.message("Select a grade");
-      return;
-    }
-    setBusy(true);
-    try {
-      const data = await fetchClassReportCards({
-        grade_level: Number(gradeId),
-        academic_year: yearId ? Number(yearId) : undefined,
-        term: termId ? Number(termId) : undefined,
-        section: sectionId ? Number(sectionId) : undefined,
-      });
-      setCards(data.cards || []);
-      setSelectedIdx(0);
-      if (!(data.cards || []).length) {
-        toast.message("No learners found for this class");
-      }
-    } catch {
-      toast.error("Could not load report cards");
-      setCards([]);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const card = cards[selectedIdx];
-  const subjectSummaries = useMemo(() => {
-    const summaries = new Map<string, { name: string; total: number; count: number }>();
-    for (const report of cards) {
-      for (const subject of report.subjects) {
-        const summary = summaries.get(subject.subject_id) ?? {
-          name: subject.subject_name,
-          total: 0,
-          count: 0,
-        };
-        if (subject.average != null) {
-          summary.total += subject.average;
-          summary.count += 1;
-        }
-        summaries.set(subject.subject_id, summary);
-      }
-    }
-    return Array.from(summaries.entries())
-      .map(([id, summary]) => {
-        const average = summary.count
-          ? Math.round((summary.total / summary.count) * 10) / 10
-          : null;
-        return {
-          id,
-          name: summary.name,
-          average,
-          learners: summary.count,
-          grade: gradeLabelFor(
-            average,
-            cards[0]?.school.grading_system || "percentage",
-            cards[0]?.school.passing_mark ?? 50
-          ),
-        };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [cards]);
-  const classOverallAverage = useMemo(() => {
-    const averages = cards
-      .map((report) => report.overall_average)
-      .filter((average): average is number => average != null);
-    if (!averages.length) return null;
-    return Math.round((averages.reduce((sum, average) => sum + average, 0) / averages.length) * 10) / 10;
-  }, [cards]);
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground max-w-2xl">
-        Term report cards from entered marks. Weighted subject averages use assessment weights.
-        Print one learner or the whole class (use browser print).
-      </p>
-
-      <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 items-end">
-        <div>
-          <Label>Year</Label>
-          <select
-            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
-            value={yearId === "" ? "" : String(yearId)}
-            onChange={(e) => setYearId(e.target.value ? Number(e.target.value) : "")}
-          >
-            {years.map((y) => (
-              <option key={y.id} value={y.id}>
-                {y.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <Label>Term</Label>
-          <select
-            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
-            value={termId === "" ? "" : String(termId)}
-            onChange={(e) => setTermId(e.target.value ? Number(e.target.value) : "")}
-          >
-            <option value="">All / default</option>
-            {terms.map((tm) => (
-              <option key={tm.id} value={tm.id}>
-                {tm.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <Label>Grade</Label>
-          <GradeSelect
-            grades={grades}
-            value={gradeId}
-            emptyLabel="Select…"
-            onChange={(v) => {
-              setGradeId(v);
-              setSectionId("");
-            }}
-          />
-        </div>
-        <div>
-          <Label>Section</Label>
-          <select
-            className="w-full mt-1 h-10 rounded-md border px-3 text-sm"
-            value={sectionId === "" ? "" : String(sectionId)}
-            onChange={(e) => setSectionId(e.target.value ? Number(e.target.value) : "")}
-          >
-            <option value="">All sections</option>
-            {sections.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex gap-2">
-          <Button className="bg-primary" disabled={busy || loading} onClick={load}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-            Load cards
-          </Button>
-          {cards.length > 0 && (
-            <Button variant="outline" onClick={() => window.print()}>
-              Print
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {cards.length > 0 && (
-        <Card className="border-border rounded-xl">
-          <CardContent className="p-4 space-y-3">
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <h3 className="font-semibold">{gradeObj?.name || "Class"} subject averages</h3>
-                <p className="text-xs text-muted-foreground">
-                  Mean of learners&apos; subject averages; learners without a subject mark are excluded.
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">Overall class average</p>
-                <p className="font-bold tabular-nums">
-                  {classOverallAverage == null ? "—" : `${classOverallAverage.toFixed(1)}%`}
-                  {" · "}
-                  {gradeLabelFor(
-                    classOverallAverage,
-                    cards[0]?.school.grading_system || "percentage",
-                    cards[0]?.school.passing_mark ?? 50
-                  )}
-                </p>
-              </div>
-            </div>
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2">Subject</th>
-                    <th className="px-3 py-2 text-right">Class average</th>
-                    <th className="px-3 py-2 text-center">Overall grade</th>
-                    <th className="px-3 py-2 text-right">Learners</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {subjectSummaries.map((subject) => (
-                    <tr key={subject.id} className="border-t">
-                      <td className="px-3 py-2 font-medium">{subject.name}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {subject.average == null ? "—" : `${subject.average.toFixed(1)}%`}
-                      </td>
-                      <td className="px-3 py-2 text-center font-semibold text-primary">
-                        {subject.grade}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">{subject.learners}</td>
-                    </tr>
-                  ))}
-                  {classOverallAverage != null && (
-                    <tr className="border-t bg-slate-50 font-semibold">
-                      <td className="px-3 py-2">Overall class average</td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {classOverallAverage.toFixed(1)}%
-                      </td>
-                      <td className="px-3 py-2 text-center text-primary">
-                        {gradeLabelFor(
-                          classOverallAverage,
-                          cards[0]?.school.grading_system || "percentage",
-                          cards[0]?.school.passing_mark ?? 50
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums">
-                        {cards.filter((report) => report.overall_average != null).length}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {cards.length > 0 && (
-        <Card className="border-border rounded-xl print:hidden">
-          <CardContent className="p-4">
-            <h3 className="font-semibold mb-2">Class ranking</h3>
-            <p className="text-xs text-muted-foreground mb-3">
-              Position by overall term average. Learners without marks are listed last.
-            </p>
-            <div className="overflow-x-auto rounded-lg border">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2">Pos</th>
-                    <th className="px-3 py-2">Adm</th>
-                    <th className="px-3 py-2">Learner</th>
-                    <th className="px-3 py-2 text-right">Average</th>
-                    <th className="px-3 py-2 text-center">Grade</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...cards]
-                    .sort((a, b) => {
-                      const ap = a.position ?? 9999;
-                      const bp = b.position ?? 9999;
-                      if (ap !== bp) return ap - bp;
-                      return (a.student.full_name || "").localeCompare(b.student.full_name || "");
-                    })
-                    .map((c) => {
-                      const idx = cards.findIndex((x) => x.student.id === c.student.id);
-                      return (
-                        <tr
-                          key={c.student.id}
-                          className={`border-t cursor-pointer hover:bg-primary/5 ${
-                            idx === selectedIdx ? "bg-primary/10" : ""
-                          }`}
-                          onClick={() => setSelectedIdx(idx)}
-                        >
-                          <td className="px-3 py-2 font-semibold tabular-nums">
-                            {c.position != null ? c.position : "—"}
-                          </td>
-                          <td className="px-3 py-2 font-mono text-xs">{c.student.admission_number}</td>
-                          <td className="px-3 py-2 font-medium">{c.student.full_name}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">
-                            {c.overall_average != null ? `${c.overall_average.toFixed(1)}%` : "—"}
-                          </td>
-                          <td className="px-3 py-2 text-center font-semibold text-primary">
-                            {c.overall_grade || "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {cards.length > 1 && (
-        <div className="flex flex-wrap gap-2 print:hidden">
-          {cards.map((c, i) => (
-            <button
-              key={c.student.id}
-              type="button"
-              onClick={() => setSelectedIdx(i)}
-              className={`text-xs px-2.5 py-1 rounded-full border ${
-                i === selectedIdx
-                  ? "bg-primary text-white border-primary"
-                  : "bg-white border-border"
-              }`}
-            >
-              {c.student.full_name || c.student.admission_number}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {card ? (
-        <div className="report-card-print space-y-4">
-          {/* single selected for screen; all for print via CSS could be added later */}
-          <Card className="border-border rounded-2xl overflow-hidden max-w-3xl mx-auto">
-            <CardContent className="p-6 sm:p-8 space-y-5">
-              <div className="text-center space-y-1 border-b pb-4">
-                {card.school.logo ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={card.school.logo}
-                    alt=""
-                    className="h-16 mx-auto object-contain mb-2"
-                  />
-                ) : null}
-                <h2 className="text-xl font-bold tracking-tight">{card.school.name}</h2>
-                <p className="text-xs text-muted-foreground">
-                  {[card.school.address, card.school.phone, card.school.email]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-                <p className="text-sm font-semibold mt-2 uppercase tracking-wide text-primary">
-                  Academic Report Card
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {card.academic_year?.name || "—"}
-                  {card.term ? ` · ${card.term.name}` : ""}
-                </p>
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                <p>
-                  <span className="text-muted-foreground">Learner:</span>{" "}
-                  <strong>{card.student.full_name}</strong>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Admission #:</span>{" "}
-                  {card.student.admission_number || "—"}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Class:</span>{" "}
-                  {card.grade?.name || "—"}
-                  {card.section ? ` · ${card.section.name}` : ""}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Class teacher:</span>{" "}
-                  {card.class_teacher_name || "—"}
-                </p>
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2">Subject</th>
-                      <th className="px-3 py-2">Teacher</th>
-                      <th className="px-3 py-2">Assessments</th>
-                      <th className="px-3 py-2 text-right">Average %</th>
-                      <th className="px-3 py-2 text-center">Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {card.subjects.map((s) => (
-                      <tr key={s.subject_id} className="border-t">
-                        <td className="px-3 py-2 font-medium">{s.subject_name}</td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
-                          {s.teacher_name || "—"}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">
-                          {s.entries.length
-                            ? s.entries
-                                .map(
-                                  (e) =>
-                                    `${e.assessment}: ${e.percentage.toFixed(0)}%`
-                                )
-                                .join(" · ")
-                            : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums">
-                          {s.average != null ? s.average.toFixed(1) : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-center font-semibold">
-                          {s.grade_letter || "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="flex flex-wrap justify-between items-center gap-3 pt-2 border-t">
-                <div>
-                  <p className="text-xs text-muted-foreground">Overall average</p>
-                  <p className="text-2xl font-bold tabular-nums">
-                    {card.overall_average != null
-                      ? `${card.overall_average.toFixed(1)}%`
-                      : "—"}
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Overall grade</p>
-                  <p className="text-3xl font-bold text-primary">
-                    {card.overall_grade || "—"}
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Class position</p>
-                  <p className="text-2xl font-bold tabular-nums">
-                    {card.position != null ? `${card.position}` : "—"}
-                    {card.out_of ? (
-                      <span className="text-sm font-normal text-muted-foreground"> / {card.out_of}</span>
-                    ) : null}
-                  </p>
-                </div>
-                <div className="text-xs text-muted-foreground max-w-[12rem]">
-                  Based on {card.subjects_with_marks} subject(s) with marks entered.
-                </div>
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-6 pt-6 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-6">Class teacher</p>
-                  <div className="border-t border-dashed pt-1">
-                    {card.class_teacher_name || "Signature"}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-6">Head teacher</p>
-                  <div className="border-t border-dashed pt-1">Signature / stamp</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : (
-        !busy && (
-          <p className="text-center text-sm text-muted-foreground py-12">
-            Select year, term and grade, then load report cards.
-          </p>
-        )
-      )}
-    </div>
-  );
-}
-
-
 function MarksEntryPanel({
   grades,
   years,
   subjects,
   loading,
-  initialContext,
-  onGoToAssessments,
 }: {
   grades: GradeLevel[];
   years: AcademicYear[];
@@ -3368,9 +2550,7 @@ function MarksEntryPanel({
     termId: number;
     gradeId: number;
     subjectId: string;
-  } | null;
-  onGoToAssessments: (context: MarkbookContext) => void;
-}) {
+  } | null;}) {
   const [yearId, setYearId] = useState<number | "">(initialContext?.yearId ?? "");
   const [termId, setTermId] = useState<number | "">(initialContext?.termId ?? "");
   const [gradeId, setGradeId] = useState<number | "">(initialContext?.gradeId ?? "");
@@ -3614,43 +2794,6 @@ const load = async () => {
     }
   };
 
-  const useDefaultPlan = async () => {
-    if (!yearId || !termId || !gradeId) {
-      toast.message("Select year, term and grade first");
-      return;
-    }
-    setBusy(true);
-    try {
-      // Apply standard plan to EVERY subject for this grade/term so other subjects
-      // open the markbook directly without asking again.
-      const res = await prepareGradeAssessments({
-        academic_year: Number(yearId),
-        term: Number(termId),
-        grade_level: Number(gradeId),
-      });
-      // Also ensure current subject (in case not on grade-subject map yet)
-      if (subjectId) {
-        await createDefaultAssessmentPlan({
-          academic_year: Number(yearId),
-          term: Number(termId),
-          grade_level: Number(gradeId),
-          subject: subjectId,
-          section: sectionId || undefined,
-        }).catch(() => null);
-      }
-      toast.success(
-        res.assessments_created
-          ? `Standard plan ready for this grade (${res.subjects} subject(s)). Other subjects will open without asking again.`
-          : `Standard plan already in place for ${res.subjects || "this"} subject(s).`
-      );
-      if (subjectId) await load();
-    } catch (e: unknown) {
-      toast.error(getApiErrorDetail(e) || "Could not create the standard plan");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const liveRows = useMemo(() => {
     if (!matrix) return [];
     const rows = matrix.rows.map((row) => {
@@ -3711,7 +2854,7 @@ const load = async () => {
       <div className="shrink-0 relative z-[80] overflow-visible rounded-xl border bg-white shadow-sm p-2.5 sm:p-3 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground max-w-xl">
-            Columns come from the assessment plans for the selected class, subject, and term.
+            Standard columns: CAT 1–3 and End of Term (Practical for science/ICT subjects). Scores feed report cards automatically.
             Averages update as you type.
           </p>
           <div className="flex flex-wrap gap-2 shrink-0">
@@ -3864,33 +3007,14 @@ const load = async () => {
       <div className="flex-1 min-h-0 relative z-[1] rounded-xl border bg-white overflow-hidden flex flex-col">
         {matrix && matrix.columns.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 p-8 text-center">
-            <div className="max-w-xl space-y-1">
-              <p className="font-medium">No assessment plan for this subject yet</p>
-              <p className="text-sm text-muted-foreground">
-                Use the standard plan (CAT 1–3 and End of Term
-                {subjectId ? "; Practical where relevant" : ""}) to apply it across this
-                grade for every subject that is not customized. Customize only affects
-                this subject&apos;s markbook.
-              </p>
-            </div>
-            <div className="flex flex-wrap justify-center gap-2">
-              <Button disabled={busy} onClick={useDefaultPlan}>
-                Use standard plan
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  onGoToAssessments({
-                    yearId: Number(yearId),
-                    termId: Number(termId),
-                    gradeId: Number(gradeId),
-                    subjectId,
-                  })
-                }
-              >
-                Customize plan
-              </Button>
-            </div>
+            <p className="font-medium">Preparing standard markbook…</p>
+            <p className="text-sm text-muted-foreground max-w-md">
+              Columns are CAT 1–3 and End of Term (plus Practical for lab subjects).
+              Open the markbook again if this stays empty.
+            </p>
+            <Button disabled={busy} onClick={() => load()}>
+              Retry
+            </Button>
           </div>
         ) : matrix ? (
           <div className="flex-1 min-h-0 overflow-auto">
