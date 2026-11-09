@@ -7,6 +7,7 @@ import { Menu, X } from "lucide-react";
 
 export const FINANCE_NAV_LINKS = [
   { href: "/dashboard/modules/finance", label: "Dashboard", exact: true },
+  { href: "/dashboard/modules/finance/returning", label: "Returning billing" },
   { href: "/dashboard/modules/finance/clearance", label: "Clearance" },
   { href: "/dashboard/modules/finance/payments", label: "Payments" },
   { href: "/dashboard/modules/finance/receipts", label: "Receipts" },

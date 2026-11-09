@@ -259,7 +259,7 @@ export default function PromoteStudentsPage() {
             </div>
             <div className="flex items-end gap-2 pb-2">
               <Checkbox id="carry" checked={carryFees} onCheckedChange={(v) => setCarryFees(v === true)} />
-              <Label htmlFor="carry">Carry unpaid fees into new year</Label>
+              <Label htmlFor="carry">Carry unpaid fees (optional). Prefer billing new-grade fees in Finance → Returning billing when they report</Label>
             </div>
           </div>
 
