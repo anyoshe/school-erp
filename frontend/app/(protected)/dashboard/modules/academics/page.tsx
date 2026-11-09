@@ -2733,7 +2733,7 @@ function ReportCardsPanel({
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">Overall class average</p>
                 <p className="font-bold tabular-nums">
-                  {classOverallAverage == null ? "—" : `${classOverallAverage.toFixed(1)} / 100`}
+                  {classOverallAverage == null ? "—" : `${classOverallAverage.toFixed(1)}%`}
                   {" · "}
                   {gradeLabelFor(
                     classOverallAverage,
@@ -2758,7 +2758,7 @@ function ReportCardsPanel({
                     <tr key={subject.id} className="border-t">
                       <td className="px-3 py-2 font-medium">{subject.name}</td>
                       <td className="px-3 py-2 text-right tabular-nums">
-                        {subject.average == null ? "—" : `${subject.average.toFixed(1)} / 100`}
+                        {subject.average == null ? "—" : `${subject.average.toFixed(1)}%`}
                       </td>
                       <td className="px-3 py-2 text-center font-semibold text-primary">
                         {subject.grade}
@@ -2770,7 +2770,7 @@ function ReportCardsPanel({
                     <tr className="border-t bg-slate-50 font-semibold">
                       <td className="px-3 py-2">Overall class average</td>
                       <td className="px-3 py-2 text-right tabular-nums">
-                        {classOverallAverage.toFixed(1)} / 100
+                        {classOverallAverage.toFixed(1)}%
                       </td>
                       <td className="px-3 py-2 text-center text-primary">
                         {gradeLabelFor(
@@ -2805,7 +2805,7 @@ function ReportCardsPanel({
                     <th className="px-3 py-2">Pos</th>
                     <th className="px-3 py-2">Adm</th>
                     <th className="px-3 py-2">Learner</th>
-                    <th className="px-3 py-2 text-right">Avg / 100</th>
+                    <th className="px-3 py-2 text-right">Average</th>
                     <th className="px-3 py-2 text-center">Grade</th>
                   </tr>
                 </thead>
@@ -2833,7 +2833,7 @@ function ReportCardsPanel({
                           <td className="px-3 py-2 font-mono text-xs">{c.student.admission_number}</td>
                           <td className="px-3 py-2 font-medium">{c.student.full_name}</td>
                           <td className="px-3 py-2 text-right tabular-nums">
-                            {c.overall_average != null ? `${c.overall_average.toFixed(1)} / 100` : "—"}
+                            {c.overall_average != null ? `${c.overall_average.toFixed(1)}%` : "—"}
                           </td>
                           <td className="px-3 py-2 text-center font-semibold text-primary">
                             {c.overall_grade || "—"}
@@ -2958,16 +2958,23 @@ function ReportCardsPanel({
 
               <div className="flex flex-wrap justify-between items-center gap-3 pt-2 border-t">
                 <div>
-                  <p className="text-xs text-muted-foreground">
-                    Total average (all subjects)
-                    {card.subjects_with_marks
-                      ? ` · ${card.subjects_with_marks} subject${card.subjects_with_marks === 1 ? "" : "s"}`
-                      : ""}
-                  </p>
+                  <p className="text-xs text-muted-foreground">Overall average</p>
                   <p className="text-2xl font-bold tabular-nums">
                     {card.overall_average != null
-                      ? `${card.overall_average.toFixed(1)} / 100`
+                      ? `${card.overall_average.toFixed(1)}%`
                       : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Total marks</p>
+                  <p className="text-2xl font-bold tabular-nums">
+                    {(() => {
+                      const scored = (card.subjects || []).filter((s) => s.average != null);
+                      if (!scored.length) return "—";
+                      const total = scored.reduce((sum, s) => sum + Number(s.average || 0), 0);
+                      const max = scored.length * 100;
+                      return `${total.toFixed(1)} / ${max}`;
+                    })()}
                   </p>
                 </div>
                 <div className="text-center">

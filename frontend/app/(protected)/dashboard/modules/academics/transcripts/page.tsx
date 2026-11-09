@@ -110,7 +110,7 @@ export default function TranscriptPage() {
               <div key={idx} className="space-y-2 break-inside-avoid">
                 <h3 className="font-semibold border-b pb-1">
                   {t.academic_year?.name} · {t.term?.name}
-                  {t.overall_average != null ? ` — Total ${t.overall_average} / 100 (${t.overall_grade || "—"})` : ""}
+                  {t.overall_average != null ? ` — Avg ${t.overall_average}% (${t.overall_grade || "—"})` : ""}
                 </h3>
                 <table className="w-full text-xs">
                   <thead>
@@ -132,14 +132,24 @@ export default function TranscriptPage() {
                     ))}
                   </tbody>
                 </table>
+                {(() => {
+                  const scored = (t.subjects || []).filter((s: any) => s.average != null);
+                  if (!scored.length) return null;
+                  const total = scored.reduce((sum: number, s: any) => sum + Number(s.average || 0), 0);
+                  return (
+                    <p className="text-xs text-muted-foreground pt-1">
+                      Total marks: <span className="font-semibold text-foreground tabular-nums">{total.toFixed(1)} / {scored.length * 100}</span>
+                    </p>
+                  );
+                })()}
               </div>
             ))}
 
             <div className="border-t pt-4 flex flex-wrap justify-between gap-4">
               <div>
-                <p className="text-xs text-muted-foreground">Cumulative total average (all subjects)</p>
+                <p className="text-xs text-muted-foreground">Cumulative average</p>
                 <p className="text-2xl font-bold">
-                  {doc.cumulative_average != null ? `${doc.cumulative_average} / 100` : "—"}{" "}
+                  {doc.cumulative_average != null ? `${doc.cumulative_average}%` : "—"}{" "}
                   <span className="text-base text-primary">{doc.cumulative_grade || ""}</span>
                 </p>
               </div>

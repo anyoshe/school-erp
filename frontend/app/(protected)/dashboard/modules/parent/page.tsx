@@ -108,9 +108,20 @@ export default function ParentPortalPage() {
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap gap-6">
                   <div>
-                    <p className="text-xs text-muted-foreground">Total average (all subjects)</p>
+                    <p className="text-xs text-muted-foreground">Overall average</p>
                     <p className="text-2xl font-bold tabular-nums">
-                      {card.overall_average != null ? `${Number(card.overall_average).toFixed(1)} / 100` : "—"}
+                      {card.overall_average != null ? `${Number(card.overall_average).toFixed(1)}%` : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Total marks</p>
+                    <p className="text-2xl font-bold tabular-nums">
+                      {(() => {
+                        const scored = (card.subjects || []).filter((s: any) => s.average != null);
+                        if (!scored.length) return "—";
+                        const total = scored.reduce((sum: number, s: any) => sum + Number(s.average || 0), 0);
+                        return `${total.toFixed(1)} / ${scored.length * 100}`;
+                      })()}
                     </p>
                   </div>
                   <div>
