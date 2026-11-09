@@ -880,7 +880,7 @@ function YearsPanel({
                             }`}
                             title="Set as current term"
                           >
-                            {term.name}
+                            <span className="font-semibold">{term.name}</span>
                             {term.is_current && (
                               <span className="ml-1 font-bold">· current</span>
                             )}
@@ -901,14 +901,43 @@ function YearsPanel({
                             title={term.is_locked ? "Unlock marks for this term" : "Lock marks (view-only)"}
                             disabled={lockMut.isPending}
                             onClick={() =>
-                              lockMut.mutate({ id: term.id, locked: !term.is_locked })
+                              lockMut.mutate({ id: term.id, locked: !Boolean(term.is_locked) })
                             }
                           >
                             {term.is_locked ? "Unlock" : "Lock"}
                           </button>
                         </div>
                       ))}
+                      {(y.terms || []).length === 0 && (
+                        <span className="text-xs text-textMuted">No terms yet — activate year or seed terms</span>
+                      )}
                     </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {!y.is_active && (
+                      <Button size="sm" variant="outline" onClick={() => activateMut.mutate(y.id)}>
+                        Set active
+                      </Button>
+                    )}
+                    {y.is_active && (y.terms || []).length === 0 && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={seedMut.isPending}
+                        onClick={() => seedMut.mutate(y.id)}
+                      >
+                        Seed Term 1–3
+                      </Button>
+                    )}
+                    <Button size="sm" className="bg-secondary hover:bg-secondary-700 text-white" onClick={() => setTermOpen(y)}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Term
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -963,7 +992,7 @@ function YearsPanel({
             </div>
             <div>
               <Label>Order</Label>
-              <Input type="number" readOnly={!!(matrix as any)?.term_locked} min={1} value={termForm.order} onChange={(e) => setTermForm({ ...termForm, order: Number(e.target.value) })} />
+              <Input type="number" min={1} value={termForm.order} onChange={(e) => setTermForm({ ...termForm, order: Number(e.target.value) })} />
             </div>
           </div>
           <DialogFooter>
@@ -1273,7 +1302,7 @@ function ClassesPanel({
               </div>
               <div>
                 <Label>Order</Label>
-                <Input type="number" readOnly={!!(matrix as any)?.term_locked} value={form.order} onChange={(e) => setForm({ ...form, order: Number(e.target.value) })} />
+                <Input type="number" value={form.order} onChange={(e) => setForm({ ...form, order: Number(e.target.value) })} />
               </div>
             </div>
           </div>
@@ -1295,7 +1324,7 @@ function ClassesPanel({
             </div>
             <div>
               <Label>Capacity (optional)</Label>
-              <Input type="number" readOnly={!!(matrix as any)?.term_locked} min={1} value={secCap} onChange={(e) => setSecCap(e.target.value)} placeholder="e.g. 40" />
+              <Input type="number" min={1} value={secCap} onChange={(e) => setSecCap(e.target.value)} placeholder="e.g. 40" />
             </div>
           </div>
           <DialogFooter>
