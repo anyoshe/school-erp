@@ -282,7 +282,7 @@ export default function Welcome() {
                       </div>
 
                       {/* Tabs */}
-                      <div className="flex mb-6 rounded-xl p-1" style={{ backgroundColor: colors.lightBg }}>
+                      <div className="flex w-full mb-6 rounded-xl p-1" style={{ backgroundColor: colors.lightBg }}>
                         <button
                           onClick={() => setActiveTab("login")}
                           className={`flex-1 text-center py-3 font-semibold rounded-lg transition-all duration-300 text-sm sm:text-base ${activeTab === "login" ? "text-white shadow-sm" : "hover:bg-white/50"
