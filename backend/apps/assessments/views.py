@@ -772,58 +772,112 @@ class MarksMatrixView(APIView):
         if not isinstance(payload, list):
             return Response({"detail": "marks must be a list"}, status=400)
 
-        saved = 0
+        if not payload:
+            return Response({"saved": 0, "errors": []})
+
         errors = []
+        # One query for valid students in this class (avoid per-row exists())
+        student_qs = Student.objects.filter(
+            school=school, current_class=ctx["grade"]
+        ).exclude(
+            status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED", "PENDING_CLEARANCE"]
+        )
+        if ctx["section_id"]:
+            student_qs = student_qs.filter(section_id=ctx["section_id"])
+        valid_students = {str(pk) for pk in student_qs.values_list("id", flat=True)}
+
+        parsed = []
+        for row in payload:
+            aid = str(row.get("assessment") or "")
+            sid = str(row.get("student") or row.get("student_id") or "")
+            if aid not in assessment_ids or not sid:
+                errors.append({"row": row, "detail": "invalid assessment or student"})
+                continue
+            if sid not in valid_students:
+                errors.append({"row": row, "detail": "student not in class"})
+                continue
+            assessment = by_id[aid]
+            is_absent = bool(row.get("is_absent"))
+            score_raw = row.get("score")
+            score = None
+            if not is_absent and score_raw not in (None, ""):
+                try:
+                    score = Decimal(str(score_raw))
+                except (InvalidOperation, TypeError, ValueError):
+                    errors.append({"row": row, "detail": "invalid score"})
+                    continue
+                if score < 0 or score > assessment.max_score:
+                    errors.append(
+                        {
+                            "row": row,
+                            "detail": f"score must be 0–{assessment.max_score}",
+                        }
+                    )
+                    continue
+            parsed.append(
+                {
+                    "assessment": assessment,
+                    "student_id": sid,
+                    "score": score,
+                    "is_absent": is_absent,
+                    "remarks": (row.get("remarks") or "")[:255],
+                }
+            )
+
+        if not parsed:
+            return Response({"saved": 0, "errors": errors[:20]})
+
+        student_ids = list({p["student_id"] for p in parsed})
+        existing = {
+            (str(m.assessment_id), str(m.student_id)): m
+            for m in Mark.objects.filter(
+                assessment_id__in=list(assessment_ids),
+                student_id__in=student_ids,
+            )
+        }
+        recorder = request.user if getattr(request.user, "is_authenticated", False) else None
+        to_create = []
+        to_update = []
         with transaction.atomic():
-            for row in payload:
-                aid = str(row.get("assessment") or "")
-                sid = row.get("student") or row.get("student_id")
-                if aid not in assessment_ids or not sid:
-                    errors.append({"row": row, "detail": "invalid assessment or student"})
-                    continue
-                assessment = by_id[aid]
-                # Ensure student belongs to school/grade
-                student_query = Student.objects.filter(
-                    pk=sid, school=school, current_class=ctx["grade"]
-                )
-                if ctx["section_id"]:
-                    student_query = student_query.filter(section_id=ctx["section_id"])
-                if not student_query.exists():
-                    errors.append({"row": row, "detail": "student not in class"})
-                    continue
-
-                is_absent = bool(row.get("is_absent"))
-                score_raw = row.get("score")
-                score = None
-                if not is_absent and score_raw not in (None, ""):
-                    try:
-                        score = Decimal(str(score_raw))
-                    except (InvalidOperation, TypeError, ValueError):
-                        errors.append({"row": row, "detail": "invalid score"})
-                        continue
-                    if score < 0 or score > assessment.max_score:
-                        errors.append(
-                            {
-                                "row": row,
-                                "detail": f"score must be 0–{assessment.max_score}",
-                            }
+            for p in parsed:
+                key = (str(p["assessment"].id), p["student_id"])
+                mark = existing.get(key)
+                if mark is None:
+                    to_create.append(
+                        Mark(
+                            assessment=p["assessment"],
+                            student_id=p["student_id"],
+                            school=school,
+                            score=p["score"],
+                            is_absent=p["is_absent"],
+                            remarks=p["remarks"],
+                            recorded_by=recorder,
                         )
-                        continue
-
-                Mark.objects.update_or_create(
-                    assessment=assessment,
-                    student_id=sid,
-                    defaults={
-                        "school": school,
-                        "score": score,
-                        "is_absent": is_absent,
-                        "remarks": (row.get("remarks") or "")[:255],
-                        "recorded_by": request.user if request.user.is_authenticated else None,
-                    },
+                    )
+                else:
+                    mark.score = p["score"]
+                    mark.is_absent = p["is_absent"]
+                    mark.remarks = p["remarks"]
+                    mark.school = school
+                    mark.recorded_by = recorder
+                    to_update.append(mark)
+            if to_create:
+                Mark.objects.bulk_create(to_create, batch_size=200)
+            if to_update:
+                Mark.objects.bulk_update(
+                    to_update,
+                    ["score", "is_absent", "remarks", "school", "recorded_by", "updated_at"],
+                    batch_size=200,
                 )
-                saved += 1
 
-        return Response({"saved": saved, "errors": errors[:20]})
+        return Response(
+            {
+                "saved": len(to_create) + len(to_update),
+                "created": len(to_create),
+                "updated": len(to_update),
+                "errors": errors[:20],
+            }
+        )
 
 
 class DefaultAssessmentPlanView(APIView):

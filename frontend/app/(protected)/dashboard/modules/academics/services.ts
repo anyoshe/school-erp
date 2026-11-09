@@ -658,6 +658,7 @@ export async function fetchMarksMatrix(params: {
   grade_level: number;
   subject: number | string;
   section?: number | string;
+  sort?: string;
 }) {
   const { data } = await api.get("/assessments/marks-matrix/", { params });
   return data as MarksMatrix;

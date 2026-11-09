@@ -3161,9 +3161,9 @@ const prepareAllSubjects = async () => {
     }
   };
 
-const load = async () => {
+const load = async (opts?: { quiet?: boolean }) => {
     if (!yearId || !termId || !gradeId || !subjectId) {
-      toast.message("Select year, term, grade and subject");
+      if (!opts?.quiet) toast.message("Select year, term, grade and subject");
       return;
     }
     setBusy(true);
@@ -3174,6 +3174,7 @@ const load = async () => {
         grade_level: Number(gradeId),
         subject: subjectId,
         section: sectionId || undefined,
+        sort: sortBy === "admission" ? "admission" : "name",
       });
       setMatrix(data);
       const d: Record<string, string> = {};
@@ -3185,48 +3186,33 @@ const load = async () => {
         }
       }
       setDraft(d);
-      if (data.columns.length) {
+      if (!opts?.quiet && data.columns.length) {
         toast.success(
           `Markbook ready: ${data.columns.map((column) => column.name).join(" · ")}`
         );
-      } else if ((data as any).grade_has_plan) {
-        // Backend should have auto-created; rare race — retry once quietly
-        try {
-          const retry = await fetchMarksMatrix({
-            academic_year: Number(yearId),
-            term: Number(termId),
-            grade_level: Number(gradeId),
-            subject: subjectId,
-            section: sectionId || undefined,
-          });
-          setMatrix(retry);
-          const d2: Record<string, string> = {};
-          for (const row of retry.rows) {
-            for (const col of retry.columns) {
-              const cell = row.cells[col.id];
-              d2[cellKey(row.student_id, col.id)] =
-                cell?.score != null && !cell?.is_absent ? String(cell.score) : "";
-            }
-          }
-          setDraft(d2);
-          if (retry.columns.length) {
-            toast.success(
-              `Markbook ready: ${retry.columns.map((c) => c.name).join(" · ")}`
-            );
-          }
-        } catch {
-          /* show empty plan UI */
-        }
-      } else {
-        // Fresh grade/term — show standard vs customize once
       }
     } catch (e: unknown) {
-      toast.error(getApiErrorDetail(e) || "Could not load markbook");
+      if (!opts?.quiet) toast.error(getApiErrorDetail(e) || "Could not load markbook");
       setMatrix(null);
     } finally {
       setBusy(false);
     }
   };
+
+  // Auto-open markbook as soon as year/term/grade/subject are chosen
+  useEffect(() => {
+    if (!yearId || !termId || !gradeId || !subjectId) {
+      setMatrix(null);
+      setDraft({});
+      return;
+    }
+    const handle = window.setTimeout(() => {
+      void load({ quiet: true });
+    }, 150);
+    return () => window.clearTimeout(handle);
+    // section + sort also refresh the grid
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yearId, termId, gradeId, subjectId, sectionId]);
 
   const save = async () => {
     if (!matrix || !yearId || !termId || !gradeId || !subjectId) return;
@@ -3240,27 +3226,40 @@ const load = async () => {
       }[] = [];
       for (const row of matrix.rows) {
         for (const col of matrix.columns) {
-          const raw = draft[cellKey(row.student_id, col.id)];
+          const key = cellKey(row.student_id, col.id);
+          const raw = draft[key];
           if (raw === undefined) continue;
           const trimmed = String(raw).trim();
+          const prev = row.cells[col.id];
+          const prevScore =
+            prev?.score != null && !prev?.is_absent ? Number(prev.score) : null;
+
           if (trimmed === "") {
-            marks.push({
-              student: row.student_id,
-              assessment: col.id,
-              score: null,
-              is_absent: false,
-            });
-          } else {
-            const n = Number(trimmed);
-            if (Number.isNaN(n)) continue;
-            marks.push({
-              student: row.student_id,
-              assessment: col.id,
-              score: n,
-              is_absent: false,
-            });
+            // Only clear cells that previously had a value
+            if (prevScore != null) {
+              marks.push({
+                student: row.student_id,
+                assessment: col.id,
+                score: null,
+                is_absent: false,
+              });
+            }
+            continue;
           }
+          const n = Number(trimmed);
+          if (Number.isNaN(n)) continue;
+          if (prevScore === n) continue; // unchanged — skip
+          marks.push({
+            student: row.student_id,
+            assessment: col.id,
+            score: n,
+            is_absent: false,
+          });
         }
+      }
+      if (!marks.length) {
+        toast.message("No changes to save");
+        return;
       }
       const res = await saveMarksMatrix(
         {
@@ -3272,8 +3271,42 @@ const load = async () => {
         },
         marks
       );
+      // Patch local matrix so we do not wait for a full reload
+      setMatrix((prev) => {
+        if (!prev) return prev;
+        const nextRows = prev.rows.map((row) => {
+          const cells = { ...row.cells };
+          for (const col of prev.columns) {
+            const key = cellKey(row.student_id, col.id);
+            if (!(key in draft)) continue;
+            const trimmed = String(draft[key] ?? "").trim();
+            if (trimmed === "") {
+              cells[col.id] = {
+                ...(cells[col.id] || {}),
+                score: null,
+                is_absent: false,
+                percentage: null,
+                grade_letter: null,
+              };
+            } else {
+              const score = Number(trimmed);
+              if (Number.isNaN(score)) continue;
+              const max = col.max_score || 100;
+              const percentage = max ? (score / max) * 100 : null;
+              cells[col.id] = {
+                ...(cells[col.id] || {}),
+                score,
+                is_absent: false,
+                percentage,
+                grade_letter: cells[col.id]?.grade_letter ?? null,
+              };
+            }
+          }
+          return { ...row, cells };
+        });
+        return { ...prev, rows: nextRows };
+      });
       toast.success(`Saved ${res.saved} mark(s)`);
-      await load();
     } catch (e: unknown) {
       toast.error(getApiErrorDetail(e) || "Save failed");
     } finally {
@@ -3341,7 +3374,7 @@ const load = async () => {
       <div className="shrink-0 relative z-[80] overflow-visible rounded-xl border bg-white shadow-sm p-2.5 sm:p-3 space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted-foreground max-w-xl">
-            Standard columns: CAT 1–3 and End of Term (Practical for science/ICT subjects). Scores feed report cards automatically.
+            Markbook opens as soon as year, term, grade and subject are selected. Standard columns: CAT 1–3 and End of Term.
             Averages update as you type.
           </p>
           <div className="flex flex-wrap gap-2 shrink-0">
@@ -3379,7 +3412,7 @@ const load = async () => {
             />
             <Button size="sm" variant="outline" disabled={busy || loading} onClick={load}>
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-              {matrix ? "Reload" : "Open markbook"}
+              {busy ? "Loading…" : "Reload"}
             </Button>
             {matrix?.columns.length ? (
               <Button size="sm" className="bg-primary" disabled={saving} onClick={save}>
