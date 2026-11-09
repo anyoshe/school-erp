@@ -10,6 +10,7 @@ from .views import (
     PrepareGradeAssessmentsView,
     MarksCsvImportView,
     TranscriptView,
+    LearnerProgressView,
     ExamHallViewSet,
     ExamSittingViewSet,
     ExamAllocateSeatsView,
@@ -36,6 +37,7 @@ urlpatterns = [
     path("report-card/", ReportCardView.as_view(), name="report-card"),
     path("report-cards/", ClassReportCardsView.as_view(), name="report-cards"),
     path("transcript/", TranscriptView.as_view(), name="transcript"),
+    path("learner-progress/", LearnerProgressView.as_view(), name="learner-progress"),
     path("marks-matrix/", MarksMatrixView.as_view(), name="marks-matrix"),
     path(
         "assessment-plans/default/",

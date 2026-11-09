@@ -19,6 +19,7 @@ export type Term = {
   end_date: string;
   order: number;
   is_current?: boolean;
+  is_locked?: boolean;
 };
 
 export type GradeLevel = {
@@ -156,6 +157,32 @@ export async function adoptCurriculumTemplate(templateId: number) {
     template_id: templateId,
   });
   return data;
+}
+
+export async function setTermLocked(termId: number, is_locked: boolean) {
+  const { data } = await api.patch(`/academics/terms/${termId}/`, { is_locked });
+  return data as Term;
+}
+
+export async function fetchLearnerProgress(studentId: string) {
+  const { data } = await api.get("/assessments/learner-progress/", {
+    params: { student: studentId },
+  });
+  return data as {
+    student: { id: string; admission_number: string; name: string; current_class?: string };
+    periods: Array<{
+      academic_year: { id: number | null; name: string };
+      term: { id: number | null; name: string; is_locked?: boolean };
+      grade_level: { id: number | null; name: string };
+      subjects: Array<{ subject_name: string; average: number | null; grade_letter?: string | null }>;
+      overall_average: number | null;
+      overall_grade?: string | null;
+    }>;
+    subject_trends: Array<{
+      subject_name: string;
+      points: Array<{ academic_year: string; term: string; grade: string; average: number }>;
+    }>;
+  };
 }
 
 export async function setCurrentTerm(termId: number) {
@@ -639,6 +666,7 @@ export type MarksMatrixRow = {
 };
 
 export type MarksMatrix = {
+  term_locked?: boolean;
   academic_year: { id: number; name: string };
   term: { id: number; name: string };
   grade_level: { id: number; name: string };

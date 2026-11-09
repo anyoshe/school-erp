@@ -1,5 +1,7 @@
 "use client";
 
+import api from "@/utils/api";
+
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { createPortal } from "react-dom";
@@ -7,6 +9,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import { toast } from "sonner";
 import {
+  TrendingUp,
   BookOpen, CalendarRange, Layers, GraduationCap, Plus, Sparkles,
   CheckCircle2, Circle, ChevronRight, Users, Loader2, ClipboardList,
   FileText, ChevronDown,
@@ -29,7 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   fetchAcademicYears, createAcademicYear, activateAcademicYear, addTerm,
-  setCurrentTerm, seedDefaultTerms, fetchCurrentCalendar,
+  setCurrentTerm, setTermLocked, seedDefaultTerms, fetchCurrentCalendar, fetchLearnerProgress,
   fetchGradeLevels, createGradeLevel, createSection,
   fetchClassRegister, ensureGradeSections, assignStudentsToSection,
   fetchSubjects, createSubject, fetchCurricula,
@@ -51,7 +54,8 @@ type Tab =
   | "teachers"
   | "marks"
   | "report-cards"
-  | "promotion";
+  | "promotion"
+  | "progress";
 
 
 function getApiErrorDetail(error: unknown): string | undefined {
@@ -106,6 +110,7 @@ const ACADEMICS_TABS: { id: Tab; label: string }[] = [
   { id: "teachers", label: "Teachers" },
   { id: "marks", label: "Marks entry" },
   { id: "report-cards", label: "Report cards" },
+  { id: "progress", label: "Learner progress" },
   { id: "promotion", label: "Promotion" },
 ];
 
@@ -126,6 +131,8 @@ function TabIcon({ id, className }: { id: Tab; className?: string }) {
       return <ClipboardList className={cn} />;
     case "report-cards":
       return <FileText className={cn} />;
+    case "progress":
+      return <TrendingUp className={cn} />;
     case "promotion":
       return <GraduationCap className={cn} />;
     default:
@@ -603,6 +610,9 @@ export default function AcademicsPage() {
       {tab === "report-cards" && (
         <ReportCardsPanel grades={grades} years={years} loading={gradesQ.isLoading || yearsQ.isLoading} />
       )}
+      {tab === "progress" && (
+        <LearnerProgressPanel />
+      )}
       {tab === "promotion" && (
         <PromotionPanel
           years={years}
@@ -858,67 +868,47 @@ function YearsPanel({
                     {/* Mini timeline */}
                     <div className="mt-3 flex flex-wrap gap-2">
                       {(y.terms || []).map((term) => (
-                        <button
-                          key={term.id}
-                          type="button"
-                          onClick={() => currentMut.mutate(term.id)}
-                          disabled={currentMut.isPending}
-                          className={`text-xs px-3 py-1.5 rounded-lg border transition-colors text-left ${
-                            term.is_current
-                              ? "bg-emerald-600 text-white border-emerald-700 shadow-sm"
-                              : "bg-primary-50 text-primary-900 border-primary-100 hover:border-emerald-400"
-                          }`}
-                          title="Set as current term"
-                        >
-                          <span className="font-semibold">{term.name}</span>
-                          {term.is_current && (
-                            <span className="ml-1 font-bold">· current</span>
-                          )}
-                          <span className={term.is_current ? "ml-1 opacity-90" : "text-primary-700/70 ml-1"}>
-                            {term.start_date?.slice(5)} – {term.end_date?.slice(5)}
-                          </span>
-                        </button>
+                        <div key={term.id} className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => currentMut.mutate(term.id)}
+                            disabled={currentMut.isPending}
+                            className={`text-xs px-3 py-1.5 rounded-lg border transition-colors text-left ${
+                              term.is_current
+                                ? "bg-emerald-600 text-white border-emerald-700 shadow-sm"
+                                : "bg-primary-50 text-primary-900 border-primary-100 hover:border-emerald-400"
+                            }`}
+                            title="Set as current term"
+                          >
+                            {term.name}
+                            {term.is_current && (
+                              <span className="ml-1 font-bold">· current</span>
+                            )}
+                            {term.is_locked && (
+                              <span className="ml-1 font-bold">· locked</span>
+                            )}
+                            <span className={term.is_current ? "ml-1 opacity-90" : "text-primary-700/70 ml-1"}>
+                              {term.start_date?.slice(5)} – {term.end_date?.slice(5)}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`text-[10px] px-2 py-1 rounded-md border ${
+                              term.is_locked
+                                ? "bg-amber-50 text-amber-900 border-amber-200"
+                                : "bg-white text-muted-foreground border-border"
+                            }`}
+                            title={term.is_locked ? "Unlock marks for this term" : "Lock marks (view-only)"}
+                            disabled={lockMut.isPending}
+                            onClick={() =>
+                              lockMut.mutate({ id: term.id, locked: !term.is_locked })
+                            }
+                          >
+                            {term.is_locked ? "Unlock" : "Lock"}
+                          </button>
+                        </div>
                       ))}
-                      {(y.terms || []).length === 0 && (
-                        <span className="text-xs text-textMuted">No terms yet — activate year or seed terms</span>
-                      )}
                     </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {!y.is_active && (
-                      <Button size="sm" variant="outline" onClick={() => activateMut.mutate(y.id)}>
-                        Set active
-                      </Button>
-                    )}
-                    {y.is_active && (y.terms || []).length === 0 && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={seedMut.isPending}
-                        onClick={() => seedMut.mutate(y.id)}
-                      >
-                        Seed Term 1–3
-                      </Button>
-                    )}
-                    {(y.terms || []).length === 0 && !y.is_active && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={seedMut.isPending}
-                        onClick={() => seedMut.mutate(y.id)}
-                      >
-                        Seed Term 1–3
-                      </Button>
-                    )}
-                    <Button size="sm" className="bg-secondary hover:bg-secondary-700 text-white" onClick={() => setTermOpen(y)}>
-                      <Plus className="h-3.5 w-3.5 mr-1" /> Term
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -973,7 +963,7 @@ function YearsPanel({
             </div>
             <div>
               <Label>Order</Label>
-              <Input type="number" min={1} value={termForm.order} onChange={(e) => setTermForm({ ...termForm, order: Number(e.target.value) })} />
+              <Input type="number" readOnly={!!(matrix as any)?.term_locked} min={1} value={termForm.order} onChange={(e) => setTermForm({ ...termForm, order: Number(e.target.value) })} />
             </div>
           </div>
           <DialogFooter>
@@ -1283,7 +1273,7 @@ function ClassesPanel({
               </div>
               <div>
                 <Label>Order</Label>
-                <Input type="number" value={form.order} onChange={(e) => setForm({ ...form, order: Number(e.target.value) })} />
+                <Input type="number" readOnly={!!(matrix as any)?.term_locked} value={form.order} onChange={(e) => setForm({ ...form, order: Number(e.target.value) })} />
               </div>
             </div>
           </div>
@@ -1305,7 +1295,7 @@ function ClassesPanel({
             </div>
             <div>
               <Label>Capacity (optional)</Label>
-              <Input type="number" min={1} value={secCap} onChange={(e) => setSecCap(e.target.value)} placeholder="e.g. 40" />
+              <Input type="number" readOnly={!!(matrix as any)?.term_locked} min={1} value={secCap} onChange={(e) => setSecCap(e.target.value)} placeholder="e.g. 40" />
             </div>
           </div>
           <DialogFooter>
@@ -3261,6 +3251,10 @@ const load = async (opts?: { quiet?: boolean }) => {
         toast.message("No changes to save");
         return;
       }
+      if ((matrix as any)?.term_locked) {
+        toast.error("This term is locked. Unlock it under Years & Terms to edit marks.");
+        return;
+      }
       const res = await saveMarksMatrix(
         {
           academic_year: Number(yearId),
@@ -3415,7 +3409,7 @@ const load = async (opts?: { quiet?: boolean }) => {
               {busy ? "Loading…" : "Reload"}
             </Button>
             {matrix?.columns.length ? (
-              <Button size="sm" className="bg-primary" disabled={saving} onClick={save}>
+              <Button size="sm" className="bg-primary" disabled={saving || !!(matrix as any)?.term_locked} onClick={save}>
                 {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
                 Save all
               </Button>
@@ -3497,7 +3491,12 @@ const load = async (opts?: { quiet?: boolean }) => {
             />
           </div>
         </div>
-        {matrix ? (
+        {(matrix as any)?.term_locked ? (
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          This term is <strong>locked</strong>. You can view marks but not edit them. Unlock under Years &amp; Terms.
+        </p>
+      ) : null}
+      {matrix ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-[11px] text-muted-foreground">
               {matrix.grade_level.name} · {matrix.subject.name} · {matrix.term.name} ·{" "}
@@ -3537,7 +3536,7 @@ const load = async (opts?: { quiet?: boolean }) => {
             </Button>
           </div>
         ) : matrix ? (
-          <div className="flex-1 min-h-0 overflow-auto">
+          <div className={`flex-1 min-h-0 overflow-auto ${(matrix as any)?.term_locked ? "opacity-95" : ""}`}>
             <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground sticky top-0 z-[1] shadow-sm">
                 <tr>
@@ -3565,7 +3564,7 @@ const load = async (opts?: { quiet?: boolean }) => {
                     {matrix.columns.map((col) => (
                       <td key={col.id} className="px-1 py-0.5">
                         <Input
-                          type="number"
+                          type="number" readOnly={!!(matrix as any)?.term_locked}
                           min={0}
                           max={col.max_score}
                           step="0.5"
@@ -3639,6 +3638,179 @@ const load = async (opts?: { quiet?: boolean }) => {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function LearnerProgressPanel() {
+  const [q, setQ] = useState("");
+  const [students, setStudents] = useState<{ id: string; name: string; admission_number?: string }[]>([]);
+  const [studentId, setStudentId] = useState("");
+  const [data, setData] = useState<Awaited<ReturnType<typeof fetchLearnerProgress>> | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get("/students/", { params: { page_size: 200 } });
+        const list = res.data?.results ?? res.data ?? [];
+        const rows = (Array.isArray(list) ? list : []).map((s: any) => ({
+          id: String(s.id),
+          name: `${s.first_name || ""} ${s.last_name || ""}`.trim() || s.admission_number || "Student",
+          admission_number: s.admission_number,
+        }));
+        if (!cancelled) setStudents(rows);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filtered = students.filter((s) => {
+    if (!q.trim()) return true;
+    const blob = `${s.name} ${s.admission_number || ""}`.toLowerCase();
+    return blob.includes(q.trim().toLowerCase());
+  });
+
+  const load = async (id: string) => {
+    setStudentId(id);
+    setBusy(true);
+    try {
+      const d = await fetchLearnerProgress(id);
+      setData(d);
+    } catch (e: unknown) {
+      toast.error(getApiErrorDetail(e) || "Could not load progress");
+      setData(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-border rounded-2xl">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Learner progress</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Full history by year and term — from joining to date. Marks stay after promotion.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Input
+            placeholder="Search learner by name or admission number"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <div className="max-h-40 overflow-y-auto rounded-lg border divide-y">
+            {filtered.slice(0, 40).map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => load(s.id)}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-muted/50 ${
+                  studentId === s.id ? "bg-primary/10" : ""
+                }`}
+              >
+                <span className="font-medium">{s.name}</span>
+                {s.admission_number ? (
+                  <span className="text-muted-foreground ml-2 text-xs">{s.admission_number}</span>
+                ) : null}
+              </button>
+            ))}
+            {!filtered.length && (
+              <p className="px-3 py-4 text-sm text-muted-foreground">No learners match.</p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {busy && <p className="text-sm text-muted-foreground">Loading progress…</p>}
+
+      {data && !busy && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <h3 className="text-lg font-bold">{data.student.name}</h3>
+              <p className="text-sm text-muted-foreground">
+                {data.student.admission_number}
+                {data.student.current_class ? ` · now ${data.student.current_class}` : ""}
+              </p>
+            </div>
+          </div>
+
+          {(data.periods || []).map((p, idx) => (
+            <Card key={idx} className="border-border rounded-2xl overflow-hidden">
+              <CardHeader className="py-3 bg-slate-50">
+                <CardTitle className="text-sm font-semibold">
+                  {p.academic_year?.name} · {p.term?.name} · {p.grade_level?.name}
+                  {p.overall_average != null ? (
+                    <span className="ml-2 text-primary">
+                      Overall {p.overall_average}% {p.overall_grade || ""}
+                    </span>
+                  ) : null}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <table className="w-full text-sm">
+                  <thead className="text-xs text-muted-foreground border-b">
+                    <tr>
+                      <th className="text-left px-3 py-2">Subject</th>
+                      <th className="text-right px-3 py-2">Average</th>
+                      <th className="text-center px-3 py-2">Grade</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(p.subjects || []).map((s) => (
+                      <tr key={s.subject_name} className="border-t">
+                        <td className="px-3 py-1.5">{s.subject_name}</td>
+                        <td className="px-3 py-1.5 text-right tabular-nums">
+                          {s.average != null ? `${s.average}%` : "—"}
+                        </td>
+                        <td className="px-3 py-1.5 text-center font-medium">{s.grade_letter || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          ))}
+
+          {(data.subject_trends || []).length > 0 && (
+            <Card className="border-border rounded-2xl">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Subject trends</CardTitle>
+                <p className="text-xs text-muted-foreground">Average % across terms (growth at a glance)</p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(data.subject_trends || []).map((tr) => (
+                  <div key={tr.subject_name}>
+                    <p className="text-sm font-medium mb-1">{tr.subject_name}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(tr.points || []).map((pt, i) => (
+                        <span
+                          key={i}
+                          className="text-[11px] px-2 py-1 rounded-md bg-primary/10 text-primary-900 border border-primary/20 tabular-nums"
+                          title={`${pt.academic_year} ${pt.term} (${pt.grade})`}
+                        >
+                          {pt.term}: {pt.average}%
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {!data.periods?.length && (
+            <p className="text-sm text-muted-foreground">No marks recorded for this learner yet.</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

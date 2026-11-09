@@ -158,7 +158,7 @@ class DepartmentCreateUpdateSerializer(serializers.ModelSerializer):
 class TermSerializer(serializers.ModelSerializer):
     class Meta:
         model = Term
-        fields = ['id', 'academic_year', 'name', 'start_date', 'end_date', 'order', 'is_current']
+        fields = ['id', 'academic_year', 'name', 'start_date', 'end_date', 'order', 'is_current', 'is_locked']
 
 
 class AcademicYearSerializer(serializers.ModelSerializer):
@@ -192,7 +192,7 @@ class AcademicYearCreateUpdateSerializer(serializers.ModelSerializer):
 class TermCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Term
-        fields = ['id', 'academic_year', 'name', 'start_date', 'end_date', 'order', 'is_current']
+        fields = ['id', 'academic_year', 'name', 'start_date', 'end_date', 'order', 'is_current', 'is_locked']
 
 
 class SubjectSerializer(serializers.ModelSerializer):

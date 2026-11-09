@@ -142,7 +142,6 @@ const emptyForm = {
   bank_account: "",
   next_of_kin: "",
   next_of_kin_phone: "",
-,
   default_basic_salary: "",
   default_allowances: "0",
   default_deductions: "0",

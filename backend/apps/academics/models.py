@@ -722,6 +722,10 @@ class Term(models.Model):
         default=False,
         help_text="When true, this is the school's current teaching term (within the active year).",
     )
+    is_locked = models.BooleanField(
+        default=False,
+        help_text="When true, marks for this term are view-only (no new entry or edits).",
+    )
 
     class Meta:
 

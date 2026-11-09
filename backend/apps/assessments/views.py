@@ -517,29 +517,33 @@ class ClassReportCardsView(APIView):
         if not grade_id:
             return Response({"detail": "grade_level is required"}, status=400)
 
-        from apps.students.models import Student
+        from apps.academics.models import AcademicYear, GradeLevel, Term
+        from .roster import students_for_grade_period
 
-        qs = (
-            Student.objects.filter(
-                school=school,
-                current_class_id=grade_id,
-            )
-            .exclude(status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED", "PENDING_CLEARANCE"])
-            .select_related(
-                "current_class",
-                "current_class__curriculum",
-                "section",
-                "section__class_teacher",
-                "section__class_teacher__user",
-            )
-            .order_by("last_name", "first_name")
-        )
+        try:
+            grade = GradeLevel.objects.get(pk=grade_id, school=school)
+        except GradeLevel.DoesNotExist:
+            return Response({"detail": "Invalid grade"}, status=400)
+
+        year_id = request.query_params.get("academic_year")
+        term_id = request.query_params.get("term")
+        year = AcademicYear.objects.filter(pk=year_id, school=school).first() if year_id else None
+        term = Term.objects.filter(pk=term_id, academic_year__school=school).first() if term_id else None
         section_id = request.query_params.get("section")
-        if section_id:
-            qs = qs.filter(section_id=section_id)
+
+        students = students_for_grade_period(
+            school=school,
+            grade=grade,
+            academic_year=year,
+            term=term,
+            section_id=section_id or None,
+            include_inactive_statuses=True,
+            limit=400,
+            sort="name",
+        )
 
         cards = []
-        for student in qs[:400]:
+        for student in students:
             card = _build_student_report(
                 student,
                 school,
@@ -668,19 +672,18 @@ class MarksMatrixView(APIView):
         grade_has_plan = bool(assessments)
 
         sort = (request.query_params.get("sort") or "name").lower()
-        students = Student.objects.filter(
-            school=school, current_class=ctx["grade"]
-        ).exclude(
-            status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED", "PENDING_CLEARANCE"]
-        )
-        if ctx["section_id"]:
-            students = students.filter(section_id=ctx["section_id"])
-        if sort in ("admission", "admission_number", "adm"):
-            students = students.order_by("admission_number", "last_name", "first_name")
-        else:
-            students = students.order_by("last_name", "first_name", "admission_number")
+        from .roster import students_for_grade_period
 
-        students = list(students[:400])
+        students = students_for_grade_period(
+            school=school,
+            grade=ctx["grade"],
+            academic_year=ctx["year"],
+            term=ctx["term"],
+            section_id=ctx.get("section_id"),
+            include_inactive_statuses=True,
+            limit=400,
+            sort=sort,
+        )
         student_ids = [s.id for s in students]
 
         marks = Mark.objects.filter(
@@ -739,10 +742,15 @@ class MarksMatrixView(APIView):
                 }
             )
 
+        term_locked = bool(getattr(ctx.get("term"), "is_locked", False))
         return Response(
             {
                 "academic_year": {"id": ctx["year"].id, "name": ctx["year"].name},
-                "term": {"id": ctx["term"].id, "name": ctx["term"].name},
+                "term": {
+                    "id": ctx["term"].id,
+                    "name": ctx["term"].name,
+                    "is_locked": term_locked,
+                },
                 "grade_level": {"id": ctx["grade"].id, "name": ctx["grade"].name},
                 "subject": {"id": ctx["subject"].id, "name": ctx["subject"].name},
                 "section_id": ctx["section_id"],
@@ -750,6 +758,7 @@ class MarksMatrixView(APIView):
                 "passing_mark": passing_mark,
                 "columns": columns,
                 "grade_has_plan": grade_has_plan,
+                "term_locked": term_locked,
                 "rows": rows,
                 "assessment_names": [c["name"] for c in columns],
                 "preset": [c["name"] for c in columns],
@@ -762,6 +771,15 @@ class MarksMatrixView(APIView):
         ctx, err = self._resolve_context(request)
         if err:
             return err
+
+        term = ctx.get("term")
+        if term is not None and getattr(term, "is_locked", False):
+            return Response(
+                {
+                    "detail": "This term is locked. Marks are view-only. Unlock the term under Academics → Years & Terms to edit.",
+                },
+                status=403,
+            )
 
         school = ctx["school"]
         assessments = list(self._get_assessments(ctx))
@@ -776,15 +794,20 @@ class MarksMatrixView(APIView):
             return Response({"saved": 0, "errors": []})
 
         errors = []
-        # One query for valid students in this class (avoid per-row exists())
-        student_qs = Student.objects.filter(
-            school=school, current_class=ctx["grade"]
-        ).exclude(
-            status__in=["TRANSFERRED", "WITHDRAWN", "GRADUATED", "PENDING_CLEARANCE"]
-        )
-        if ctx["section_id"]:
-            student_qs = student_qs.filter(section_id=ctx["section_id"])
-        valid_students = {str(pk) for pk in student_qs.values_list("id", flat=True)}
+        from .roster import students_for_grade_period
+
+        valid_students = {
+            str(s.id)
+            for s in students_for_grade_period(
+                school=school,
+                grade=ctx["grade"],
+                academic_year=ctx["year"],
+                term=ctx["term"],
+                section_id=ctx.get("section_id"),
+                include_inactive_statuses=True,
+                limit=2000,
+            )
+        }
 
         parsed = []
         for row in payload:
@@ -1371,6 +1394,172 @@ class TranscriptView(APIView):
                     "This is to certify that the above is a true extract of the academic record "
                     "of the named learner as held by the school."
                 ),
+            }
+        )
+
+
+
+class LearnerProgressView(APIView):
+    """
+    Full academic progress for one learner: every year/term subject averages,
+    for growth analysis from joining to date.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+        student_id = request.query_params.get("student")
+        if not student_id:
+            return Response({"detail": "student is required"}, status=400)
+
+        from apps.students.models import Student
+        from .grading import grade_label, grading_system_for_school
+        from .models import Mark
+
+        try:
+            student = Student.objects.select_related(
+                "current_class", "current_class__curriculum"
+            ).get(pk=student_id, school=school)
+        except Student.DoesNotExist:
+            return Response({"detail": "Student not found"}, status=404)
+
+        marks = (
+            Mark.objects.filter(student=student, school=school)
+            .select_related(
+                "assessment",
+                "assessment__subject",
+                "assessment__academic_year",
+                "assessment__term",
+                "assessment__grade_level",
+            )
+            .order_by(
+                "assessment__academic_year__start_date",
+                "assessment__term__order",
+                "assessment__subject__name",
+            )
+        )
+
+        # period_key -> subject_key -> weighted accumulators
+        periods = {}
+        for m in marks:
+            a = m.assessment
+            pct = m.percentage
+            if pct is None:
+                continue
+            year = a.academic_year
+            term = a.term
+            pk = (
+                year.id if year else 0,
+                term.id if term else 0,
+            )
+            period = periods.setdefault(
+                pk,
+                {
+                    "academic_year": {
+                        "id": year.id if year else None,
+                        "name": year.name if year else "—",
+                    },
+                    "term": {
+                        "id": term.id if term else None,
+                        "name": term.name if term else "—",
+                        "is_locked": bool(getattr(term, "is_locked", False)) if term else False,
+                    },
+                    "grade_level": {
+                        "id": a.grade_level_id,
+                        "name": getattr(a.grade_level, "name", None) or "—",
+                    },
+                    "subjects": {},
+                },
+            )
+            sk = str(a.subject_id)
+            bucket = period["subjects"].setdefault(
+                sk,
+                {
+                    "subject_id": sk,
+                    "subject_name": a.subject.name if a.subject_id else "—",
+                    "weighted_sum": Decimal("0"),
+                    "weight_total": Decimal("0"),
+                    "entries": [],
+                },
+            )
+            w = Decimal(str(a.weight or 1))
+            bucket["weighted_sum"] += Decimal(str(pct)) * w
+            bucket["weight_total"] += w
+            bucket["entries"].append(
+                {
+                    "assessment": a.name,
+                    "percentage": float(pct),
+                    "score": float(m.score) if m.score is not None else None,
+                }
+            )
+
+        curriculum = getattr(getattr(student, "current_class", None), "curriculum", None)
+        grading_system = grading_system_for_school(school, curriculum)
+        passing = int(getattr(school, "passing_mark", None) or 50)
+
+        series = []
+        subject_trends = {}  # subject_name -> list of {period, average}
+
+        for pk in sorted(periods.keys(), key=lambda x: (x[0], x[1])):
+            period = periods[pk]
+            subject_rows = []
+            overall_sum = Decimal("0")
+            overall_n = 0
+            for b in sorted(period["subjects"].values(), key=lambda x: x["subject_name"]):
+                avg = None
+                if b["weight_total"] > 0:
+                    avg = float(b["weighted_sum"] / b["weight_total"])
+                    overall_sum += Decimal(str(avg))
+                    overall_n += 1
+                avg_r = round(avg, 1) if avg is not None else None
+                subject_rows.append(
+                    {
+                        "subject_id": b["subject_id"],
+                        "subject_name": b["subject_name"],
+                        "average": avg_r,
+                        "grade_letter": grade_label(avg, grading_system, passing) if avg is not None else None,
+                        "entries": b["entries"],
+                    }
+                )
+                if avg_r is not None:
+                    subject_trends.setdefault(b["subject_name"], []).append(
+                        {
+                            "academic_year": period["academic_year"]["name"],
+                            "term": period["term"]["name"],
+                            "grade": period["grade_level"]["name"],
+                            "average": avg_r,
+                        }
+                    )
+            overall = float(overall_sum / overall_n) if overall_n else None
+            series.append(
+                {
+                    "academic_year": period["academic_year"],
+                    "term": period["term"],
+                    "grade_level": period["grade_level"],
+                    "subjects": subject_rows,
+                    "overall_average": round(overall, 1) if overall is not None else None,
+                    "overall_grade": grade_label(overall, grading_system, passing)
+                    if overall is not None
+                    else None,
+                }
+            )
+
+        return Response(
+            {
+                "student": {
+                    "id": str(student.id),
+                    "admission_number": student.admission_number or "",
+                    "name": f"{student.first_name or ''} {student.last_name or ''}".strip(),
+                    "current_class": getattr(student.current_class, "name", None),
+                },
+                "periods": series,
+                "subject_trends": [
+                    {"subject_name": k, "points": v}
+                    for k, v in sorted(subject_trends.items(), key=lambda x: x[0])
+                ],
             }
         )
 
