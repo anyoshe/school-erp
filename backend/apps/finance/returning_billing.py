@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.core.tenancy import selected_school
+from apps.school.support import selected_school
 
 
 class ReturningStudentsView(APIView):
