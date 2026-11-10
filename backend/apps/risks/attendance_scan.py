@@ -24,11 +24,18 @@ RATE_DELTA = 0.15  # 15 percentage points
 
 def scan_attendance_risks_for_school(school, today: date | None = None) -> dict:
     from apps.attendance.models import StudentAttendance
+    from apps.risks.settings_util import get_risk_settings
 
     today = today or timezone.localdate()
+    cfg = get_risk_settings(school)
+    consecutive_need = int(cfg.consecutive_absent_days or CONSECUTIVE_ABSENT)
+    mon_fri_need = int(cfg.mon_fri_absent_count or MON_FRI_ABSENT)
+    chronic_need = int(cfg.chronic_absent_60d or CHRONIC_ABSENT_60D)
+    rate_window = int(cfg.absence_rate_window_days or RATE_WINDOW)
+    rate_delta = float(cfg.absence_rate_delta or RATE_DELTA)
     start_60 = today - timedelta(days=60)
     start_30 = today - timedelta(days=30)
-    start_30_prior = today - timedelta(days=30 + RATE_WINDOW)
+    start_30_prior = today - timedelta(days=30 + rate_window)
 
     rows = list(
         StudentAttendance.objects.filter(
@@ -83,7 +90,7 @@ def scan_attendance_risks_for_school(school, today: date | None = None) -> dict:
             else:
                 run = 0
 
-        if any_streak >= CONSECUTIVE_ABSENT:
+        if any_streak >= consecutive_need:
             fp = f"att:streak:{sid}"
             obj, created = upsert_alert(
                 school=school,
@@ -109,7 +116,7 @@ def scan_attendance_risks_for_school(school, today: date | None = None) -> dict:
             for r in absences
             if r.date >= start_30 and r.date.weekday() in (0, 4)  # Mon=0, Fri=4
         ]
-        if len(mon_fri) >= MON_FRI_ABSENT:
+        if len(mon_fri) >= mon_fri_need:
             fp = f"att:monfri:{sid}"
             obj, created = upsert_alert(
                 school=school,
@@ -130,16 +137,16 @@ def scan_attendance_risks_for_school(school, today: date | None = None) -> dict:
             updated_n += int(not created)
 
         # 3) Rising rate: last 15d vs previous 15d
-        recent = [r for r in records if r.date > today - timedelta(days=RATE_WINDOW)]
+        recent = [r for r in records if r.date > today - timedelta(days=rate_window)]
         prior = [
             r
             for r in records
-            if today - timedelta(days=2 * RATE_WINDOW) < r.date <= today - timedelta(days=RATE_WINDOW)
+            if today - timedelta(days=2 * rate_window) < r.date <= today - timedelta(days=rate_window)
         ]
         if len(recent) >= 5 and len(prior) >= 5:
             r_abs = sum(1 for r in recent if r.status == "ABSENT") / len(recent)
             p_abs = sum(1 for r in prior if r.status == "ABSENT") / len(prior)
-            if r_abs >= p_abs + RATE_DELTA and r_abs >= 0.2:
+            if r_abs >= p_abs + rate_delta and r_abs >= 0.2:
                 fp = f"att:rising:{sid}"
                 obj, created = upsert_alert(
                     school=school,
@@ -148,13 +155,13 @@ def scan_attendance_risks_for_school(school, today: date | None = None) -> dict:
                     severity="HIGH" if r_abs >= 0.4 else "MEDIUM",
                     title=f"{name}: absences rising sharply",
                     detail=(
-                        f"{adm}: absence rate {r_abs*100:.0f}% (last {RATE_WINDOW} days) vs "
+                        f"{adm}: absence rate {r_abs*100:.0f}% (last {rate_window} days) vs "
                         f"{p_abs*100:.0f}% prior period (+{(r_abs-p_abs)*100:.0f} pts)."
                     ),
                     metrics={
                         "recent_rate": round(r_abs, 3),
                         "prior_rate": round(p_abs, 3),
-                        "window": RATE_WINDOW,
+                        "window": rate_window,
                     },
                     student=student,
                     action_path=action,
@@ -165,7 +172,7 @@ def scan_attendance_risks_for_school(school, today: date | None = None) -> dict:
 
         # 4) Chronic
         abs_60 = len(absences)
-        if abs_60 >= CHRONIC_ABSENT_60D:
+        if abs_60 >= chronic_need:
             fp = f"att:chronic:{sid}"
             obj, created = upsert_alert(
                 school=school,

@@ -91,6 +91,12 @@ def send_digest(
     from apps.risks.models import RiskDigestLog
 
     today = timezone.localdate()
+    if not channel:
+        try:
+            from apps.risks.settings_util import get_risk_settings
+            channel = get_risk_settings(school).digest_channel
+        except Exception:
+            channel = None
     channel = (channel or os.getenv("RISK_DIGEST_CHANNEL") or "LOG").strip().upper()
     if channel not in ("LOG", "WHATSAPP", "EMAIL", "BOTH"):
         channel = "LOG"

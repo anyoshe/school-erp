@@ -185,6 +185,14 @@ export function RiskAttentionCard() {
             type="button"
             size="sm"
             variant="secondary"
+            onClick={() => router.push("/dashboard/modules/risks")}
+          >
+            Risk center
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
             onClick={() => router.push("/dashboard/modules/finance")}
           >
             Open finance

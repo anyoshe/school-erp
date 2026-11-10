@@ -24,9 +24,13 @@ BURN_WINDOW_DAYS = 7
 
 def scan_ops_risks_for_school(school) -> dict:
     from apps.inventory.models import Asset, ConsumableItem, StockMovement
+    from apps.risks.settings_util import get_risk_settings
 
+    cfg = get_risk_settings(school)
+    burn_mult = Decimal(str(cfg.burn_multiplier or BURN_MULTIPLIER))
+    burn_days = int(cfg.burn_window_days or BURN_WINDOW_DAYS)
     today = timezone.localdate()
-    start = today - timedelta(days=BURN_WINDOW_DAYS)
+    start = today - timedelta(days=burn_days)
     keep: set[str] = set()
     created_n = updated_n = 0
 
@@ -104,8 +108,8 @@ def scan_ops_risks_for_school(school) -> dict:
                 or 0
             )
             out_sum = Decimal(str(out_sum))
-            avg_daily = out_sum / Decimal(str(BURN_WINDOW_DAYS))
-            if avg_daily > expected * BURN_MULTIPLIER:
+            avg_daily = out_sum / Decimal(str(burn_days))
+            if avg_daily > expected * burn_mult:
                 fp = f"ops:burn:{item.id}"
                 obj, created = upsert_alert(
                     school=school,
@@ -114,7 +118,7 @@ def scan_ops_risks_for_school(school) -> dict:
                     severity="HIGH" if avg_daily > expected * Decimal("2") else "MEDIUM",
                     title=f"High burn-rate: {item.name}",
                     detail=(
-                        f"Avg daily use {float(avg_daily):.1f} {item.unit} over {BURN_WINDOW_DAYS}d "
+                        f"Avg daily use {float(avg_daily):.1f} {item.unit} over {burn_days}d "
                         f"vs expected {float(expected):g} {item.unit}/day "
                         f"({float((avg_daily/expected)*100):.0f}% of plan). Check waste or under-counted meals."
                     ),
@@ -122,7 +126,7 @@ def scan_ops_risks_for_school(school) -> dict:
                         "item_id": item.id,
                         "avg_daily_out": float(avg_daily),
                         "expected_daily_use": float(expected),
-                        "window_days": BURN_WINDOW_DAYS,
+                        "window_days": burn_days,
                         "total_out": float(out_sum),
                     },
                     action_path="/dashboard/modules/inventory",

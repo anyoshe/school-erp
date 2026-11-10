@@ -16,7 +16,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 
-MID_TERM_COLLECTION_THRESHOLD = Decimal("0.40")
+MID_TERM_COLLECTION_THRESHOLD = Decimal("0.40")  # defaults; overridden by SchoolRiskSettings
 MID_TERM_ELAPSED_THRESHOLD = Decimal("0.40")
 
 
@@ -103,8 +103,12 @@ def _current_term_window(school):
 
 def scan_fee_risks_for_school(school, today: date | None = None) -> dict:
     from apps.finance.models import Invoice
+    from apps.risks.settings_util import get_risk_settings
 
     today = today or timezone.localdate()
+    cfg = get_risk_settings(school)
+    mid_collect = Decimal(str(cfg.mid_term_collection_threshold or MID_TERM_COLLECTION_THRESHOLD))
+    mid_elapsed = Decimal(str(cfg.mid_term_elapsed_threshold or MID_TERM_ELAPSED_THRESHOLD))
     keep: set[str] = set()
     created_n = updated_n = 0
 
@@ -186,7 +190,7 @@ def scan_fee_risks_for_school(school, today: date | None = None) -> dict:
     term_name, year_label, start, end = _current_term_window(school)
     if start and end and end > start:
         elapsed = Decimal(str((today - start).days)) / Decimal(str((end - start).days or 1))
-        if elapsed >= MID_TERM_ELAPSED_THRESHOLD:
+        if elapsed >= mid_elapsed:
             # Aggregate per student for this term/year labels (fuzzy match on term string)
             term_q = Q()
             if term_name:
@@ -229,7 +233,7 @@ def scan_fee_risks_for_school(school, today: date | None = None) -> dict:
                 if due <= 0:
                     continue
                 ratio = paid / due
-                if ratio >= MID_TERM_COLLECTION_THRESHOLD:
+                if ratio >= mid_collect:
                     continue
                 sid = str(r["student_id"])
                 student = student_map.get(sid)

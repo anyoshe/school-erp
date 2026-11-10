@@ -52,6 +52,10 @@ def _cat_order_key(assessment) -> tuple:
 def scan_academic_risks_for_school(school) -> dict:
     from apps.academics.models import AcademicYear, Term
     from apps.assessments.models import Assessment, Mark
+    from apps.risks.settings_util import get_risk_settings
+
+    cfg = get_risk_settings(school)
+    drop_points = Decimal(str(cfg.cat_drop_points or DROP_POINTS))
 
     year = (
         AcademicYear.objects.filter(school=school, is_active=True)
@@ -129,7 +133,7 @@ def scan_academic_risks_for_school(school) -> dict:
             # Strictly declining across available points
             declining = all(pcts[i] > pcts[i + 1] for i in range(len(pcts) - 1))
             # Or last vs first drop ≥ 15
-            big_drop = pcts[-1] <= pcts[0] - DROP_POINTS
+            big_drop = pcts[-1] <= pcts[0] - drop_points
             if not (declining or big_drop):
                 continue
             subj_name = points_sorted[0][3]

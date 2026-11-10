@@ -73,6 +73,7 @@ const SETTINGS_LINKS: MenuItem[] = [
   { label: "Modules", href: "/dashboard/settings/modules", icon: Grid },
   { label: "Users & Roles", href: "/dashboard/settings/users", icon: Users },
   { label: "Billing", href: "/dashboard/settings/billing", icon: DollarSign },
+  { label: "Risk thresholds", href: "/dashboard/settings/school/risk", icon: Shield },
 ];
 
 export default function Sidebar({ isCollapsed }: SidebarProps) {
@@ -241,6 +242,22 @@ if (duplicates.length > 0) {
               </li>
             );
           })}
+
+          {/* Early warning */}
+          <li>
+            <Link
+              href="/dashboard/modules/risks"
+              className={clsx(
+                "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
+                pathname.startsWith("/dashboard/modules/risks")
+                  ? "bg-primary-50 text-primary-800 font-medium"
+                  : "text-gray-700 hover:bg-gray-100"
+              )}
+            >
+              <Shield className="w-5 h-5" />
+              {!isCollapsed && <span>Risk center</span>}
+            </Link>
+          </li>
 
           {/* Settings */}
           {(!isPlatformAdmin || Boolean(currentSchool)) && (

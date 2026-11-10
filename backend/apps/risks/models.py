@@ -114,3 +114,56 @@ class RiskDigestLog(models.Model):
 
     def __str__(self):
         return f"Digest {self.school_id} {self.digest_date} ({self.channel})"
+
+
+class SchoolRiskSettings(models.Model):
+    """Per-school thresholds and feature toggles for the early-warning engine (R7)."""
+
+    school = models.OneToOneField(
+        "school.School",
+        on_delete=models.CASCADE,
+        related_name="risk_settings",
+        primary_key=True,
+    )
+    # Feature toggles
+    enable_fee = models.BooleanField(default=True)
+    enable_attendance = models.BooleanField(default=True)
+    enable_academic = models.BooleanField(default=True)
+    enable_ops = models.BooleanField(default=True)
+    # Fee
+    mid_term_collection_threshold = models.DecimalField(
+        max_digits=4, decimal_places=2, default=0.40,
+        help_text="Flag when paid/due is below this ratio mid-term (e.g. 0.40 = 40%)",
+    )
+    mid_term_elapsed_threshold = models.DecimalField(
+        max_digits=4, decimal_places=2, default=0.40,
+        help_text="Only apply mid-term lag after this fraction of the term has elapsed",
+    )
+    # Attendance
+    consecutive_absent_days = models.PositiveSmallIntegerField(default=3)
+    mon_fri_absent_count = models.PositiveSmallIntegerField(default=3)
+    chronic_absent_60d = models.PositiveSmallIntegerField(default=7)
+    absence_rate_window_days = models.PositiveSmallIntegerField(default=15)
+    absence_rate_delta = models.DecimalField(
+        max_digits=4, decimal_places=2, default=0.15,
+        help_text="Minimum rise in absence rate (e.g. 0.15 = +15 points)",
+    )
+    # Academic
+    cat_drop_points = models.DecimalField(
+        max_digits=5, decimal_places=2, default=15,
+        help_text="Point drop from first to latest CAT that triggers trajectory risk",
+    )
+    # Ops
+    burn_multiplier = models.DecimalField(max_digits=4, decimal_places=2, default=1.25)
+    burn_window_days = models.PositiveSmallIntegerField(default=7)
+    # Digest defaults
+    digest_channel = models.CharField(
+        max_length=20,
+        default="LOG",
+        help_text="LOG | WHATSAPP | EMAIL | BOTH",
+    )
+    digest_limit = models.PositiveSmallIntegerField(default=5)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Risk settings · {self.school_id}"
