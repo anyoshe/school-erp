@@ -67,6 +67,13 @@ export default function AuthResolvePage() {
           return;
         }
 
+        // Parents land on the parent portal, not the staff dashboard
+        const role = (user.role || "").toUpperCase();
+        if (role === "PARENT") {
+          router.replace("/dashboard/modules/parent");
+          return;
+        }
+
         router.replace("/dashboard");
       } catch {
         router.replace("/login");
