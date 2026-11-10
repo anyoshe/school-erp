@@ -486,7 +486,7 @@ export default function Welcome() {
                             </button>
                           </form>
 
-                          <div className="mt-6 text-center">
+                          <div className="mt-6 text-center space-y-2">
                             <Link
                               href="/"
                               className="inline-flex items-center gap-1.5 text-sm hover:underline transition-all"
@@ -495,6 +495,15 @@ export default function Welcome() {
                               <ChevronRight className="w-3.5 h-3.5 rotate-180" />
                               Back to homepage
                             </Link>
+                            <div>
+                              <Link
+                                href="/parent-login"
+                                className="text-sm font-medium hover:underline transition-all"
+                                style={{ color: colors.textMuted }}
+                              >
+                                Parent portal login →
+                              </Link>
+                            </div>
                           </div>
 
                           <div className="mt-6 pt-6 border-t text-center" style={{ borderColor: colors.borderLight }}>

@@ -94,13 +94,20 @@ export default function Home() {
                 About
               </a>
               <Link
+                href="/parent-login"
+                className="text-sm font-semibold transition-colors hover:text-primary-700"
+                style={{ color: colors.primary }}
+              >
+                Parent login
+              </Link>
+              <Link
                 href="/login"
                 className="px-4 sm:px-5 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0"
                 style={{
                   background: `linear-gradient(135deg, ${colors.primary}, ${colors.primaryHover})`,
                 }}
               >
-                Sign In <ArrowRight className="inline ml-1.5 w-3.5 h-3.5" />
+                Staff sign in <ArrowRight className="inline ml-1.5 w-3.5 h-3.5" />
               </Link>
             </nav>
 
@@ -122,7 +129,7 @@ export default function Home() {
           {/* Mobile Navigation Menu */}
           <div
             className={`md:hidden overflow-hidden transition-all duration-300 ease-in-out ${
-              isMenuOpen ? "max-h-64 mt-3 opacity-100" : "max-h-0 opacity-0"
+              isMenuOpen ? "max-h-80 mt-3 opacity-100" : "max-h-0 opacity-0"
             }`}
           >
             <div className="py-3 border-t" style={{ borderColor: colors.borderLight }}>
@@ -161,6 +168,18 @@ export default function Home() {
                   About
                 </a>
                 <Link
+                  href="/parent-login"
+                  className="px-3 py-2.5 rounded-lg text-center text-sm font-semibold border transition-colors"
+                  style={{
+                    color: colors.primary,
+                    borderColor: colors.primary,
+                    backgroundColor: `${colors.primary}10`,
+                  }}
+                  onClick={() => setIsMenuOpen(false)}
+                >
+                  Parent login
+                </Link>
+                <Link
                   href="/login"
                   className="px-3 py-2.5 rounded-lg text-center text-sm font-semibold text-white transition-colors"
                   style={{
@@ -168,7 +187,7 @@ export default function Home() {
                   }}
                   onClick={() => setIsMenuOpen(false)}
                 >
-                  Sign In
+                  Staff sign in
                 </Link>
               </div>
             </div>
@@ -504,6 +523,10 @@ export default function Home() {
                  style={{ color: colors.textMuted }}>
                 Contact
               </a>
+              <Link href="/parent-login" className="text-xs sm:text-sm transition-colors hover:text-primary-700" 
+                 style={{ color: colors.textMuted }}>
+                Parent login
+              </Link>
               <a href="#" className="text-xs sm:text-sm transition-colors hover:text-primary-700" 
                  style={{ color: colors.textMuted }}>
                 Support
