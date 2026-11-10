@@ -825,6 +825,15 @@ function YearsPanel({
     onError: () => toast.error("Could not set current term"),
   });
 
+  const lockMut = useMutation({
+    mutationFn: ({ id, locked }: { id: number; locked: boolean }) => setTermLocked(id, locked),
+    onSuccess: (_, v) => {
+      toast.success(v.locked ? "Term locked — marks are view-only" : "Term unlocked — marks can be edited");
+      onRefresh();
+    },
+    onError: () => toast.error("Could not update term lock"),
+  });
+
   const termMut = useMutation({
     mutationFn: () => addTerm(termOpen!.id, termForm),
     onSuccess: () => {
