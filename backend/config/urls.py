@@ -28,6 +28,7 @@ urlpatterns = [
     # 5. PHASE 2 Priority: Staff + Finance (M-Pesa, fees for Kenyan schools)
     path('api/staff/', include('apps.staff.urls')),
     path('api/finance/', include('apps.finance.urls')),
+    path('api/risks/', include('apps.risks.urls')),
 
     # 6. Academic Flow (attendance → academics)
     path('api/attendance/', include('apps.attendance.urls')),

@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     "apps.events",
     "apps.alumni",
     "apps.procurement",
+    "apps.risks",
 ]
 
 MIDDLEWARE = [

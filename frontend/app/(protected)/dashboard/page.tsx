@@ -7,6 +7,7 @@ import {
   ChevronRight, CalendarRange, BookOpen, Sparkles, ClipboardList, Wallet,
 } from "lucide-react";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
+import { RiskAttentionCard } from "./components/RiskAttentionCard";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { fetchSchoolPulse } from "@/services/dashboard.service";
 import { Card, CardContent } from "@/components/ui/card";
@@ -76,6 +77,8 @@ export default function DashboardHome() {
           </div>
         </div>
       </div>
+
+      <RiskAttentionCard />
 
       {/* Colorful KPI row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3 sm:gap-4 items-stretch">
