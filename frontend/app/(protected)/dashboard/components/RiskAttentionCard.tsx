@@ -19,7 +19,7 @@ type RiskAlert = {
 };
 
 type RiskToday = {
-  counts?: { open?: number; fee?: number; attendance?: number; academic?: number; high?: number };
+  counts?: { open?: number; fee?: number; attendance?: number; academic?: number; ops?: number; high?: number };
   alerts?: RiskAlert[];
 };
 
@@ -35,6 +35,8 @@ export function RiskAttentionCard() {
   const [data, setData] = useState<RiskToday | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [digestBusy, setDigestBusy] = useState(false);
+  const [digestMsg, setDigestMsg] = useState<string | null>(null);
 
   const load = useCallback(
     async (refresh = true) => {
@@ -64,6 +66,26 @@ export function RiskAttentionCard() {
   useEffect(() => {
     void load(true);
   }, [load]);
+
+  const sendDigest = async () => {
+    if (!currentSchool?.id) return;
+    setDigestBusy(true);
+    setDigestMsg(null);
+    try {
+      const res = await api.post(
+        "/risks/digest/send/",
+        { channel: "LOG", force: true },
+        { headers: { "X-School-ID": String(currentSchool.id) } }
+      );
+      const d = res.data;
+      if (d?.skipped) setDigestMsg("Digest already logged today");
+      else setDigestMsg(`Morning brief ready (${d?.alert_count ?? 0} items). Channel: ${d?.channel || "LOG"}`);
+    } catch (e: any) {
+      setDigestMsg(e?.response?.data?.detail || "Could not send digest");
+    } finally {
+      setDigestBusy(false);
+    }
+  };
 
   const alerts = data?.alerts || [];
   const open = data?.counts?.open ?? alerts.length;
@@ -109,6 +131,9 @@ export function RiskAttentionCard() {
           <span className="rounded-full border bg-white px-2.5 py-1 text-muted-foreground">
             Learning {data?.counts?.academic ?? 0}
           </span>
+          <span className="rounded-full border bg-white px-2.5 py-1 text-muted-foreground">
+            Ops {data?.counts?.ops ?? 0}
+          </span>
         </div>
 
         {loading && !data ? (
@@ -152,6 +177,9 @@ export function RiskAttentionCard() {
           </ul>
         )}
 
+        {digestMsg ? (
+          <p className="text-xs text-muted-foreground">{digestMsg}</p>
+        ) : null}
         <div className="flex flex-wrap gap-2 pt-1">
           <Button
             type="button"
@@ -184,6 +212,15 @@ export function RiskAttentionCard() {
             onClick={() => router.push("/dashboard/modules/academics")}
           >
             Academics
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={digestBusy}
+            onClick={() => void sendDigest()}
+          >
+            {digestBusy ? "Sending…" : "Morning brief"}
           </Button>
         </div>
       </CardContent>

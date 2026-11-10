@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from apps.school.support import selected_school
 from apps.risks.models import RiskAlert
 from apps.risks.scan import scan_school
+from apps.risks.digest import build_digest_message, send_digest
 
 
 SEVERITY_ORDER = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
@@ -75,6 +76,7 @@ class RiskTodayView(APIView):
                     "fee": base.filter(category=RiskAlert.Category.FEE).count(),
                     "attendance": base.filter(category=RiskAlert.Category.ATTENDANCE).count(),
                     "academic": base.filter(category=RiskAlert.Category.ACADEMIC).count(),
+                    "ops": base.filter(category=RiskAlert.Category.OPS).count(),
                     "high": base.filter(severity=RiskAlert.Severity.HIGH).count(),
                 },
                 "alerts": [row(a) for a in items],
@@ -101,10 +103,48 @@ class RiskAckView(APIView):
 
 
 class RiskScanView(APIView):
-    """Force full risk rescan (fee + attendance + academic) for current school."""
-
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         school = selected_school(request)
         return Response(scan_school(school))
+
+
+class RiskDigestPreviewView(APIView):
+    """Preview morning digest without sending."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = selected_school(request)
+        limit = int(request.query_params.get("limit") or 5)
+        # refresh scans first so digest is current
+        if request.query_params.get("refresh", "1") not in ("0", "false"):
+            try:
+                scan_school(school)
+            except Exception:
+                pass
+        built = build_digest_message(school, limit=limit)
+        return Response(built)
+
+
+class RiskDigestSendView(APIView):
+    """
+    Send morning digest.
+    Body: { channel?: LOG|WHATSAPP|EMAIL|BOTH, force?: bool, limit?: int }
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        school = selected_school(request)
+        channel = request.data.get("channel")
+        force = bool(request.data.get("force"))
+        limit = int(request.data.get("limit") or 5)
+        # Ensure alerts are fresh
+        try:
+            scan_school(school)
+        except Exception:
+            pass
+        result = send_digest(school, channel=channel, limit=limit, force=force)
+        return Response(result)

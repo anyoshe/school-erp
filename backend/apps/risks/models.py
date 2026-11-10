@@ -76,3 +76,41 @@ class RiskAlert(models.Model):
 
     def __str__(self):
         return f"[{self.severity}] {self.category}: {self.title}"
+
+
+class RiskDigestLog(models.Model):
+    """Record of a morning risk digest sent (or dry-run logged) for a school."""
+
+    class Channel(models.TextChoices):
+        LOG = "LOG", "Log only"
+        WHATSAPP = "WHATSAPP", "WhatsApp"
+        EMAIL = "EMAIL", "Email"
+        BOTH = "BOTH", "WhatsApp + Email"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(
+        "school.School",
+        on_delete=models.CASCADE,
+        related_name="risk_digests",
+    )
+    digest_date = models.DateField(db_index=True)
+    channel = models.CharField(max_length=20, choices=Channel.choices, default=Channel.LOG)
+    alert_count = models.PositiveIntegerField(default=0)
+    high_count = models.PositiveIntegerField(default=0)
+    message_preview = models.TextField(blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+    ok = models.BooleanField(default=True)
+    detail = models.CharField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-digest_date", "-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["school", "digest_date", "channel"],
+                name="risks_digest_unique_school_date_channel",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Digest {self.school_id} {self.digest_date} ({self.channel})"

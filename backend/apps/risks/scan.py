@@ -6,20 +6,19 @@ def scan_school(school) -> dict:
     from apps.risks.fee_scan import scan_fee_risks_for_school
     from apps.risks.attendance_scan import scan_attendance_risks_for_school
     from apps.risks.academic_scan import scan_academic_risks_for_school
+    from apps.risks.ops_scan import scan_ops_risks_for_school
 
     out = {"school_id": str(school.id)}
-    try:
-        out["fee"] = scan_fee_risks_for_school(school)
-    except Exception as exc:
-        out["fee"] = {"error": str(exc)}
-    try:
-        out["attendance"] = scan_attendance_risks_for_school(school)
-    except Exception as exc:
-        out["attendance"] = {"error": str(exc)}
-    try:
-        out["academic"] = scan_academic_risks_for_school(school)
-    except Exception as e:
-        out["academic"] = {"error": str(e)}
+    for key, fn in (
+        ("fee", scan_fee_risks_for_school),
+        ("attendance", scan_attendance_risks_for_school),
+        ("academic", scan_academic_risks_for_school),
+        ("ops", scan_ops_risks_for_school),
+    ):
+        try:
+            out[key] = fn(school)
+        except Exception as exc:
+            out[key] = {"error": str(exc)}
     return out
 
 
