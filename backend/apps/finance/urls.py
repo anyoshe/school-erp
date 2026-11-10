@@ -1,6 +1,7 @@
 # finance/urls.py
 from django.urls import path, include
 from .returning_billing import ReturningStudentsView, ReturningStudentsBillView
+from .opening_balances import OpeningBalanceView
 from rest_framework.routers import DefaultRouter
 from .views import (
     IncomeReceiptListView,
@@ -42,6 +43,7 @@ urlpatterns = [
     path('dashboard-summary/', FinanceDashboardSummaryView.as_view(), name='finance-dashboard-summary'),
     path('returning-students/', ReturningStudentsView.as_view(), name='returning-students'),
     path('returning-students/bill/', ReturningStudentsBillView.as_view(), name='returning-students-bill'),
+    path('opening-balances/', OpeningBalanceView.as_view(), name='opening-balances'),
     path('awaiting-clearance/', AwaitingClearanceView.as_view(), name='awaiting-clearance'),
     path('awaiting-clearance/<uuid:student_id>/add-item/', ClearanceAddItemView.as_view(), name='clearance-add-item'),
     path('awaiting-clearance/<uuid:student_id>/prepare/', ClearancePrepareView.as_view(), name='clearance-prepare'),

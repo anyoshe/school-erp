@@ -608,7 +608,7 @@ export default function FinanceDashboard() {
             {
               href: "/dashboard/modules/finance/student-assignments",
               label: "Assign fee structures",
-              desc: "Link a student to a grade/term fee structure so invoices can be generated.",
+              desc: "Link any learner to a structure and plan anytime (one-by-one). For promoted returns use Returning billing.",
               icon: ClipboardList,
               ring: "border-amber-200 bg-amber-50/50 hover:bg-amber-50",
               iconBg: "bg-amber-600",
@@ -616,7 +616,7 @@ export default function FinanceDashboard() {
             {
               href: "/dashboard/modules/finance/post-balances",
               label: "Opening balances",
-              desc: "Carry forward prior-term arrears when students join mid-year or migrate from paper books.",
+              desc: "Post arrears from paper books or mid-year joins as invoices, then collect under Payments.",
               icon: Scale,
               ring: "border-violet-200 bg-violet-50/50 hover:bg-violet-50",
               iconBg: "bg-violet-600",

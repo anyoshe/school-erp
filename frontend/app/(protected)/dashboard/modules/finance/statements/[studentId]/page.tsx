@@ -1,5 +1,7 @@
 "use client";
 
+import { FinanceNavLinks } from "../../components/FinanceNav";
+
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
@@ -30,10 +32,11 @@ export default function StudentStatementPage() {
 
   return (
     <div className="space-y-4 p-4 sm:p-6 max-w-3xl mx-auto print:p-0">
+      <div className="print:hidden"><FinanceNavLinks /></div>
       <div className="flex items-center gap-3 print:hidden">
         <Button asChild variant="outline" size="sm">
-          <Link href={`/dashboard/modules/students/${studentId}`}>
-            <ArrowLeft className="h-4 w-4 mr-1" /> Student
+          <Link href="/dashboard/modules/finance/statements">
+            <ArrowLeft className="h-4 w-4 mr-1" /> All statements
           </Link>
         </Button>
         <h1 className="text-xl font-bold flex-1">Fee statement</h1>

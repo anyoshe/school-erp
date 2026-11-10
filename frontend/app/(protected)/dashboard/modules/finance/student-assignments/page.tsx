@@ -1,5 +1,6 @@
 "use client";
 
+import { FinanceNavLinks } from "../components/FinanceNav";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import api from "@/utils/api";
+import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import { Loader2, Search, ChevronDown } from "lucide-react";
 
 type Student = {
@@ -75,6 +77,8 @@ type FeeAssignment = {
 };
 
 export default function StudentAssignmentsPage() {
+  const { currentSchool } = useCurrentSchool();
+  const schoolHeaders = currentSchool?.id ? { "X-School-ID": String(currentSchool.id) } : undefined;
   const [students, setStudents] = useState<Student[]>([]);
   const [assignments, setAssignments] = useState<FeeAssignment[]>([]);
   const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
@@ -103,10 +107,10 @@ export default function StudentAssignmentsPage() {
     setLoading(true);
     try {
       const [studentsRes, assignmentsRes, structuresRes, plansRes] = await Promise.all([
-        api.get("/students/"),
-        api.get("/finance/student-assignments/"),
-        api.get("/finance/structures/"),
-        api.get("/finance/payment-plans/"),
+        api.get("/students/", { headers: schoolHeaders, params: { page_size: 500 } }),
+        api.get("/finance/student-assignments/", { headers: schoolHeaders }),
+        api.get("/finance/structures/", { headers: schoolHeaders }),
+        api.get("/finance/payment-plans/", { headers: schoolHeaders }),
       ]);
 
       setStudents(Array.isArray(studentsRes.data) ? studentsRes.data : studentsRes.data.results || []);
@@ -225,7 +229,7 @@ export default function StudentAssignmentsPage() {
       }
 
       // Refresh data
-      const res = await api.get("/finance/student-assignments/");
+      const res = await api.get("/finance/student-assignments/", { headers: schoolHeaders });
       setAssignments(Array.isArray(res.data) ? res.data : res.data.results || []);
       setSelectedStudent(null);
     } catch (err: any) {
@@ -273,7 +277,8 @@ export default function StudentAssignmentsPage() {
 
   // Shell first — never block the whole module on network
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
+      <FinanceNavLinks />
       {loading && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground rounded-xl border bg-stone-50 px-4 py-3">
           <Loader2 className="h-4 w-4 animate-spin" />
