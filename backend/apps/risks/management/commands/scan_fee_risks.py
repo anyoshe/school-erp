@@ -1,10 +1,10 @@
 from django.core.management.base import BaseCommand
 
-from apps.risks.fee_scan import scan_all_schools, scan_fee_risks_for_school
+from apps.risks.scan import scan_all_schools, scan_school
 
 
 class Command(BaseCommand):
-    help = "Scan fee early-warning rules and upsert RiskAlert rows"
+    help = "Scan fee, attendance, and academic early-warning rules"
 
     def add_arguments(self, parser):
         parser.add_argument("--school-id", type=str, default=None)
@@ -18,7 +18,7 @@ class Command(BaseCommand):
             if not school:
                 self.stderr.write("School not found")
                 return
-            result = scan_fee_risks_for_school(school)
+            result = scan_school(school)
             self.stdout.write(self.style.SUCCESS(str(result)))
             return
         results = scan_all_schools()

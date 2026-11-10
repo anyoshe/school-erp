@@ -19,7 +19,7 @@ type RiskAlert = {
 };
 
 type RiskToday = {
-  counts?: { open?: number; fee?: number; high?: number };
+  counts?: { open?: number; fee?: number; attendance?: number; academic?: number; high?: number };
   alerts?: RiskAlert[];
 };
 
@@ -78,7 +78,7 @@ export function RiskAttentionCard() {
             Needs attention today
           </CardTitle>
           <p className="text-xs text-muted-foreground mt-1">
-            Early warnings — fee default risk first. Act before term-end pressure.
+            Early warnings across fees, attendance, and learning. Act before small issues become crises.
           </p>
         </div>
         <Button
@@ -101,7 +101,13 @@ export function RiskAttentionCard() {
             {high} high
           </span>
           <span className="rounded-full border bg-white px-2.5 py-1 text-muted-foreground">
-            Fee risks: {data?.counts?.fee ?? 0}
+            Fees {data?.counts?.fee ?? 0}
+          </span>
+          <span className="rounded-full border bg-white px-2.5 py-1 text-muted-foreground">
+            Attendance {data?.counts?.attendance ?? 0}
+          </span>
+          <span className="rounded-full border bg-white px-2.5 py-1 text-muted-foreground">
+            Learning {data?.counts?.academic ?? 0}
           </span>
         </div>
 
@@ -113,7 +119,7 @@ export function RiskAttentionCard() {
           <p className="text-sm text-red-600">{error}</p>
         ) : alerts.length === 0 ? (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 px-4 py-3 text-sm text-emerald-900">
-            No open fee risks right now. Keep recording payments — we&apos;ll flag overdue and mid-term lags automatically.
+            No open risks right now. We watch fee defaults, absence patterns, and declining CAT scores automatically.
           </div>
         ) : (
           <ul className="space-y-2">
@@ -162,6 +168,22 @@ export function RiskAttentionCard() {
             onClick={() => router.push("/dashboard/modules/finance/payments")}
           >
             Record payment
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => router.push("/dashboard/modules/attendance")}
+          >
+            Attendance
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => router.push("/dashboard/modules/academics")}
+          >
+            Academics
           </Button>
         </div>
       </CardContent>

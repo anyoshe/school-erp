@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 
 from apps.school.support import selected_school
 from apps.risks.models import RiskAlert
-from apps.risks.fee_scan import scan_fee_risks_for_school
+from apps.risks.scan import scan_school
 
 
 SEVERITY_ORDER = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
@@ -18,22 +18,22 @@ class RiskTodayView(APIView):
 
     def get(self, request):
         school = selected_school(request)
-        # Lightweight refresh of fee rules so dashboard stays current without cron
         refresh = request.query_params.get("refresh", "1") not in ("0", "false", "False")
         scan_meta = None
         if refresh:
             try:
-                scan_meta = scan_fee_risks_for_school(school)
+                scan_meta = scan_school(school)
             except Exception as exc:
                 scan_meta = {"error": str(exc)}
 
         limit = int(request.query_params.get("limit") or 12)
-        qs = (
-            RiskAlert.objects.filter(school=school, status=RiskAlert.Status.OPEN)
-            .select_related("student")
-            .order_by("severity", "-updated_at")[: max(1, min(limit, 50))]
-        )
-        # Sort HIGH first in Python (CharField alpha would put HIGH before LOW anyway)
+        category = (request.query_params.get("category") or "").upper().strip()
+        qs = RiskAlert.objects.filter(school=school, status=RiskAlert.Status.OPEN)
+        if category in ("FEE", "ATTENDANCE", "ACADEMIC", "OPS"):
+            qs = qs.filter(category=category)
+        qs = qs.select_related("student").order_by("severity", "-updated_at")[
+            : max(1, min(limit, 50))
+        ]
         items = sorted(qs, key=lambda a: SEVERITY_ORDER.get(a.severity, 9))
 
         def row(a: RiskAlert):
@@ -50,7 +50,7 @@ class RiskTodayView(APIView):
                 or (
                     f"/dashboard/modules/students/{st.id}"
                     if st is not None
-                    else "/dashboard/modules/finance"
+                    else "/dashboard"
                 ),
                 "student": (
                     {
@@ -66,22 +66,16 @@ class RiskTodayView(APIView):
                 "updated_at": a.updated_at,
             }
 
-        fee_open = RiskAlert.objects.filter(
-            school=school, status=RiskAlert.Status.OPEN, category=RiskAlert.Category.FEE
-        ).count()
+        base = RiskAlert.objects.filter(school=school, status=RiskAlert.Status.OPEN)
         return Response(
             {
                 "generated_at": timezone.now().isoformat(),
                 "counts": {
-                    "open": RiskAlert.objects.filter(
-                        school=school, status=RiskAlert.Status.OPEN
-                    ).count(),
-                    "fee": fee_open,
-                    "high": RiskAlert.objects.filter(
-                        school=school,
-                        status=RiskAlert.Status.OPEN,
-                        severity=RiskAlert.Severity.HIGH,
-                    ).count(),
+                    "open": base.count(),
+                    "fee": base.filter(category=RiskAlert.Category.FEE).count(),
+                    "attendance": base.filter(category=RiskAlert.Category.ATTENDANCE).count(),
+                    "academic": base.filter(category=RiskAlert.Category.ACADEMIC).count(),
+                    "high": base.filter(severity=RiskAlert.Severity.HIGH).count(),
                 },
                 "alerts": [row(a) for a in items],
                 "scan": scan_meta,
@@ -107,11 +101,10 @@ class RiskAckView(APIView):
 
 
 class RiskScanView(APIView):
-    """Force fee risk rescan for current school."""
+    """Force full risk rescan (fee + attendance + academic) for current school."""
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
         school = selected_school(request)
-        result = scan_fee_risks_for_school(school)
-        return Response(result)
+        return Response(scan_school(school))
