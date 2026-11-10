@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/utils/api";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
@@ -99,7 +100,7 @@ export default function ParentPortalPage() {
     enabled: !!selected && tab === "attendance",
   });
 
-  const tabs: { id: Tab; label: string; icon: JSX.Element }[] = [
+  const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
     { id: "overview", label: "Overview", icon: <User className="h-3.5 w-3.5" /> },
     { id: "fees", label: "Fees", icon: <Wallet className="h-3.5 w-3.5" /> },
     { id: "results", label: "Results", icon: <BookOpen className="h-3.5 w-3.5" /> },
