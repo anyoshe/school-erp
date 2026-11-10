@@ -88,7 +88,7 @@ export default function TranscriptPage() {
       </div>
 
       {doc && (
-        <Card className="border-2 border-slate-800 print:border-black">
+        <Card className="print-document border-2 border-slate-800 print:border-black">
           <CardContent className="p-6 sm:p-8 space-y-6 text-sm">
             <div className="text-center space-y-1 border-b pb-4">
               <p className="text-xs tracking-[0.2em] uppercase text-muted-foreground">Republic of Kenya</p>

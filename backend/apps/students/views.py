@@ -41,7 +41,6 @@ class StudentViewSet(viewsets.ModelViewSet):
     ]
     search_fields = [
         'first_name', 'last_name', 'admission_number', 'learner_id',
-        'national_student_id'
     ]
     ordering_fields = ['admission_number', 'admission_date', 'status', 'current_class']
     ordering = ['last_name', 'first_name']

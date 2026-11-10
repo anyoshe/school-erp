@@ -3,6 +3,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.utils.crypto import get_random_string
 
+from apps.finance.models import ExpenseCategory, FeeCategory
 from .models import Staff, Payroll, LeaveRequest
 
 User = get_user_model()
@@ -98,8 +99,22 @@ class StaffWriteSerializer(serializers.Serializer):
     default_deductions = serializers.DecimalField(
         max_digits=12, decimal_places=2, required=False, default=Decimal("0")
     )
-    default_fee_category = serializers.UUIDField(required=False, allow_null=True)
-    default_expense_category = serializers.UUIDField(required=False, allow_null=True)
+    default_fee_category = serializers.PrimaryKeyRelatedField(
+        queryset=FeeCategory.objects.all(), required=False, allow_null=True
+    )
+    default_expense_category = serializers.PrimaryKeyRelatedField(
+        queryset=ExpenseCategory.objects.all(), required=False, allow_null=True
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        school = self.context.get("school")
+        for field_name in ("default_fee_category", "default_expense_category"):
+            field = self.fields[field_name]
+            if school:
+                field.queryset = field.queryset.filter(school=school)
+            else:
+                field.queryset = field.queryset.none()
 
     def create(self, validated_data):
         school = self.context["school"]
@@ -149,8 +164,8 @@ class StaffWriteSerializer(serializers.Serializer):
             default_basic_salary=validated_data.get("default_basic_salary") or Decimal("0"),
             default_allowances=validated_data.get("default_allowances") or Decimal("0"),
             default_deductions=validated_data.get("default_deductions") or Decimal("0"),
-            default_fee_category_id=validated_data.get("default_fee_category"),
-            default_expense_category_id=validated_data.get("default_expense_category"),
+            default_fee_category=validated_data.get("default_fee_category"),
+            default_expense_category=validated_data.get("default_expense_category"),
         )
         if hasattr(school, "users"):
             try:
@@ -200,9 +215,9 @@ class StaffWriteSerializer(serializers.Serializer):
             if field in validated_data:
                 setattr(instance, field, validated_data[field])
         if "default_fee_category" in validated_data:
-            instance.default_fee_category_id = validated_data.get("default_fee_category")
+            instance.default_fee_category = validated_data["default_fee_category"]
         if "default_expense_category" in validated_data:
-            instance.default_expense_category_id = validated_data.get("default_expense_category")
+            instance.default_expense_category = validated_data["default_expense_category"]
         instance.save()
         return instance
 

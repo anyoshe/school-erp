@@ -2896,7 +2896,7 @@ function ReportCardsPanel({
       )}
 
       {card ? (
-        <div className="report-card-print space-y-4">
+        <div className="print-document report-card-print space-y-4">
           {/* single selected for screen; all for print via CSS could be added later */}
           <Card className="border-border rounded-2xl overflow-hidden max-w-3xl mx-auto">
             <CardContent className="p-6 sm:p-8 space-y-5">

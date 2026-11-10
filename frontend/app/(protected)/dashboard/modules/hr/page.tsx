@@ -154,6 +154,32 @@ function money(n: string | number | undefined) {
   return v.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
+function getStaffSaveErrorMessage(error: unknown) {
+  let data: unknown;
+  if (error && typeof error === "object" && "response" in error) {
+    const response = error.response;
+    if (response && typeof response === "object" && "data" in response) {
+      data = response.data;
+    }
+  }
+
+  if (typeof data === "string") return data;
+  if (data && typeof data === "object") {
+    const errors = data as Record<string, unknown>;
+    if (typeof errors.detail === "string") return errors.detail;
+
+    const messages = Object.entries(errors).flatMap(([field, value]) => {
+      const fieldErrors = Array.isArray(value) ? value : [value];
+      return fieldErrors
+        .filter((message): message is string => typeof message === "string")
+        .map((message) => `${field}: ${message}`);
+    });
+    if (messages.length) return messages.join("; ");
+  }
+
+  return error instanceof Error ? error.message : "Save failed";
+}
+
 export default function HRPage() {
   const { currentSchool } = useCurrentSchool();
   const [tab, setTab] = useState<"directory" | "payroll" | "leave">("directory");
@@ -368,13 +394,8 @@ export default function HRPage() {
       }
       setOpen(false);
       loadStaff();
-    } catch (e: any) {
-      const d = e?.response?.data;
-      toast.error(
-        typeof d === "string"
-          ? d
-          : d?.email?.[0] || d?.detail || "Save failed"
-      );
+    } catch (error: unknown) {
+      toast.error(getStaffSaveErrorMessage(error));
     } finally {
       setSaving(false);
     }
@@ -1414,7 +1435,7 @@ export default function HRPage() {
             <DialogTitle>Payslip</DialogTitle>
           </DialogHeader>
           {payslip && (
-            <div id="payslip-print" className="space-y-4 text-sm border rounded-xl p-5 bg-white">
+            <div id="payslip-print" className="print-document space-y-4 text-sm border rounded-xl p-5 bg-white">
               <div className="text-center border-b pb-3">
                 <p className="text-xs uppercase tracking-widest text-muted-foreground">Payslip</p>
                 <h2 className="text-lg font-bold">{payslip.school?.name}</h2>
