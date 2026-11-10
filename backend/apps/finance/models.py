@@ -889,3 +889,67 @@ class JournalLine(models.Model):
 
     class Meta:
         ordering = ["id"]
+
+
+class LunchEnrollment(models.Model):
+    """
+    Learner subscription to the school lunch / meals program.
+    TERM plans drive optional Meals lines on fee structures; other plans
+    record the agreed rate for weekly/daily billing later.
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+        PAUSED = "PAUSED", "Paused"
+        ENDED = "ENDED", "Ended"
+
+    class PlanType(models.TextChoices):
+        TERM = "TERM", "Per term (package)"
+        MONTHLY = "MONTHLY", "Monthly"
+        WEEKLY = "WEEKLY", "Weekly"
+        DAILY = "DAILY", "Daily rate"
+
+    class AbsenceRule(models.TextChoices):
+        CHARGE_FULL = "CHARGE_FULL", "Still charge (place reserved)"
+        CREDIT_UNUSED = "CREDIT_UNUSED", "Credit unused days (manual/policy)"
+        CHARGE_USAGE = "CHARGE_USAGE", "Charge only days eaten (needs meal register)"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="lunch_enrollments")
+    student = models.ForeignKey(
+        "students.Student",
+        on_delete=models.CASCADE,
+        related_name="lunch_enrollments",
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE, db_index=True)
+    plan_type = models.CharField(max_length=16, choices=PlanType.choices, default=PlanType.TERM)
+    amount = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+        help_text="Agreed charge per plan period (term / month / week / day)",
+    )
+    absence_rule = models.CharField(
+        max_length=20,
+        choices=AbsenceRule.choices,
+        default=AbsenceRule.CHARGE_FULL,
+    )
+    academic_year = models.CharField(max_length=32, blank=True, default="")
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    notes = models.CharField(max_length=255, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="lunch_enrollments_created"
+    )
+
+    class Meta:
+        ordering = ["-updated_at"]
+        indexes = [
+            models.Index(fields=["school", "status"]),
+            models.Index(fields=["student", "status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.student_id} lunch {self.plan_type} ({self.status})"

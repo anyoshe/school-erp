@@ -319,6 +319,14 @@ student, user=None, academic_year=None, period_name=None):
         assignment.fee_structure = structure
         assignment.save(update_fields=["fee_structure"])
 
+    # Active lunch program → select Meals optional lines on this assignment
+    if assignment is not None:
+        try:
+            from apps.finance.lunch import apply_lunch_enrollment_to_assignment
+            apply_lunch_enrollment_to_assignment(assignment)
+        except Exception:
+            pass
+
     year = academic_year or (structure.academic_year if structure else None)
     term = period_name or (structure.period_name if structure else None)
     match_error = None

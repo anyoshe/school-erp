@@ -16,6 +16,7 @@ export const FINANCE_NAV_LINKS = [
   { href: "/dashboard/modules/finance/standing", label: "P&L" },
   { href: "/dashboard/modules/finance/reconcile", label: "Reconcile" },
   { href: "/dashboard/modules/finance/expenses", label: "Expenses" },
+  { href: "/dashboard/modules/finance/meals", label: "Meals" },
   { href: "/dashboard/modules/finance/bills", label: "Bills" },
   { href: "/dashboard/modules/finance/income-receipts", label: "Pre-enroll" },
 ] as const;

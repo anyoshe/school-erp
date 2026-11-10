@@ -1,6 +1,12 @@
 # finance/urls.py
 from django.urls import path, include
 from .returning_billing import ReturningStudentsView, ReturningStudentsBillView
+from .lunch_views import (
+    LunchEnrollmentListCreateView,
+    LunchEnrollmentDetailView,
+    LunchKittyView,
+    LunchEnsureDefaultsView,
+)
 from .opening_balances import OpeningBalanceView
 from rest_framework.routers import DefaultRouter
 from .views import (
@@ -50,5 +56,9 @@ urlpatterns = [
     path('clearance/lines/<str:line_id>/', ClearanceAdjustLineView.as_view(), name='clearance-adjust-line'),
     path('owner-standing/', OwnerStandingView.as_view(), name='owner-standing'),
     path('students/<uuid:student_id>/statement/', StudentFeeStatementView.as_view(), name='student-fee-statement'),
+    path('lunch/enrollments/', LunchEnrollmentListCreateView.as_view(), name='lunch-enrollments'),
+    path('lunch/enrollments/<uuid:enrollment_id>/', LunchEnrollmentDetailView.as_view(), name='lunch-enrollment-detail'),
+    path('lunch/kitty/', LunchKittyView.as_view(), name='lunch-kitty'),
+    path('lunch/ensure-defaults/', LunchEnsureDefaultsView.as_view(), name='lunch-ensure-defaults'),
     path('', include(router.urls)),
 ]
