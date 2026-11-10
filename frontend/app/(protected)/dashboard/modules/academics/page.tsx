@@ -3318,7 +3318,6 @@ const load = async (opts?: { quiet?: boolean }) => {
                 score: null,
                 is_absent: false,
                 percentage: null,
-                grade_letter: null,
               };
             } else {
               const score = Number(trimmed);
@@ -3330,7 +3329,6 @@ const load = async (opts?: { quiet?: boolean }) => {
                 score,
                 is_absent: false,
                 percentage,
-                grade_letter: cells[col.id]?.grade_letter ?? null,
               };
             }
           }
@@ -3442,7 +3440,7 @@ const load = async (opts?: { quiet?: boolean }) => {
               className="hidden"
               onChange={(e) => onCsvSelected(e.target.files?.[0] || null)}
             />
-            <Button size="sm" variant="outline" disabled={busy || loading} onClick={load}>
+            <Button size="sm" variant="outline" disabled={busy || loading} onClick={() => load()}>
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
               {busy ? "Loading…" : "Reload"}
             </Button>
