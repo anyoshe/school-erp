@@ -144,33 +144,39 @@ export default function ParentPortalPage() {
         </Card>
       ) : (
         <>
-          <div {(digestQ.data?.items?.length ?? 0) > 0 && (
-        <Card className="border-amber-200 bg-amber-50/80 shadow-sm rounded-xl">
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm flex items-center gap-2 text-amber-900">
-              <AlertCircle className="h-4 w-4" /> Needs your attention
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-3 pt-0 space-y-2">
-            {digestQ.data!.items.slice(0, 5).map((it, i) => (
-              <button
-                key={i}
-                type="button"
-                className="w-full text-left rounded-lg border border-amber-100 bg-white px-3 py-2 text-sm hover:bg-amber-50/50"
-                onClick={() => {
-                  setSelected(it.student_id);
-                  setTab(it.type === "fee" ? "fees" : it.type === "attendance" ? "attendance" : "overview");
-                }}
-              >
-                <span className="font-medium block">{it.title}</span>
-                <span className="text-xs text-muted-foreground">{it.detail}</span>
-              </button>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+          {(digestQ.data?.items?.length ?? 0) > 0 && (
+            <Card className="border-amber-200 bg-amber-50/80 shadow-sm rounded-xl">
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-sm flex items-center gap-2 text-amber-900">
+                  <AlertCircle className="h-4 w-4" /> Needs your attention
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="px-4 pb-3 pt-0 space-y-2">
+                {digestQ.data!.items.slice(0, 5).map((it, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className="w-full text-left rounded-lg border border-amber-100 bg-white px-3 py-2 text-sm hover:bg-amber-50/50"
+                    onClick={() => {
+                      setSelected(it.student_id);
+                      setTab(
+                        it.type === "fee"
+                          ? "fees"
+                          : it.type === "attendance"
+                            ? "attendance"
+                            : "overview"
+                      );
+                    }}
+                  >
+                    <span className="font-medium block">{it.title}</span>
+                    <span className="text-xs text-muted-foreground">{it.detail}</span>
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
-      <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
             {children.map((c) => (
               <button
                 key={c.id}
