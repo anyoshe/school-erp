@@ -128,7 +128,7 @@ export default function ParentPortalPage() {
             <AlertCircle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
             <div>
               {childrenQ.data?.detail ||
-                "No learners linked yet. Ask the school office to invite your parent account and link your child’s admission number."}
+                "No learners linked yet. Ask the school office to open Parent Portal and invite/link your email to the child’s admission number. Then sign out and sign in again."}
             </div>
           </CardContent>
         </Card>

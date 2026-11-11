@@ -45,6 +45,27 @@ class CurrentUserView(APIView):
 
     def get(self, request):
         user = User.objects.prefetch_related('schools__modules').get(pk=request.user.pk)
+        # Parents invited before membership fix: attach school from guardian links
+        if (getattr(user, "role", "") or "").upper() == "PARENT":
+            try:
+                from apps.parent_portal.models import GuardianProfile, ParentStudentLink
+                from apps.school.models import School
+                school_ids = set()
+                for sid in GuardianProfile.objects.filter(user=user).values_list("school_id", flat=True):
+                    if sid:
+                        school_ids.add(sid)
+                for sid in ParentStudentLink.objects.filter(
+                    guardian_profile__user=user
+                ).values_list("school_id", flat=True):
+                    if sid:
+                        school_ids.add(sid)
+                for sid in school_ids:
+                    school = School.objects.filter(pk=sid).first()
+                    if school is not None:
+                        school.users.add(user)
+                user = User.objects.prefetch_related("schools__modules").get(pk=user.pk)
+            except Exception:
+                pass
         serializer = CurrentUserSerializer(user)
         return Response(serializer.data)
 class UserViewSet(viewsets.ModelViewSet):

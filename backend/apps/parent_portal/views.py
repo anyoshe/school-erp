@@ -10,10 +10,24 @@ from rest_framework.views import APIView
 from apps.school.support import selected_school
 
 
-def _guardian_profile(user, school):
+def _guardian_profile(user, school=None):
     from .models import GuardianProfile
 
-    return GuardianProfile.objects.filter(user=user, school=school).first()
+    if school is not None:
+        p = GuardianProfile.objects.filter(user=user, school=school).first()
+        if p:
+            return p
+    return GuardianProfile.objects.filter(user=user).first()
+
+
+def _ensure_parent_school_membership(user, school):
+    """Parents must be on school.users so X-School-ID /me and APIs resolve."""
+    if user is None or school is None:
+        return
+    try:
+        school.users.add(user)
+    except Exception:
+        pass
 
 
 def _ensure_parent_access(user, school, student_id):
@@ -23,10 +37,13 @@ def _ensure_parent_access(user, school, student_id):
 
     profile = GuardianProfile.objects.filter(user=user, school=school).first()
     if not profile:
+        profile = GuardianProfile.objects.filter(user=user).first()
+    if not profile:
         return None, None, Response({"detail": "Parent profile not found"}, status=403)
+    _ensure_parent_school_membership(user, school)
     link = ParentStudentLink.objects.filter(
-        guardian_profile=profile, student_id=student_id, school=school
-    ).first()
+        guardian_profile=profile, student_id=student_id
+    ).filter(Q(school=school) | Q(student__school=school)).first()
     if not link:
         return None, None, Response({"detail": "Child not linked to this parent"}, status=403)
     student = Student.objects.filter(pk=student_id, school=school).select_related(
@@ -154,23 +171,37 @@ class ParentChildrenView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        school = selected_school(request)
+        try:
+            school = selected_school(request)
+        except Exception:
+            school = None
         if not school:
-            return Response({"detail": "No school selected"}, status=400)
+            return Response(
+                {
+                    "children": [],
+                    "detail": "No school available for this parent account. Ask the school office to re-link your login.",
+                }
+            )
+        _ensure_parent_school_membership(request.user, school)
         profile = _guardian_profile(request.user, school)
         if not profile:
             profile = _auto_provision(request.user, school)
         if not profile:
+            # Links may exist under profile without school filter match
+            from .models import GuardianProfile, ParentStudentLink
+            profile = GuardianProfile.objects.filter(user=request.user).first()
+        if not profile:
             return Response(
                 {
                     "children": [],
-                    "detail": "No parent profile linked. Ask the school to link your account.",
+                    "detail": "No parent profile linked. Ask the school to link your account under Parent Portal.",
                 }
             )
         from .models import ParentStudentLink
 
         links = (
-            ParentStudentLink.objects.filter(guardian_profile=profile, school=school)
+            ParentStudentLink.objects.filter(guardian_profile=profile)
+            .filter(Q(school=school) | Q(student__school=school))
             .select_related("student", "student__current_class", "student__section")
             .order_by("student__last_name", "student__first_name")
         )
@@ -253,12 +284,25 @@ class ParentChildResultsView(APIView):
             return err
         from apps.assessments.views import _build_student_report
 
-        card = _build_student_report(
-            student,
-            school,
-            academic_year_id=request.query_params.get("academic_year"),
-            term_id=request.query_params.get("term"),
-        )
+        try:
+            card = _build_student_report(
+                student,
+                school,
+                academic_year_id=request.query_params.get("academic_year"),
+                term_id=request.query_params.get("term"),
+            )
+        except Exception as exc:
+            card = {
+                "student": {
+                    "id": str(student.id),
+                    "full_name": f"{student.first_name or ''} {student.last_name or ''}".strip(),
+                    "admission_number": student.admission_number,
+                },
+                "subjects": [],
+                "overall_average": None,
+                "detail": "Results are not available yet for this term.",
+                "error": str(exc)[:200],
+            }
         return Response(card)
 
 
@@ -413,6 +457,20 @@ class ParentLinkStudentView(APIView):
             student=student,
             defaults={"is_primary": True},
         )
+        _ensure_parent_school_membership(user, school)
+        if getattr(user, "role", None) != "PARENT":
+            try:
+                from apps.accounts.models import User as UserModel
+                if user.role not in (
+                    UserModel.Role.SUPER_ADMIN,
+                    UserModel.Role.SCHOOL_ADMIN,
+                    UserModel.Role.PRINCIPAL,
+                    UserModel.Role.TEACHER,
+                ):
+                    user.role = UserModel.Role.PARENT
+                    user.save(update_fields=["role"])
+            except Exception:
+                pass
         return Response(
             {
                 "linked": True,
@@ -504,6 +562,7 @@ class ParentInviteView(APIView):
             student=student,
             defaults={"is_primary": True},
         )
+        _ensure_parent_school_membership(user, school)
         payload = {
             "ok": True,
             "user_created": created_user,

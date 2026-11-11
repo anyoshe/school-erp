@@ -176,7 +176,28 @@ class CurrentUserSerializer(serializers.ModelSerializer):
     def get_schools(self, obj):
         # Session serializer includes modules (code/name) without grade_levels — enough for shell
         from apps.school.serializers import SchoolSessionSerializer
-        schools_qs = obj.schools.prefetch_related("modules").all()
+        from apps.school.models import School
+        schools_qs = list(obj.schools.prefetch_related("modules").all())
+        if (getattr(obj, "role", "") or "").upper() == "PARENT" and not schools_qs:
+            try:
+                from apps.parent_portal.models import GuardianProfile, ParentStudentLink
+                ids = set(
+                    GuardianProfile.objects.filter(user=obj).values_list("school_id", flat=True)
+                ) | set(
+                    ParentStudentLink.objects.filter(guardian_profile__user=obj).values_list(
+                        "school_id", flat=True
+                    )
+                )
+                ids = {i for i in ids if i}
+                if ids:
+                    schools_qs = list(School.objects.filter(pk__in=ids).prefetch_related("modules"))
+                    for sch in schools_qs:
+                        try:
+                            sch.users.add(obj)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
         return SchoolSessionSerializer(schools_qs, many=True, context=self.context).data
     
     def get_is_temporary_password(self, obj):
