@@ -33,7 +33,8 @@ class Command(BaseCommand):
             codes.remove("reports")
 
         total = 0
-        for school in School.objects.all().iterator():
+        # Avoid server-side cursors (Neon pooler closes them mid-iteration)
+        for school in list(School.objects.all()[:500]):
             before = set(school.modules.values_list("code", flat=True))
             if dry:
                 would = before.intersection(codes)
