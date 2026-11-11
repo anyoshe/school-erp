@@ -16,7 +16,7 @@ from .serializers import (
     MedicalRecordSerializer, MedicalRecordCreateUpdateSerializer
 )
 from apps.school.support import accessible_school_ids, selected_school
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, NotFound
 
 
 class StudentPagination(PageNumberPagination):

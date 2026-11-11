@@ -563,6 +563,7 @@ class Application(models.Model):
 
     # Documents / Misc
     photo = models.ImageField(upload_to='admission_photos/', null=True, blank=True)
+
     religion = models.CharField(max_length=50, blank=True)
     category = models.CharField(max_length=50, blank=True)
     notes = models.TextField(blank=True)
@@ -886,25 +887,6 @@ class Application(models.Model):
                 defaults={"is_primary": False},
             )
 
-        # Copy admission documents onto student medical record as attachments
-        try:
-            medical = getattr(student, "student_medical_record", None) or MedicalRecord.objects.filter(student=student).first()
-            if medical:
-                for doc in self.documents.all():
-                    try:
-                        if not doc.file:
-                            continue
-                        MedicalDocument.objects.create(
-                            medical_record=medical,
-                            file=doc.file,
-                            document_type="OTHER",
-                            description=(doc.description or "Admission document")[:255],
-                        )
-                    except Exception as de:
-                        print(f"[ENROLL] doc copy skip: {de}")
-        except Exception as e:
-            print(f"[ENROLL] document copy failed: {e}")
-
         # Post any already-paid interview/admission charges into finance income
         try:
             from apps.finance.pre_enrollment import post_charge_to_finance
@@ -937,6 +919,12 @@ class ApplicationDocument(models.Model):
     file = models.FileField(upload_to='admission_documents/')
     description = models.CharField(max_length=255, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if self.file and not getattr(self.file, "_committed", True):
+            from apps.core.file_validation import validate_upload
+            validate_upload(self.file)
+        return super().save(*args, **kwargs)
 
     checksum = models.CharField(
     max_length=64,

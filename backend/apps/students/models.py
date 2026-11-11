@@ -516,6 +516,13 @@ class MedicalDocument(models.Model):
         MedicalRecord, on_delete=models.CASCADE, related_name="documents"
     )
     file = models.FileField(upload_to="medical_documents/")
+
+    def save(self, *args, **kwargs):
+        if self.file and not getattr(self.file, "_committed", True):
+            from apps.core.file_validation import validate_upload
+            validate_upload(self.file)
+        return super().save(*args, **kwargs)
+
     document_type = models.CharField(
         max_length=50, 
         choices=[('VACCINATION_CARD', 'Vaccination Card'), ('MEDICAL_REPORT', 'Medical Report'), ('OTHER', 'Other')],

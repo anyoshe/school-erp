@@ -190,6 +190,12 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
     setup_complete = serializers.BooleanField(required=False, write_only=False)
     modules = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
 
+    def validate_logo(self, image):
+        if image:
+            from apps.core.file_validation import validate_image
+            validate_image(image)
+        return image
+
     class Meta:
         model = School
         fields = [
@@ -226,7 +232,7 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
         if invalid_ids:
             raise serializers.ValidationError(f"Invalid module IDs: {invalid_ids}")
         return value
-    
+
     def update(self, instance, validated_data):
         request = self.context.get('request')
         if not request:
@@ -255,5 +261,7 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
         if module_ids is not None:
             instance.modules.set(module_ids)
 
-        instance.save()
+        from apps.core.upload_context import upload_owner
+        with upload_owner(instance):
+            instance.save()
         return instance

@@ -1,6 +1,7 @@
 # students/serializers.py
 from rest_framework import serializers
 from django.db import IntegrityError
+from django.db import transaction
 from .models import Student, Guardian, StudentGuardian, MedicalRecord, MedicalDocument
 from apps.academics.serializers import GradeLevelSerializer
 from apps.school.serializers import SchoolSerializer
@@ -257,6 +258,8 @@ class LinkExistingGuardianSerializer(serializers.ModelSerializer):
 
 
 class MedicalDocumentSerializer(serializers.ModelSerializer):
+    file = serializers.SerializerMethodField()
+
     class Meta:
         model = MedicalDocument
         fields = '__all__'
@@ -265,6 +268,13 @@ class MedicalDocumentSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['uploaded_by'] = self.context['request'].user
         return super().create(validated_data)
+
+    def get_file(self, obj):
+        request = self.context.get("request")
+        if request:
+            from django.urls import reverse
+            return request.build_absolute_uri(reverse("medical-document-download", kwargs={"document_id": obj.pk}))
+        return None
 
 
 class MedicalRecordSerializer(serializers.ModelSerializer):
@@ -281,7 +291,9 @@ class MedicalRecordSerializer(serializers.ModelSerializer):
 
 class MedicalRecordCreateUpdateSerializer(serializers.ModelSerializer):
     school = serializers.PrimaryKeyRelatedField(read_only=True)
-    documents = MedicalDocumentSerializer(many=True, required=False)
+    documents = serializers.ListField(
+        child=serializers.FileField(), required=False, write_only=True
+    )
     consent_by = serializers.PrimaryKeyRelatedField(
         queryset=Guardian.objects.all(),
         allow_null=True
@@ -300,20 +312,36 @@ class MedicalRecordCreateUpdateSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_documents(self, files):
+        from apps.core.file_validation import validate_upload
+        for upload in files:
+            validate_upload(upload)
+        return files
+
+    @transaction.atomic
     def create(self, validated_data):
-        documents_data = validated_data.pop('documents', [])
-        validated_data['recorded_by'] = self.context['request'].user
+        documents = validated_data.pop('documents', [])
         instance = super().create(validated_data)
-        for doc_data in documents_data:
-            MedicalDocument.objects.create(medical_record=instance, **doc_data)
+        for upload in documents:
+            from apps.core.upload_context import upload_owner
+            with upload_owner(instance):
+                MedicalDocument.objects.create(
+                    medical_record=instance, file=upload,
+                    uploaded_by=self.context['request'].user,
+                )
         return instance
 
+    @transaction.atomic
     def update(self, instance, validated_data):
-        documents_data = validated_data.pop('documents', [])
-        validated_data['reviewed_by'] = self.context['request'].user
+        documents = validated_data.pop('documents', [])
         instance = super().update(instance, validated_data)
-        for doc_data in documents_data:
-            MedicalDocument.objects.create(medical_record=instance, **doc_data)
+        for upload in documents:
+            from apps.core.upload_context import upload_owner
+            with upload_owner(instance):
+                MedicalDocument.objects.create(
+                    medical_record=instance, file=upload,
+                    uploaded_by=self.context['request'].user,
+                )
         return instance
 
 
@@ -324,6 +352,12 @@ class StudentCreateUpdateSerializer(serializers.ModelSerializer):
     full_name = serializers.ReadOnlyField()
     guardians = StudentGuardianSerializer(many=True, required=False)
     medical_record = MedicalRecordSerializer(source='student_medical_record', required=False)
+
+    def validate_photo(self, image):
+        if image:
+            from apps.core.file_validation import validate_image
+            validate_image(image)
+        return image
 
     class Meta:
         model = Student
@@ -368,13 +402,16 @@ class StudentCreateUpdateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         validated_data = self._clean_fk_blanks(validated_data)
+        school = validated_data.get("school") or selected_school(self.context["request"])
         validated_data['created_by'] = self.context['request'].user
         if not validated_data.get('admission_number'):
             school = validated_data.get('school')
             if school:
                 from apps.school.models import generate_unique_admission_number
                 validated_data['admission_number'] = generate_unique_admission_number(school)
-        return super().create(validated_data)
+        from apps.core.upload_context import upload_owner
+        with upload_owner(school):
+            return super().create(validated_data)
 
     def _normalize_relationship(self, value):
         if value is None:
@@ -429,7 +466,9 @@ class StudentCreateUpdateSerializer(serializers.ModelSerializer):
         if "email" not in validated_data and False:
             pass
 
-        instance = super().update(instance, validated_data)
+        from apps.core.upload_context import upload_owner
+        with upload_owner(instance):
+            instance = super().update(instance, validated_data)
 
         touched = any(v is not None for v in (g_name, g_phone, g_email, g_rel, g_id))
         if touched:

@@ -52,10 +52,19 @@ from apps.students.models import Student
 
 
 class ApplicationDocumentSerializer(serializers.ModelSerializer):
+    file = serializers.SerializerMethodField()
+
     class Meta:
         model = ApplicationDocument
         fields = ['id', 'file', 'description', 'uploaded_at']
         read_only_fields = ['uploaded_at']
+
+    def get_file(self, obj):
+        request = self.context.get("request")
+        if request:
+            from django.urls import reverse
+            return request.build_absolute_uri(reverse("application-document-download", kwargs={"pk": obj.pk}))
+        return None
 
 
 class AdmissionFeePaymentSerializer(serializers.ModelSerializer):
@@ -198,7 +207,19 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
         allow_empty=True
     )
     photo = serializers.ImageField(required=False, allow_null=True)
-    
+
+    def validate_documents(self, uploads):
+        from apps.core.file_validation import validate_upload
+        for upload in uploads:
+            validate_upload(upload)
+        return uploads
+
+    def validate_photo(self, image):
+        if image:
+            from apps.core.file_validation import validate_image
+            validate_image(image)
+        return image
+
 
     class Meta:
         model = Application
@@ -308,20 +329,21 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
         ):
             if validated_data.get(key) is None:
                 validated_data[key] = ""
-        application = Application.objects.create(**validated_data)
+        from apps.core.upload_context import upload_owner
+        with upload_owner(validated_data.get("school")):
+            application = Application.objects.create(**validated_data)
 
         for file in documents_files:
             # Change this line
             checksum = self.compute_checksum(file) 
 
-            ApplicationDocument.objects.get_or_create(
-                application=application,
-                checksum=checksum,
-                defaults={
-                    "file": file,
-                    "description": file.name
-                }
-            )
+            from apps.core.upload_context import upload_owner
+            with upload_owner(application):
+                ApplicationDocument.objects.get_or_create(
+                    application=application,
+                    checksum=checksum,
+                    defaults={"file": file, "description": file.name},
+                )
         return application
 
 
@@ -332,20 +354,21 @@ class ApplicationCreateUpdateSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
-        instance.save()
+        from apps.core.upload_context import upload_owner
+        with upload_owner(instance):
+            instance.save()
 
         for file in documents_files:
             # Change this line
             checksum = self.compute_checksum(file)
 
-            ApplicationDocument.objects.get_or_create(
-                application=instance,
-                checksum=checksum,
-                defaults={
-                    "file": file,
-                    "description": file.name
-                }
-            )
+            from apps.core.upload_context import upload_owner
+            with upload_owner(instance):
+                ApplicationDocument.objects.get_or_create(
+                    application=instance,
+                    checksum=checksum,
+                    defaults={"file": file, "description": file.name},
+                )
 
         return instance
 

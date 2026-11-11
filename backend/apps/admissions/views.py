@@ -5,7 +5,7 @@ from decimal import Decimal
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, NotFound
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db import transaction
@@ -608,7 +608,7 @@ class PublicApplicationSubmissionViewSet(viewsets.GenericViewSet):
         # Optional: log what was saved (for debugging)
         print(f"Public submission saved with status: {application.status}")
 
-        return Response(ApplicationSerializer(application).data, status=status.HTTP_201_CREATED)
+        return Response(ApplicationSerializer(application, context={"request": request}).data, status=status.HTTP_201_CREATED)
     
     @action(detail=True, methods=['patch'], url_path='update')
     def update_draft(self, request, pk=None):
@@ -624,7 +624,7 @@ class PublicApplicationSubmissionViewSet(viewsets.GenericViewSet):
         serializer.save()
 
         print(f"Public update - ID: {pk}, Status: {application.status}")
-        return Response(ApplicationSerializer(application).data)
+        return Response(ApplicationSerializer(application, context={"request": request}).data)
     
     def retrieve(self, request, pk=None):
         """
@@ -681,6 +681,16 @@ class ApplicationDocumentViewSet(viewsets.ModelViewSet):
         return self.queryset.filter(
             application__school_id__in=accessible_school_ids(self.request)
         )
+
+    @action(detail=True, methods=['get'], url_path='download')
+    def download(self, request, pk=None):
+        from django.http import FileResponse
+        document = self.get_object()
+        try:
+            filename = document.file.name.rsplit(':', 1)[-1].rsplit('/', 1)[-1]
+            return FileResponse(document.file.open('rb'), as_attachment=True, filename=filename)
+        except Exception as exc:
+            raise NotFound("Document file is unavailable.") from exc
 
 
 class AdmissionFeePaymentViewSet(viewsets.ModelViewSet):

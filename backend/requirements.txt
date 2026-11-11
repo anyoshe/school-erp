@@ -12,3 +12,5 @@ gunicorn>=23,<24
 django-filter==25.2
 
 Pillow>=11.3,<13
+cloudinary>=1.44,<2
+requests>=2.32,<3
