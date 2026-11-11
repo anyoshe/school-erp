@@ -1,5 +1,6 @@
 "use client";
 
+import { SchoolPrintHeader } from "@/components/print/SchoolPrintHeader";
 import { useState } from "react";
 import Link from "next/link";
 import api from "@/utils/api";
@@ -90,14 +91,11 @@ export default function TranscriptPage() {
       {doc && (
         <Card className="print-document border-2 border-slate-800 print:border-black">
           <CardContent className="p-6 sm:p-8 space-y-6 text-sm">
-            <div className="text-center space-y-1 border-b pb-4">
-              <p className="text-xs tracking-[0.2em] uppercase text-muted-foreground">Republic of Kenya</p>
-              <h2 className="text-xl font-bold uppercase">{doc.school?.name}</h2>
-              <p className="text-xs text-muted-foreground">{doc.school?.address}</p>
-              <p className="text-xs">{doc.school?.phone} {doc.school?.email}</p>
-              <p className="font-semibold mt-3 tracking-wide">{doc.document}</p>
-              <p className="text-xs">Issued: {doc.issued_at}</p>
-            </div>
+            <SchoolPrintHeader
+              school={doc.school}
+              documentTitle={doc.document || "Official Academic Transcript"}
+              subtitle={doc.issued_at ? `Issued: ${doc.issued_at}` : null}
+            />
 
             <div className="grid sm:grid-cols-2 gap-2">
               <p><span className="text-muted-foreground">Learner:</span> <strong>{doc.student?.full_name}</strong></p>

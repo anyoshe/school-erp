@@ -492,7 +492,11 @@ class PayrollViewSet(ModelViewSet):
                     "address": getattr(school, "address", "") or "",
                     "phone": getattr(school, "phone", "") or "",
                     "email": getattr(school, "email", "") or "",
-                    "logo": getattr(school, "logo", None) and str(school.logo.url) if getattr(school, "logo", None) else None,
+                    "logo": (
+                        request.build_absolute_uri(school.logo.url)
+                        if getattr(school, "logo", None)
+                        else None
+                    ),
                 },
                 "employee": {
                     "name": name,

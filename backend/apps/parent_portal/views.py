@@ -291,6 +291,13 @@ class ParentChildResultsView(APIView):
                 academic_year_id=request.query_params.get("academic_year"),
                 term_id=request.query_params.get("term"),
             )
+            try:
+                from apps.assessments.views import _school_print_branding
+                brand = _school_print_branding(school, request)
+                if isinstance(card.get("school"), dict):
+                    card["school"].update(brand)
+            except Exception:
+                pass
         except Exception as exc:
             card = {
                 "student": {

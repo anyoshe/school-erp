@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "@/utils/api";
+import { SchoolPrintHeader } from "@/components/print/SchoolPrintHeader";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1436,12 +1437,11 @@ export default function HRPage() {
           </DialogHeader>
           {payslip && (
             <div id="payslip-print" className="print-document space-y-4 text-sm border rounded-xl p-5 bg-white">
-              <div className="text-center border-b pb-3">
-                <p className="text-xs uppercase tracking-widest text-muted-foreground">Payslip</p>
-                <h2 className="text-lg font-bold">{payslip.school?.name}</h2>
-                <p className="text-xs text-muted-foreground">{payslip.school?.address}</p>
-                <p className="text-xs">{payslip.school?.phone} {payslip.school?.email}</p>
-              </div>
+              <SchoolPrintHeader
+                school={payslip.school}
+                documentTitle="Payslip"
+                subtitle={payslip.pay?.month_label || null}
+              />
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <p className="text-xs text-muted-foreground">Employee</p>

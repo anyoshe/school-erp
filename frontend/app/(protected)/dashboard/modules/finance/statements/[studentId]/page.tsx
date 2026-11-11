@@ -1,5 +1,6 @@
 "use client";
 
+import { SchoolPrintHeader } from "@/components/print/SchoolPrintHeader";
 import { FinanceNavLinks } from "../../components/FinanceNav";
 
 import { useParams } from "next/navigation";
@@ -48,10 +49,13 @@ export default function StudentStatementPage() {
       {isLoading || !data ? (
         <p className="text-sm text-muted-foreground">Loading statement…</p>
       ) : (
-        <Card className="print:shadow-none print:border-0">
-          <CardHeader>
-            <CardTitle className="text-lg">{data.school?.name}</CardTitle>
-            <p className="text-sm text-muted-foreground">Student fee statement · {data.generated_at}</p>
+        <Card className="print-document print:shadow-none print:border-0">
+          <CardHeader className="pb-2">
+            <SchoolPrintHeader
+              school={data.school}
+              documentTitle="Student Fee Statement"
+              subtitle={data.generated_at ? ` `Generated: ${data.generated_at}` : null}
+            />
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
             <div className="grid grid-cols-2 gap-2">

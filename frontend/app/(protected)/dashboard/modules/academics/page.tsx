@@ -1,6 +1,7 @@
 "use client";
 
-import api from "@/utils/api";
+import api from "@/utils/api"
+import { SchoolPrintHeader } from "@/components/print/SchoolPrintHeader";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -2900,29 +2901,11 @@ function ReportCardsPanel({
           {/* single selected for screen; all for print via CSS could be added later */}
           <Card className="border-border rounded-2xl overflow-hidden max-w-3xl mx-auto">
             <CardContent className="p-6 sm:p-8 space-y-5">
-              <div className="text-center space-y-1 border-b pb-4">
-                {card.school.logo ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={card.school.logo}
-                    alt=""
-                    className="h-16 mx-auto object-contain mb-2"
-                  />
-                ) : null}
-                <h2 className="text-xl font-bold tracking-tight">{card.school.name}</h2>
-                <p className="text-xs text-muted-foreground">
-                  {[card.school.address, card.school.phone, card.school.email]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-                <p className="text-sm font-semibold mt-2 uppercase tracking-wide text-primary">
-                  Academic Report Card
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {card.academic_year?.name || "—"}
-                  {card.term ? ` · ${card.term.name}` : ""}
-                </p>
-              </div>
+              <SchoolPrintHeader
+                school={card.school}
+                documentTitle="Academic Report Card"
+                subtitle={`${card.academic_year?.name || "—"}${card.term ? ` · ${card.term.name}` : ""}`}
+              />
 
               <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
                 <p>

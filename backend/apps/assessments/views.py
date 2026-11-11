@@ -240,6 +240,30 @@ class ClassResultsView(APIView):
         )
 
 
+def _school_print_branding(school, request=None):
+    """Name, contacts, and logo URL for printable documents."""
+    logo = None
+    if getattr(school, "logo", None):
+        try:
+            url = school.logo.url
+            if request is not None and url and not str(url).startswith("http"):
+                logo = request.build_absolute_uri(url)
+            else:
+                logo = url
+        except Exception:
+            logo = None
+    return {
+        "id": str(school.id),
+        "name": school.name,
+        "short_name": getattr(school, "short_name", "") or "",
+        "address": getattr(school, "address", "") or "",
+        "phone": getattr(school, "phone", "") or "",
+        "email": getattr(school, "email", "") or "",
+        "motto": getattr(school, "motto", "") or "",
+        "logo": logo,
+    }
+
+
 def _build_student_report(
     student,
     school,
@@ -457,13 +481,7 @@ def _build_student_report(
             "admission_number": student.admission_number or "",
         },
         "school": {
-            "id": str(school.id),
-            "name": school.name,
-            "short_name": getattr(school, "short_name", "") or "",
-            "address": getattr(school, "address", "") or "",
-            "phone": getattr(school, "phone", "") or "",
-            "email": getattr(school, "email", "") or "",
-            "logo": None,
+            **_school_print_branding(school),
             "grading_system": grading_system_for_school(
                 school,
                 grade.curriculum if grade else None,
@@ -1397,14 +1415,7 @@ class TranscriptView(APIView):
             {
                 "document": "OFFICIAL ACADEMIC TRANSCRIPT",
                 "issued_at": __import__("django.utils.timezone", fromlist=["now"]).now().date().isoformat(),
-                "school": {
-                    "name": school.name,
-                    "short_name": getattr(school, "short_name", "") or "",
-                    "address": getattr(school, "address", "") or "",
-                    "phone": getattr(school, "phone", "") or "",
-                    "email": getattr(school, "email", "") or "",
-                    "motto": getattr(school, "motto", "") or "",
-                },
+                "school": _school_print_branding(school, request),
                 "student": {
                     "id": str(student.id),
                     "admission_number": student.admission_number,
