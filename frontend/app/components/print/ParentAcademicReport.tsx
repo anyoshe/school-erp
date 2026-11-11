@@ -151,19 +151,11 @@ export function AcademicReportForm({
 
   return (
     <div className="parent-report-a4 mx-auto bg-white text-slate-900 shadow-sm border border-slate-200 print:shadow-none print:border-0">
-            <style jsx global>{`
+      <style jsx global>{`
         @media print {
           @page {
             size: A4 portrait;
-            margin: 8mm 10mm 10mm 10mm;
-          }
-          html,
-          body {
-            background: #fff !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+            margin: 12mm;
           }
           body * {
             visibility: hidden;
@@ -173,68 +165,36 @@ export function AcademicReportForm({
             visibility: visible;
           }
           .parent-report-a4 {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-            width: 100% !important;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
             max-width: none !important;
-            margin: 0 !important;
-            padding: 0 !important;
             border: none !important;
             box-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
           }
-          .print\:hidden,
-          .print\:hidden * {
+          .print\\:hidden {
             display: none !important;
-            visibility: hidden !important;
-          }
-          .school-print-header {
-            margin-top: 0 !important;
-            padding-top: 0 !important;
-            margin-bottom: 6px !important;
-            padding-bottom: 6px !important;
-          }
-          .school-print-logo {
-            height: 64px !important;
-            max-height: 64px !important;
-            max-width: 180px !important;
-          }
-          .parent-report-a4 .summary-strip > div {
-            break-inside: avoid;
-          }
-          .parent-report-a4 table.marks {
-            page-break-inside: auto;
-          }
-          .parent-report-a4 table.marks tr {
-            page-break-inside: avoid;
-          }
-          .parent-report-a4 .comments-block {
-            page-break-inside: avoid;
-          }
-          .break-before-page {
-            break-before: page;
-            page-break-before: always;
           }
         }
         .parent-report-a4 {
           max-width: 210mm;
-          margin-left: auto;
-          margin-right: auto;
-          padding: 8px 12px 16px;
-          font-size: 11px;
-          line-height: 1.3;
-          box-sizing: border-box;
+          padding: 16px 20px 24px;
+          font-size: 12px;
+          line-height: 1.35;
         }
         .parent-report-a4 .meta-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 4px 16px;
-          margin: 6px 0 8px;
-          font-size: 11px;
+          gap: 6px 20px;
+          margin: 12px 0 14px;
+          font-size: 12px;
         }
         .parent-report-a4 .meta-grid .lab {
           color: #64748b;
-          font-size: 9px;
+          font-size: 10px;
           text-transform: uppercase;
           letter-spacing: 0.04em;
         }
@@ -245,50 +205,50 @@ export function AcademicReportForm({
         .parent-report-a4 .summary-strip {
           display: grid;
           grid-template-columns: repeat(4, 1fr);
-          gap: 6px;
-          margin: 6px 0 8px;
+          gap: 8px;
+          margin: 10px 0 14px;
         }
         .parent-report-a4 .summary-strip > div {
           border: 1px solid #cbd5e1;
-          border-radius: 6px;
-          padding: 5px 7px;
+          border-radius: 8px;
+          padding: 8px 10px;
           text-align: center;
           background: #f8fafc;
         }
         .parent-report-a4 .summary-strip .lab {
-          font-size: 8px;
+          font-size: 9px;
           text-transform: uppercase;
           letter-spacing: 0.05em;
           color: #64748b;
         }
         .parent-report-a4 .summary-strip .val {
-          font-size: 13px;
+          font-size: 16px;
           font-weight: 700;
-          margin-top: 1px;
+          margin-top: 2px;
         }
         .parent-report-a4 .summary-strip .sub {
-          font-size: 9px;
+          font-size: 10px;
           color: #475569;
-          margin-top: 1px;
+          margin-top: 2px;
         }
         .parent-report-a4 table.marks {
           width: 100%;
           border-collapse: collapse;
-          font-size: 10px;
+          font-size: 11px;
         }
         .parent-report-a4 table.marks th,
         .parent-report-a4 table.marks td {
           border: 1px solid #94a3b8;
-          padding: 3px 5px;
+          padding: 5px 6px;
           vertical-align: middle;
         }
         .parent-report-a4 table.marks th {
           background: #f1f5f9;
           font-weight: 700;
           text-align: center;
-          font-size: 9px;
+          font-size: 10px;
           text-transform: uppercase;
-          letter-spacing: 0.02em;
+          letter-spacing: 0.03em;
         }
         .parent-report-a4 table.marks td.subj {
           text-align: left;
@@ -303,21 +263,24 @@ export function AcademicReportForm({
           background: #f8fafc;
         }
         .parent-report-a4 .legend {
-          margin-top: 8px;
-          font-size: 9px;
+          margin-top: 12px;
+          font-size: 10px;
           color: #475569;
         }
         .parent-report-a4 .legend strong {
           color: #0f172a;
         }
-        .parent-report-a4 .comments-block {
-          margin-top: 10px !important;
+        .parent-report-a4 .signs {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 28px;
+          margin-top: 28px;
+          font-size: 11px;
         }
-        .parent-report-a4 .comments-block > div {
-          margin-bottom: 8px !important;
-        }
-        .parent-report-a4 .comments-block > div > div[style*="minHeight"] {
-          min-height: 36px !important;
+        .parent-report-a4 .signs .line {
+          border-top: 1px solid #334155;
+          margin-top: 28px;
+          padding-top: 4px;
         }
         @media (max-width: 640px) {
           .parent-report-a4 .summary-strip {
@@ -499,14 +462,14 @@ export function AcademicReportForm({
         ) : null}
       </div>
 
-      <div className="comments-block" style={{ marginTop: 10 }}>
-        <div style={{ marginBottom: 8 }}>
+      <div className="comments-block" style={{ marginTop: 16 }}>
+        <div style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "#475569", marginBottom: 4 }}>
             Class teacher&apos;s comment
           </div>
           <div
             style={{
-              minHeight: 40,
+              minHeight: 52,
               border: "1px solid #94a3b8",
               borderRadius: 6,
               padding: "8px 10px",
@@ -531,7 +494,7 @@ export function AcademicReportForm({
           </div>
           <div
             style={{
-              minHeight: 40,
+              minHeight: 52,
               border: "1px solid #94a3b8",
               borderRadius: 6,
               padding: "8px 10px",

@@ -19,13 +19,16 @@ type Props = {
   documentTitle: string;
   subtitle?: string | null;
   className?: string;
-  /** A4 reports use letterhead density; default is still enlarged for print. */
+  /** A4 reports use the largest logo; default is still enlarged for print. */
   variant?: "default" | "a4" | "compact";
 };
 
 /**
  * Official header for printable school documents.
- * Print: sits flush under the page margin like a letterhead.
+ *
+ * RULE: logo is always prepared for print — SVG preferred; raster logos
+ * have solid/white backgrounds removed and are shown enlarged so they
+ * dominate the heading without a boxy plate behind them.
  */
 export function SchoolPrintHeader({
   school,
@@ -56,26 +59,25 @@ export function SchoolPrintHeader({
     .slice(0, 2)
     .toUpperCase();
 
-  // Screen sizes; print sizes are forced via .school-print-header CSS
   const logoClass =
     variant === "a4"
-      ? "school-print-logo h-[72px] max-h-[72px] max-w-[200px] w-auto object-contain"
+      ? "h-[96px] max-h-[96px] max-w-[240px] w-auto object-contain print:h-[100px] print:max-w-[260px]"
       : variant === "compact"
-        ? "school-print-logo h-[56px] max-h-[56px] max-w-[140px] w-auto object-contain"
-        : "school-print-logo h-[68px] max-h-[68px] max-w-[180px] w-auto object-contain";
+        ? "h-[64px] max-h-[64px] max-w-[160px] w-auto object-contain print:h-[72px]"
+        : "h-[80px] max-h-[80px] max-w-[200px] w-auto object-contain print:h-[88px] print:max-w-[220px]";
 
   const monoClass =
     variant === "a4"
-      ? "school-print-logo h-[72px] w-[72px] text-xl"
+      ? "h-[96px] w-[96px] text-2xl"
       : variant === "compact"
-        ? "school-print-logo h-[56px] w-[56px] text-base"
-        : "school-print-logo h-[68px] w-[68px] text-lg";
+        ? "h-[64px] w-[64px] text-lg"
+        : "h-[80px] w-[80px] text-xl";
 
   return (
     <header
-      className={`school-print-header text-center border-b-2 border-slate-800 pb-2 mb-3 print:pb-1.5 print:mb-2 ${className}`}
+      className={`text-center border-b-2 border-slate-800 pb-3 mb-4 ${className}`}
     >
-      <div className="flex justify-center mb-1.5 print:mb-1">
+      <div className="flex justify-center mb-3 print:mb-3">
         {logoSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -95,35 +97,31 @@ export function SchoolPrintHeader({
       <h1
         className={
           variant === "a4"
-            ? "text-lg sm:text-xl font-bold tracking-tight text-slate-900 uppercase leading-tight print:text-[16pt]"
-            : "text-base sm:text-lg font-bold tracking-tight text-slate-900 uppercase print:text-[14pt]"
+            ? "text-xl sm:text-2xl font-bold tracking-tight text-slate-900 uppercase leading-tight"
+            : "text-lg sm:text-xl font-bold tracking-tight text-slate-900 uppercase"
         }
       >
         {name}
       </h1>
       {motto ? (
-        <p className="text-[11px] italic text-slate-600 mt-0.5 print:text-[9pt] print:mt-0">
-          &ldquo;{motto}&rdquo;
-        </p>
+        <p className="text-xs italic text-slate-600 mt-0.5">&ldquo;{motto}&rdquo;</p>
       ) : null}
       {contact ? (
-        <p className="text-[10px] sm:text-[11px] text-slate-600 mt-0.5 leading-snug max-w-xl mx-auto print:text-[8.5pt] print:mt-0">
+        <p className="text-[11px] sm:text-xs text-slate-600 mt-1 leading-snug max-w-xl mx-auto">
           {contact}
         </p>
       ) : null}
       <p
         className={
           variant === "a4"
-            ? "mt-2 text-sm font-bold uppercase tracking-[0.12em] text-slate-900 print:mt-1.5 print:text-[11pt]"
-            : "mt-2 text-xs font-semibold uppercase tracking-[0.1em] text-slate-800 print:mt-1 print:text-[10pt]"
+            ? "mt-3 text-base font-bold uppercase tracking-[0.14em] text-slate-900"
+            : "mt-3 text-sm font-semibold uppercase tracking-[0.12em] text-slate-800"
         }
       >
         {documentTitle}
       </p>
       {subtitle ? (
-        <p className="text-[11px] sm:text-xs text-slate-600 mt-0.5 font-medium print:text-[9pt] print:mt-0">
-          {subtitle}
-        </p>
+        <p className="text-xs sm:text-sm text-slate-600 mt-1 font-medium">{subtitle}</p>
       ) : null}
     </header>
   );
