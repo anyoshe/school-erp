@@ -119,9 +119,12 @@ class CloudinaryStorage(FileSystemStorage):
                 overwrite=False,
                 filename_override=Path(name).name,
             )
-        except Exception:
+        except Exception as exc:
             content.seek(0)
-            raise
+            raise ImproperlyConfigured(
+                f"Cloudinary upload failed: {exc}. "
+                "Check CLOUDINARY_URL credentials and that the Cloudinary account is active."
+            ) from exc
         else:
             content.seek(0)
         public_id = result.get("public_id")

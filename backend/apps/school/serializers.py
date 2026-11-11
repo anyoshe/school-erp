@@ -268,6 +268,8 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
             instance.modules.set(module_ids)
 
         if new_logo is not serializers.empty:
+            from apps.core.storage import CloudinaryStorage
+
             try:
                 if new_logo is None and instance.logo:
                     try:
@@ -276,12 +278,25 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
                         pass
                     instance.logo = None
                 elif new_logo:
+                    storage = CloudinaryStorage()
+                    if not storage.configured:
+                        raise DRFValidationError(
+                            {
+                                "logo": (
+                                    "Logo upload requires CLOUDINARY_URL on the backend (Deplexo). "
+                                    "Text fields can still be saved without a logo."
+                                ),
+                                "hint": "Set CLOUDINARY_URL=cloudinary://API_KEY:API_SECRET@CLOUD_NAME then redeploy.",
+                            }
+                        )
                     if instance.logo:
                         try:
                             instance.logo.delete(save=False)
                         except Exception:
                             pass
                     instance.logo = new_logo
+            except DRFValidationError:
+                raise
             except Exception as exc:
                 raise DRFValidationError(
                     {"logo": f"Could not process logo: {exc}"}
@@ -291,6 +306,8 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
         try:
             with upload_owner(instance):
                 instance.save()
+        except DRFValidationError:
+            raise
         except ImproperlyConfigured as exc:
             raise DRFValidationError(
                 {
@@ -307,14 +324,12 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
                 }
             ) from exc
         except Exception as exc:
-            # Avoid opaque 500s for known storage/config issues
             msg = str(exc)
-            if "cloudinary" in msg.lower() or "CLOUDINARY" in msg:
-                raise DRFValidationError(
-                    {
-                        "detail": "Media storage error (Cloudinary).",
-                        "error": msg[:300],
-                    }
-                ) from exc
-            raise
+            raise DRFValidationError(
+                {
+                    "detail": "Could not save school (often logo/media storage).",
+                    "error": msg[:400],
+                    "hint": "Ensure CLOUDINARY_URL is set on Deplexo, or save without a new logo.",
+                }
+            ) from exc
         return instance
