@@ -37,6 +37,11 @@ interface Module {
 /* ---------------------------------- */
 /* Icon Mapping                        */
 /* ---------------------------------- */
+const SHELL_CODES = new Set([
+  "library", "reports", "events", "health", "alumni", "transport",
+  "elearning", "inventory", "procurement",
+]);
+
 const iconMap: Record<string, React.ReactNode> = {
   students: <Users className="w-8 h-8" />,
   admissions: <GraduationCap className="w-8 h-8" />,

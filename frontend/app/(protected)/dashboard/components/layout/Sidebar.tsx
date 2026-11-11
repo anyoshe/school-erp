@@ -29,17 +29,17 @@ const DESIRED_ORDER: string[] = [
   "students",
   "academics",
   "attendance",
-  "library",
   "staff",
+  "parent_portal",
+  "library",
+  "reports",
   "events",
   "health",
-  "parent_portal",
   "alumni",
   "transport",
   "elearning",
   "inventory",
   "procurement",
-  // reports intentionally missing → will be forced last
 ];
 // Map backend module codes to friendly names, icons, and URLs
 const MODULE_CONFIG: Record<string, MenuItem> = {
@@ -90,8 +90,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
 
   const enabledModules = currentSchool?.modules || [];
 
-  // Core modules always visible even if not toggled on for the school
-  // (schools can still manage extras under Settings → Modules)
+  // Product core — used only when school has no module list yet
   const CORE_MODULE_CODES = [
     "admissions",
     "students",
@@ -99,64 +98,63 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     "academics",
     "attendance",
     "staff",
-    "reports",
     "parent_portal",
   ];
 
-// Build unique items by code first (already deduplicated)
-const uniqueModuleItems = new Map<string, MenuItem>();
+  // Placeholder modules: never inject unless the school explicitly enabled them
+  const SHELL_MODULE_CODES = new Set([
+    "library",
+    "reports",
+    "events",
+    "health",
+    "alumni",
+    "transport",
+    "elearning",
+    "inventory",
+    "procurement",
+  ]);
 
-for (const code of CORE_MODULE_CODES) {
-  const item = MODULE_CONFIG[code];
-  if (item) uniqueModuleItems.set(code, item);
-}
+  const uniqueModuleItems = new Map<string, MenuItem>();
+  const schoolCodes = enabledModules
+    .map((m: { code?: string }) => m?.code)
+    .filter(Boolean) as string[];
 
-for (const m of enabledModules) {
-  if (!m.code) continue;
-  const item = MODULE_CONFIG[m.code];
-  if (item) {
-    uniqueModuleItems.set(m.code, item);
+  if (schoolCodes.length === 0) {
+    for (const code of CORE_MODULE_CODES) {
+      const item = MODULE_CONFIG[code];
+      if (item) uniqueModuleItems.set(code, item);
+    }
+  } else {
+    for (const code of schoolCodes) {
+      if (SHELL_MODULE_CODES.has(code) && !schoolCodes.includes(code)) continue;
+      const item = MODULE_CONFIG[code];
+      if (item) uniqueModuleItems.set(code, item);
+    }
+    // Always keep core operational modules visible even if an older school
+    // lost them from the M2M — still prefer not to force shells.
+    for (const code of CORE_MODULE_CODES) {
+      if (!uniqueModuleItems.has(code) && MODULE_CONFIG[code]) {
+        uniqueModuleItems.set(code, MODULE_CONFIG[code]);
+      }
+    }
   }
-}
 
-// Now build the final ordered list
-const dynamicItems: MenuItem[] = [];
-
-// 1. Desired order (skip if not enabled)
-for (const code of DESIRED_ORDER) {
-  const item = uniqueModuleItems.get(code);
-  if (item) {
+  const dynamicItems: MenuItem[] = [];
+  for (const code of DESIRED_ORDER) {
+    const item = uniqueModuleItems.get(code);
+    if (item) {
+      dynamicItems.push(item);
+      uniqueModuleItems.delete(code);
+    }
+  }
+  const reportsItem = uniqueModuleItems.get("reports");
+  if (reportsItem) {
+    dynamicItems.push(reportsItem);
+    uniqueModuleItems.delete("reports");
+  }
+  for (const item of uniqueModuleItems.values()) {
     dynamicItems.push(item);
-    uniqueModuleItems.delete(code); // prevent appearing again
   }
-}
-
-// 2. Reports last (if enabled)
-const reportsItem = uniqueModuleItems.get("reports");
-if (reportsItem) {
-  dynamicItems.push(reportsItem);
-  uniqueModuleItems.delete("reports");
-}
-
-// 3. Any remaining modules (in backend-provided order)
-for (const item of uniqueModuleItems.values()) {
-  dynamicItems.push(item);
-}
-
-// ── Debug: Check for duplicate hrefs ────────────────────────────────
-const hrefCount = new Map<string, number>();
-dynamicItems.forEach(item => {
-  if (item.href) {
-    hrefCount.set(item.href, (hrefCount.get(item.href) || 0) + 1);
-  }
-});
-
-const duplicates = Array.from(hrefCount.entries()).filter(([_, count]) => count > 1);
-
-if (duplicates.length > 0) {
-  console.warn("Duplicate hrefs detected in sidebar:", duplicates);
-  console.log("Full dynamicItems:", dynamicItems.map(i => ({label: i.label, href: i.href})));
-}
   return (
     <div className="flex flex-col h-full bg-white shadow-lg">
       {/* Header */}

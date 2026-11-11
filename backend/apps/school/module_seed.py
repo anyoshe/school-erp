@@ -23,6 +23,31 @@ DEFAULT_MODULES = [
 ]
 
 
+# Product-ready defaults — enabled on new schools
+CORE_MODULE_CODES = (
+    "admissions",
+    "students",
+    "finance",
+    "academics",
+    "attendance",
+    "staff",
+    "parent_portal",
+)
+
+# Present in catalogue but not auto-enabled (Coming soon / optional)
+SHELL_MODULE_CODES = (
+    "library",
+    "reports",
+    "events",
+    "health",
+    "alumni",
+    "transport",
+    "elearning",
+    "inventory",
+    "procurement",
+)
+
+
 def seed_default_modules():
     """
     Keep the platform module catalogue present.
@@ -41,20 +66,8 @@ def seed_default_modules():
         return
 
 
-
-CORE_MODULE_CODES = (
-    "admissions",
-    "students",
-    "finance",
-    "academics",
-    "attendance",
-    "staff",
-    "reports",
-)
-
-
 def ensure_school_core_modules(school):
-    """Attach core ERP modules to a school if missing."""
+    """Attach core ERP modules to a school if missing (does not attach shells)."""
     seed_default_modules()
     try:
         for code in CORE_MODULE_CODES:
@@ -63,3 +76,15 @@ def ensure_school_core_modules(school):
                 school.modules.add(mod)
     except (OperationalError, ProgrammingError):
         return
+
+
+def prune_school_shell_modules(school, codes=None):
+    """Remove shell (placeholder) modules from a school so nav stays clean."""
+    seed_default_modules()
+    try:
+        target = list(codes) if codes is not None else list(SHELL_MODULE_CODES)
+        mods = Module.objects.filter(code__in=target)
+        school.modules.remove(*mods)
+        return [m.code for m in mods]
+    except (OperationalError, ProgrammingError):
+        return []

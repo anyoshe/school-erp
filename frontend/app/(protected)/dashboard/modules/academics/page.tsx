@@ -3087,8 +3087,11 @@ const load = async (opts?: { quiet?: boolean }) => {
         );
       }
     } catch (e: unknown) {
-      if (!opts?.quiet) toast.error(getApiErrorDetail(e) || "Could not load markbook");
-      setMatrix(null);
+      if (!opts?.quiet) {
+        toast.error(getApiErrorDetail(e) || "Could not load markbook");
+        setMatrix(null);
+      }
+      // quiet refresh: keep previous markbook on screen
     } finally {
       setBusy(false);
     }
@@ -3101,13 +3104,14 @@ const load = async (opts?: { quiet?: boolean }) => {
       setDraft({});
       return;
     }
+    // Keep prior grid visible while the next subject loads (no blank flash)
     const handle = window.setTimeout(() => {
       void load({ quiet: true });
-    }, 150);
+    }, 40);
     return () => window.clearTimeout(handle);
     // section + sort also refresh the grid
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [yearId, termId, gradeId, subjectId, sectionId]);
+  }, [yearId, termId, gradeId, subjectId, sectionId, sortBy]);
 
   const save = async () => {
     if (!matrix || !yearId || !termId || !gradeId || !subjectId) return;

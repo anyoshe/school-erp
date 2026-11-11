@@ -141,6 +141,10 @@ export default function AdmissionActions({
     actionLock.current = true;
     try {
       setLoading(value || action);
+      // Advance pipeline UI immediately — do not wait for network round-trip
+      if (action === "status" && value) {
+        setOptimisticStatus(String(value).toUpperCase());
+      }
 
       if (action === "status") {
         const payload: Record<string, string> = { status: value || "" };
@@ -175,7 +179,8 @@ export default function AdmissionActions({
         }
 
         setIsRejectOpen(false);
-        await onUpdated?.(res.data);
+        // Refresh in background; UI already advanced optimistically
+        void Promise.resolve(onUpdated?.(res.data));
         return;
       }
 
