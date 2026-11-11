@@ -117,8 +117,8 @@ type Props = {
   sectionLabel?: string;
 };
 
-/** Complete A4 academic report form for the parent portal. */
-export function ParentAcademicReport({
+/** Shared A4 academic report form (staff academics + parent portal). */
+export function AcademicReportForm({
   data,
   learnerName,
   admissionNumber,
@@ -518,4 +518,8 @@ export function ParentAcademicReport({
   );
 }
 
-export default ParentAcademicReport;
+
+
+/** @deprecated use AcademicReportForm — kept for parent portal imports */
+export const ParentAcademicReport = AcademicReportForm;
+export default AcademicReportForm;

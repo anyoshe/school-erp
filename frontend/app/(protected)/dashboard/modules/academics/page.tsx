@@ -2,6 +2,7 @@
 
 import api from "@/utils/api"
 import { SchoolPrintHeader } from "@/components/print/SchoolPrintHeader";
+import { AcademicReportForm } from "@/components/print/ParentAcademicReport";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -2898,136 +2899,19 @@ function ReportCardsPanel({
 
       {card ? (
         <div className="print-document report-card-print space-y-4">
-          {/* single selected for screen; all for print via CSS could be added later */}
-          <Card className="border-border rounded-2xl overflow-hidden max-w-3xl mx-auto">
-            <CardContent className="p-6 sm:p-8 space-y-5">
-              <SchoolPrintHeader
-                school={card.school}
-                documentTitle="Academic Report Card"
-                subtitle={`${card.academic_year?.name || "—"}${card.term ? ` · ${card.term.name}` : ""}`}
-              />
-
-              <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                <p>
-                  <span className="text-muted-foreground">Learner:</span>{" "}
-                  <strong>{card.student.full_name}</strong>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Admission #:</span>{" "}
-                  {card.student.admission_number || "—"}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Class:</span>{" "}
-                  {card.grade?.name || "—"}
-                  {card.section ? ` · ${card.section.name}` : ""}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Class teacher:</span>{" "}
-                  {card.class_teacher_name || "—"}
-                </p>
-              </div>
-
-              <div className="overflow-x-auto rounded-xl border">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2">Subject</th>
-                      <th className="px-3 py-2">Teacher</th>
-                      <th className="px-3 py-2">Assessments</th>
-                      <th className="px-3 py-2 text-right">Average %</th>
-                      <th className="px-3 py-2 text-center">Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {card.subjects.map((s) => (
-                      <tr key={s.subject_id} className="border-t">
-                        <td className="px-3 py-2 font-medium">{s.subject_name}</td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
-                          {s.teacher_name || "—"}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">
-                          {s.entries.length
-                            ? s.entries
-                                .map(
-                                  (e) =>
-                                    `${e.assessment}: ${e.percentage.toFixed(0)}%`
-                                )
-                                .join(" · ")
-                            : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums">
-                          {s.average != null ? s.average.toFixed(1) : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-center font-semibold">
-                          {s.grade_letter || "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    {(() => {
-                      const scored = (card.subjects || []).filter((s) => s.average != null);
-                      if (!scored.length) return null;
-                      const total = scored.reduce((sum, s) => sum + Number(s.average || 0), 0);
-                      const max = scored.length * 100;
-                      return (
-                        <tr className="border-t bg-slate-50 font-semibold">
-                          <td className="px-3 py-2" colSpan={3}>
-                            Total
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums">
-                            {Math.round(total)} / {max}
-                          </td>
-                          <td className="px-3 py-2" />
-                        </tr>
-                      );
-                    })()}
-                  </tfoot>
-                </table>
-              </div>
-
-              <div className="flex flex-wrap justify-between items-center gap-3 pt-2 border-t">
-                <div>
-                  <p className="text-xs text-muted-foreground">Overall average</p>
-                  <p className="text-2xl font-bold tabular-nums">
-                    {card.overall_average != null
-                      ? `${card.overall_average.toFixed(1)}%`
-                      : "—"}
-                  </p>
+          <AcademicReportForm data={card as any} />
+          {/* Print entire class: each learner on a page */}
+          <div className="hidden print:block space-y-0">
+            {cards.map((c, i) =>
+              i === selectedIdx ? null : (
+                <div key={c.student?.id || i} className="break-before-page">
+                  <AcademicReportForm data={c as any} />
                 </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Overall grade</p>
-                  <p className="text-3xl font-bold text-primary">
-                    {card.overall_grade || "—"}
-                  </p>
-                </div>
-                <div className="text-center">
-                  <p className="text-xs text-muted-foreground">Class position</p>
-                  <p className="text-2xl font-bold tabular-nums">
-                    {card.position != null ? `${card.position}` : "—"}
-                    {card.out_of ? (
-                      <span className="text-sm font-normal text-muted-foreground"> / {card.out_of}</span>
-                    ) : null}
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-6 pt-6 text-sm">
-                <div>
-                  <p className="text-xs text-muted-foreground mb-6">Class teacher</p>
-                  <div className="border-t border-dashed pt-1">
-                    {card.class_teacher_name || "Signature"}
-                  </div>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground mb-6">Head teacher</p>
-                  <div className="border-t border-dashed pt-1">Signature / stamp</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              )
+            )}
+          </div>
         </div>
-      ) : (
+      ) : () : (
         !busy && (
           <p className="text-center text-sm text-muted-foreground py-12">
             Select year, term and grade, then load report cards.
