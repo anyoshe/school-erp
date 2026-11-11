@@ -250,6 +250,8 @@ class ParentChildOverviewView(APIView):
                 "position": card.get("position") or card.get("class_position"),
                 "out_of": card.get("out_of"),
                 "overall_grade": card.get("overall_grade"),
+                "overall_marks_total": card.get("overall_marks_total"),
+                "overall_marks_max": card.get("overall_marks_max"),
                 "term": card.get("term") or card.get("term_name"),
                 "academic_year": card.get("academic_year") or card.get("year_name"),
                 "subject_count": len(card.get("subjects") or []),

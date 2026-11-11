@@ -45,7 +45,12 @@ export type ParentReportData = {
   class_position?: string | number | null;
   out_of?: string | number | null;
   subjects_with_marks?: number | null;
+  overall_marks_total?: number | null;
+  overall_marks_max?: number | null;
+  class_teacher_comment?: string | null;
+  head_teacher_comment?: string | null;
 };
+
 
 function collectAssessmentColumns(subjects: SubjectRow[]): string[] {
   const order: string[] = [];
@@ -331,15 +336,17 @@ export function ParentAcademicReport({
 
       <div className="summary-strip">
         <div>
-          <div className="lab">Overall average</div>
+          <div className="lab">Overall marks</div>
           <div className="val">
-            {data.overall_average != null ? `${data.overall_average}%` : "—"}
+            {data.overall_marks_total != null && data.overall_marks_max
+              ? `${data.overall_marks_total}/${data.overall_marks_max}`
+              : withMarks.length > 0
+                ? `${Math.round(totalAvgSum * 10) / 10}/${totalPossible}`
+                : "—"}
           </div>
-          {withMarks.length > 0 ? (
-            <div className="sub">
-              {Math.round(totalAvgSum * 10) / 10}/{totalPossible}
-            </div>
-          ) : null}
+          <div className="sub">
+            {data.overall_average != null ? `Average ${data.overall_average}%` : "—"}
+          </div>
         </div>
         <div>
           <div className="lab">Overall grade</div>
@@ -420,7 +427,13 @@ export function ParentAcademicReport({
                 </td>
               ))}
               <td className="num">
-                {data.overall_average != null ? `${data.overall_average}%` : "—"}
+                {data.overall_marks_total != null && data.overall_marks_max
+                  ? `${data.overall_marks_total}/${data.overall_marks_max}`
+                  : withMarks.length > 0
+                    ? `${Math.round(totalAvgSum * 10) / 10}/${totalPossible}`
+                    : data.overall_average != null
+                      ? `${data.overall_average}%`
+                      : "—"}
               </td>
               <td className="num">{data.overall_grade || "—"}</td>
               <td>
@@ -449,23 +462,55 @@ export function ParentAcademicReport({
         ) : null}
       </div>
 
-      <div className="signs">
-        <div>
-          <div className="line">
-            Class teacher
-            <div style={{ fontWeight: 600, marginTop: 2 }}>
-              {data.class_teacher_name || "Name: ____________________________"}
-            </div>
-            <div style={{ color: "#64748b", marginTop: 2 }}>Date: ______________</div>
+      <div className="comments-block" style={{ marginTop: 16 }}>
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "#475569", marginBottom: 4 }}>
+            Class teacher&apos;s comment
+          </div>
+          <div
+            style={{
+              minHeight: 52,
+              border: "1px solid #94a3b8",
+              borderRadius: 6,
+              padding: "8px 10px",
+              background: "#fff",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {data.class_teacher_comment || "\u00a0"}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11 }}>
+            <span>
+              <strong>Name:</strong> {data.class_teacher_name || "________________"}
+            </span>
+            <span>
+              <strong>Sign / date:</strong> ______________
+            </span>
           </div>
         </div>
         <div>
-          <div className="line">
-            Head teacher / Principal
-            <div style={{ fontWeight: 600, marginTop: 2 }}>
-              Name: ____________________________
-            </div>
-            <div style={{ color: "#64748b", marginTop: 2 }}>Date / stamp: ______________</div>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "#475569", marginBottom: 4 }}>
+            Head teacher&apos;s comment
+          </div>
+          <div
+            style={{
+              minHeight: 52,
+              border: "1px solid #94a3b8",
+              borderRadius: 6,
+              padding: "8px 10px",
+              background: "#fff",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {data.head_teacher_comment || "\u00a0"}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11 }}>
+            <span>
+              <strong>Name:</strong> ________________
+            </span>
+            <span>
+              <strong>Sign / stamp:</strong> ______________
+            </span>
           </div>
         </div>
       </div>

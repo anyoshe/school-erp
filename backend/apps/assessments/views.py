@@ -265,11 +265,68 @@ def _school_print_branding(school, request=None):
 
 
 
+
+def _subject_averages_for_students(school, year, term, grade, student_ids):
+    """Map student_id -> weighted subject averages list for ranking / totals."""
+    from collections import defaultdict
+    from decimal import Decimal
+    from apps.assessments.models import Assessment, Mark
+
+    if not student_ids or not year or not grade:
+        return {}
+
+    assessments = Assessment.objects.filter(
+        school=school,
+        academic_year=year,
+        grade_level=grade,
+    )
+    if term:
+        assessments = assessments.filter(models_Q_term(term))
+
+    marks = (
+        Mark.objects.filter(
+            assessment__in=assessments,
+            student_id__in=student_ids,
+            is_absent=False,
+            score__isnull=False,
+        )
+        .select_related("assessment", "assessment__subject")
+    )
+
+    # student -> subject -> (weighted_sum, weight_total)
+    buckets = defaultdict(lambda: defaultdict(lambda: [Decimal("0"), Decimal("0")]))
+    for m in marks:
+        pct = m.percentage
+        if pct is None:
+            continue
+        weight = Decimal(str(m.assessment.weight or 1))
+        key = (str(m.student_id), str(m.assessment.subject_id))
+        b = buckets[str(m.student_id)][str(m.assessment.subject_id)]
+        b[0] += Decimal(str(pct)) * weight
+        b[1] += weight
+
+    out = {}
+    for sid, subs in buckets.items():
+        avgs = []
+        for _subj, (ws, wt) in subs.items():
+            if wt > 0:
+                avgs.append(float(ws / wt))
+        out[sid] = avgs
+    return out
+
+
+def models_Q_term(term):
+    from django.db.models import Q
+    return Q(term=term) | Q(term__isnull=True)
+
+
 def _attach_class_position(card, student, school, year, term, grade):
     """Rank this learner against classmates for the same year/term/grade."""
-    if not card or card.get("overall_average") is None or not grade or not year:
-        card["position"] = card.get("position")
-        card["out_of"] = card.get("out_of")
+    card.setdefault("position", None)
+    card.setdefault("out_of", None)
+
+    if card.get("overall_average") is None or not grade or not year:
+        # Still expose totals from subjects on the card
         return card
 
     from apps.students.models import Student
@@ -288,7 +345,7 @@ def _attach_class_position(card, student, school, year, term, grade):
                 grade=grade,
                 academic_year=year,
                 term=term,
-                section_id=section_id,
+                section_id=None,  # rank whole grade; section filter was hiding peers
                 include_inactive_statuses=True,
                 limit=400,
                 sort="name",
@@ -300,55 +357,50 @@ def _attach_class_position(card, student, school, year, term, grade):
     if not peers:
         qs = Student.objects.filter(school=school, current_class_id=getattr(grade, "id", None))
         qs = qs.exclude(status__in=["WITHDRAWN", "TRANSFERRED", "GRADUATED", "ALUMNI"])
-        if section_id:
-            qs = qs.filter(section_id=section_id)
         peers = list(qs[:400])
 
-    if not peers:
-        peers = [student]
+    # Always include the current student
+    sid = str(getattr(student, "id", ""))
+    if not any(str(getattr(p, "id", "")) == sid for p in peers):
+        peers = list(peers) + [student]
 
-    prev_skip = getattr(_build_student_report, "_skip_position", False)
-    _build_student_report._skip_position = True
+    peer_ids = [getattr(p, "id", None) for p in peers if getattr(p, "id", None)]
+    avg_map = _subject_averages_for_students(school, year, term, grade, peer_ids)
+
     averages = []
-    try:
-        for peer in peers:
-            if str(getattr(peer, "id", "")) == str(getattr(student, "id", "")):
-                avg = card.get("overall_average")
-            else:
-                peer_card = _build_student_report(
-                    peer,
-                    school,
-                    academic_year_id=getattr(year, "id", None),
-                    term_id=getattr(term, "id", None) if term else None,
-                    grade_level_id=getattr(grade, "id", None),
-                )
-                avg = peer_card.get("overall_average")
-            if avg is not None:
-                averages.append(
-                    (
-                        str(getattr(peer, "id", "")),
-                        float(avg),
-                        (getattr(peer, "last_name", None) or ""),
-                    )
-                )
-    finally:
-        _build_student_report._skip_position = prev_skip
+    for peer in peers:
+        pid = str(getattr(peer, "id", ""))
+        if pid == sid and card.get("overall_average") is not None:
+            avg = float(card["overall_average"])
+        else:
+            subj_avgs = avg_map.get(pid) or []
+            if not subj_avgs:
+                continue
+            avg = sum(subj_avgs) / len(subj_avgs)
+        averages.append((pid, float(avg), (getattr(peer, "last_name", None) or "")))
+
+    # Ensure self is ranked even if only one with marks
+    if not any(a[0] == sid for a in averages) and card.get("overall_average") is not None:
+        averages.append((sid, float(card["overall_average"]), getattr(student, "last_name", "") or ""))
+
+    if not averages:
+        return card
 
     averages.sort(key=lambda x: (-x[1], x[2]))
     out_of = len(averages)
     rank = None
     prev = None
     pos = 0
-    sid = str(getattr(student, "id", ""))
     for i, (pid, avg, _) in enumerate(averages, start=1):
-        if prev is None or avg != prev:
+        if prev is None or abs(avg - prev) > 0.05:
             pos = i
         prev = avg
         if pid == sid:
             rank = pos
             break
-    card["position"] = rank
-    card["out_of"] = out_of or None
+
+    card["position"] = rank if rank is not None else 1
+    card["out_of"] = out_of
     return card
 
 
@@ -600,6 +652,9 @@ def _build_student_report(
         "overall_grade": overall_grade,
         "overall_grade_descriptor": grade_descriptor(overall_grade, gsys),
         "subjects_with_marks": overall_n,
+        # Sum of subject averages over 100 each (e.g. 495/600 for 6 subjects)
+        "overall_marks_total": round(float(overall_sum), 1) if overall_n else None,
+        "overall_marks_max": overall_n * 100 if overall_n else None,
         "position": None,
         "out_of": None,
     }
