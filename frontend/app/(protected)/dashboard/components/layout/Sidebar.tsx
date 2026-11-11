@@ -99,12 +99,12 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
     "attendance",
     "staff",
     "parent_portal",
+    "reports",
   ];
 
   // Placeholder modules: never inject unless the school explicitly enabled them
   const SHELL_MODULE_CODES = new Set([
     "library",
-    "reports",
     "events",
     "health",
     "alumni",

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import (
+from .views import ParentDigestView, (
     ParentChildrenView,
     ParentChildOverviewView,
     ParentChildResultsView,
@@ -14,6 +14,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path('digest/', ParentDigestView.as_view(), name='parent-digest'),
     path("children/", ParentChildrenView.as_view(), name="parent-children"),
     path(
         "children/<uuid:student_id>/overview/",

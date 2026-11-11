@@ -839,3 +839,95 @@ class ParentUnlinkDeleteView(APIView):
                 "message": "Parent unlinked. Invite again with a password for a fresh login.",
             }
         )
+
+
+
+class ParentDigestView(APIView):
+    """
+    Short attention list for a linked parent: fee balances, open invoices,
+    recent absences — no school-wide risk scan required.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import timedelta
+
+        from django.db.models import Sum
+        from django.utils import timezone
+
+        from .models import GuardianProfile, ParentStudentLink
+
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+        profile = _guardian_profile(request.user, school)
+        if not profile:
+            return Response({"items": [], "detail": "No parent profile", "count": 0})
+        links = ParentStudentLink.objects.filter(
+            guardian_profile=profile, school=school
+        ).select_related("student", "student__current_class")
+        items = []
+        for link in links:
+            st = link.student
+            bal = 0.0
+            open_inv = 0
+            try:
+                from apps.finance.models import Invoice
+
+                agg = Invoice.objects.filter(student=st, school=school).aggregate(
+                    due=Sum("amount_due"), paid=Sum("amount_paid")
+                )
+                due = float(agg.get("due") or 0)
+                paid = float(agg.get("paid") or 0)
+                bal = max(due - paid, 0.0)
+                open_inv = Invoice.objects.filter(
+                    student=st, school=school, balance__gt=0
+                ).count()
+            except Exception:
+                pass
+            absences = 0
+            try:
+                from apps.attendance.models import AttendanceRecord
+
+                since = timezone.now().date() - timedelta(days=14)
+                absences = AttendanceRecord.objects.filter(
+                    student=st,
+                    school=school,
+                    date__gte=since,
+                    status__iexact="absent",
+                ).count()
+                if absences == 0:
+                    absences = AttendanceRecord.objects.filter(
+                        student=st,
+                        school=school,
+                        date__gte=since,
+                        status__in=["ABSENT", "UA", "UNEXCUSED", "A"],
+                    ).count()
+            except Exception:
+                pass
+            name = f"{st.first_name or ''} {st.last_name or ''}".strip()
+            if bal > 0.01:
+                items.append(
+                    {
+                        "type": "fee",
+                        "severity": "HIGH" if bal > 5000 else "MEDIUM",
+                        "student_id": str(st.id),
+                        "student_name": name,
+                        "title": f"Fee balance — {name}",
+                        "detail": f"KSh {bal:,.0f} outstanding"
+                        + (f" ({open_inv} open invoice(s))" if open_inv else "")
+                        + ".",
+                    }
+                )
+            if absences >= 3:
+                items.append(
+                    {
+                        "type": "attendance",
+                        "severity": "HIGH" if absences >= 5 else "MEDIUM",
+                        "student_id": str(st.id),
+                        "student_name": name,
+                        "title": f"Absences — {name}",
+                        "detail": f"{absences} absence(s) in the last 14 days.",
+                    }
+                )
+        return Response({"items": items, "count": len(items)})

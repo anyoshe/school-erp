@@ -38,7 +38,7 @@ interface Module {
 /* Icon Mapping                        */
 /* ---------------------------------- */
 const SHELL_CODES = new Set([
-  "library", "reports", "events", "health", "alumni", "transport",
+  "library", "events", "health", "alumni", "transport",
   "elearning", "inventory", "procurement",
 ]);
 
