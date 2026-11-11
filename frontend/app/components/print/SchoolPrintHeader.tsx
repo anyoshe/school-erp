@@ -19,6 +19,8 @@ type Props = {
   documentTitle: string;
   subtitle?: string | null;
   className?: string;
+  /** Larger logo and spacing for A4 report forms */
+  variant?: "default" | "a4";
 };
 
 /** Official header for printable school documents (logo + identity + title). */
@@ -28,6 +30,7 @@ export function SchoolPrintHeader({
   documentTitle,
   subtitle,
   className = "",
+  variant = "default",
 }: Props) {
   const name = school?.name || fallback?.name || "School";
   const address = school?.address || fallback?.address || "";
@@ -49,36 +52,65 @@ export function SchoolPrintHeader({
     .trim()
     .slice(0, 2)
     .toUpperCase();
+  const a4 = variant === "a4";
 
   return (
-    <header className={`text-center border-b border-slate-300 pb-4 mb-4 ${className}`}>
-      <div className="flex justify-center mb-2">
+    <header
+      className={`text-center border-b-2 border-slate-800 pb-3 mb-4 ${className}`}
+    >
+      <div className={`flex justify-center ${a4 ? "mb-3" : "mb-2"}`}>
         {logoSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={logoSrc}
             alt={`${name} logo`}
-            className="h-16 sm:h-20 max-w-[180px] object-contain print:h-[72px]"
+            className={
+              a4
+                ? "h-[88px] max-w-[220px] object-contain print:h-[90px]"
+                : "h-16 sm:h-20 max-w-[180px] object-contain print:h-[72px]"
+            }
           />
         ) : (
-          <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-lg font-bold text-slate-700 print:h-[72px] print:w-[72px]">
+          <div
+            className={
+              a4
+                ? "h-[88px] w-[88px] rounded-full bg-slate-100 border-2 border-slate-300 flex items-center justify-center text-2xl font-bold text-slate-700"
+                : "h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-slate-100 border border-slate-300 flex items-center justify-center text-lg font-bold text-slate-700 print:h-[72px] print:w-[72px]"
+            }
+          >
             {monogram}
           </div>
         )}
       </div>
-      <h1 className="text-lg sm:text-xl font-bold tracking-tight text-slate-900 uppercase">
+      <h1
+        className={
+          a4
+            ? "text-xl sm:text-2xl font-bold tracking-tight text-slate-900 uppercase leading-tight"
+            : "text-lg sm:text-xl font-bold tracking-tight text-slate-900 uppercase"
+        }
+      >
         {name}
       </h1>
       {motto ? (
         <p className="text-xs italic text-slate-600 mt-0.5">&ldquo;{motto}&rdquo;</p>
       ) : null}
       {contact ? (
-        <p className="text-[11px] sm:text-xs text-slate-600 mt-1 leading-snug">{contact}</p>
+        <p className="text-[11px] sm:text-xs text-slate-600 mt-1 leading-snug max-w-xl mx-auto">
+          {contact}
+        </p>
       ) : null}
-      <p className="mt-3 text-sm font-semibold uppercase tracking-[0.12em] text-slate-800">
+      <p
+        className={
+          a4
+            ? "mt-3 text-base font-bold uppercase tracking-[0.14em] text-slate-900"
+            : "mt-3 text-sm font-semibold uppercase tracking-[0.12em] text-slate-800"
+        }
+      >
         {documentTitle}
       </p>
-      {subtitle ? <p className="text-xs text-slate-600 mt-1">{subtitle}</p> : null}
+      {subtitle ? (
+        <p className="text-xs sm:text-sm text-slate-600 mt-1 font-medium">{subtitle}</p>
+      ) : null}
     </header>
   );
 }

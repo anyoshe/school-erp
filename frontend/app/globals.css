@@ -210,3 +210,11 @@
     color: #000 !important;
   }
 }
+
+
+/* Parent portal A4 academic report */
+@media print {
+  @page {
+    size: A4 portrait;
+  }
+}

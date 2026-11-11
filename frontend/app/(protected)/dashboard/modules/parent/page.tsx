@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/utils/api";
-import { SchoolPrintHeader } from "@/components/print/SchoolPrintHeader";
+import { ParentAcademicReport } from "@/components/print/ParentAcademicReport";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -453,126 +453,21 @@ export default function ParentPortalPage() {
                 <p className="text-sm text-muted-foreground">No results available yet.</p>
               ) : (
                 <div className="space-y-3">
-                  <div className="flex flex-wrap gap-2 print:hidden">
+                  <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
+                    <p className="text-xs text-muted-foreground">
+                      A4 layout — use Print report for a clean one-page official copy.
+                    </p>
                     <Button variant="outline" size="sm" onClick={() => window.print()}>
                       Print report
                     </Button>
                   </div>
-
-                  <div className="print-document max-w-3xl mx-auto bg-white border border-slate-200 rounded-xl shadow-sm p-6 sm:p-8 print:border-0 print:shadow-none print:p-0">
-                    <SchoolPrintHeader
-                      school={resultsQ.data.school}
-                      documentTitle="Academic Report Form"
-                      subtitle={[
-                        resultsQ.data.academic_year?.name,
-                        resultsQ.data.term?.name,
-                        resultsQ.data.grade?.name,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    />
-
-                    <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm mb-4">
-                      <p>
-                        <span className="text-slate-500">Learner:</span>{" "}
-                        <strong>
-                          {resultsQ.data.student?.full_name || activeChild?.full_name || "—"}
-                        </strong>
-                      </p>
-                      <p>
-                        <span className="text-slate-500">Admission #:</span>{" "}
-                        {resultsQ.data.student?.admission_number ||
-                          activeChild?.admission_number ||
-                          "—"}
-                      </p>
-                      <p>
-                        <span className="text-slate-500">Class / Grade:</span>{" "}
-                        {resultsQ.data.grade?.name || activeChild?.grade || "—"}
-                        {resultsQ.data.section?.name
-                          ? ` · ${resultsQ.data.section.name}`
-                          : activeChild?.section
-                            ? ` · ${activeChild.section}`
-                            : ""}
-                      </p>
-                      <p>
-                        <span className="text-slate-500">Class teacher:</span>{" "}
-                        {resultsQ.data.class_teacher_name || "—"}
-                      </p>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm border-collapse">
-                        <thead>
-                          <tr className="border-b-2 border-slate-300 text-left text-[11px] uppercase tracking-wide text-slate-600">
-                            <th className="py-2 pr-2">Subject</th>
-                            <th className="py-2 pr-2 text-right">Average</th>
-                            <th className="py-2 pr-2 text-center">Grade</th>
-                            <th className="py-2 text-left">Teacher</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(resultsQ.data.subjects || []).length === 0 ? (
-                            <tr>
-                              <td colSpan={4} className="py-6 text-center text-slate-500">
-                                Marks have not been entered for this term yet.
-                              </td>
-                            </tr>
-                          ) : (
-                            (resultsQ.data.subjects || []).map((s: any, i: number) => (
-                              <tr key={s.subject_id || s.name || i} className="border-b border-slate-100">
-                                <td className="py-2 pr-2 font-medium">{s.name || s.subject_name || "—"}</td>
-                                <td className="py-2 pr-2 text-right tabular-nums">
-                                  {s.average != null ? `${s.average}%` : "—"}
-                                </td>
-                                <td className="py-2 pr-2 text-center font-semibold">
-                                  {s.grade_label || s.grade || "—"}
-                                </td>
-                                <td className="py-2 text-slate-600 text-xs">
-                                  {s.teacher_name || "—"}
-                                </td>
-                              </tr>
-                            ))
-                          )}
-                        </tbody>
-                        {(resultsQ.data.subjects || []).length > 0 ? (
-                          <tfoot>
-                            <tr className="border-t-2 border-slate-300 font-semibold bg-slate-50">
-                              <td className="py-2.5 pr-2">Overall</td>
-                              <td className="py-2.5 pr-2 text-right tabular-nums">
-                                {resultsQ.data.overall_average != null
-                                  ? `${resultsQ.data.overall_average}%`
-                                  : "—"}
-                              </td>
-                              <td className="py-2.5 pr-2 text-center">
-                                {resultsQ.data.overall_grade || "—"}
-                              </td>
-                              <td className="py-2.5 text-xs font-normal text-slate-600">
-                                {resultsQ.data.position || resultsQ.data.class_position
-                                  ? `Position ${resultsQ.data.position || resultsQ.data.class_position}`
-                                  : ""}
-                              </td>
-                            </tr>
-                          </tfoot>
-                        ) : null}
-                      </table>
-                    </div>
-
-                    <div className="mt-8 grid sm:grid-cols-2 gap-6 text-xs text-slate-600">
-                      <div>
-                        <p className="font-semibold text-slate-800 mb-6">Class teacher</p>
-                        <p>Sign: ______________________</p>
-                        <p className="mt-2">Date: ______________________</p>
-                      </div>
-                      <div>
-                        <p className="font-semibold text-slate-800 mb-6">Head teacher / Principal</p>
-                        <p>Sign: ______________________</p>
-                        <p className="mt-2">Date: ______________________</p>
-                      </div>
-                    </div>
-                    <p className="mt-6 text-[10px] text-slate-400 text-center print:mt-8">
-                      Official school document — generated for parent portal access
-                    </p>
-                  </div>
+                  <ParentAcademicReport
+                    data={resultsQ.data}
+                    learnerName={activeChild?.full_name}
+                    admissionNumber={activeChild?.admission_number}
+                    gradeLabel={activeChild?.grade}
+                    sectionLabel={activeChild?.section}
+                  />
                 </div>
               )}
             </>
