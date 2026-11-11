@@ -36,7 +36,22 @@ export default function StaffParentPortalPage() {
     enabled: !!currentSchool?.id,
   });
 
+  const unlinkMut = useMutation({
+    mutationFn: async (payload: { link_id: number | string; delete_user?: boolean }) => {
+      const { data } = await api.post("/parent-portal/unlink/", payload);
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success(data?.message || "Parent unlinked");
+      qc.invalidateQueries({ queryKey: ["parent-directory"] });
+    },
+    onError: (e: any) => {
+      toast.error(e?.response?.data?.detail || "Could not unlink parent");
+    },
+  });
+
   const inviteMut = useMutation({
+
     mutationFn: async () => {
       const { data } = await api.post("/parent-portal/invite/", {
         admission_number: form.admission_number.trim(),
@@ -193,7 +208,7 @@ export default function StaffParentPortalPage() {
               </div>
             ) : !(dirQ.data?.links || []).length ? (
               <p className="text-sm text-muted-foreground py-6">
-                No parent links yet. Invite a parent using the form — they will see fees, results and attendance for that learner.
+                No parent links yet. Invite a parent using the form — they will see fees, results and attendance for that learner. Use Remove on a row to unlink and invite fresh.
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -203,7 +218,8 @@ export default function StaffParentPortalPage() {
                       <th className="py-2 pr-2">Parent</th>
                       <th className="py-2 pr-2">Student</th>
                       <th className="py-2 pr-2">Grade</th>
-                      <th className="py-2">Contact</th>
+                      <th className="py-2 pr-2">Contact</th>
+                      <th className="py-2 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -218,7 +234,25 @@ export default function StaffParentPortalPage() {
                           <div className="text-xs text-muted-foreground">{row.admission_number}</div>
                         </td>
                         <td className="py-2 pr-2">{row.grade || "—"}</td>
-                        <td className="py-2 text-muted-foreground">{row.parent_phone || "—"}</td>
+                        <td className="py-2 pr-2 text-muted-foreground">{row.parent_phone || "—"}</td>
+                        <td className="py-2 text-right">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-rose-700 border-rose-200 hover:bg-rose-50"
+                            disabled={unlinkMut.isPending}
+                            onClick={() => {
+                              const ok = window.confirm(
+                                `Remove link for ${row.parent_name || row.parent_email} → ${row.student_name || row.admission_number}?\n\nYou can invite them again with a new password afterward.`
+                              );
+                              if (!ok) return;
+                              unlinkMut.mutate({ link_id: row.id });
+                            }}
+                          >
+                            Remove
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

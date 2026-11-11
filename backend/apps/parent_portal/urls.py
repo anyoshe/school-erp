@@ -9,6 +9,8 @@ from .views import (
     ParentLinkStudentView,
     ParentInviteView,
     ParentDirectoryView,
+    ParentUnlinkView,
+    ParentUnlinkDeleteView,
 )
 
 urlpatterns = [
@@ -36,4 +38,6 @@ urlpatterns = [
     path("link-student/", ParentLinkStudentView.as_view(), name="parent-link-student"),
     path("invite/", ParentInviteView.as_view(), name="parent-invite"),
     path("directory/", ParentDirectoryView.as_view(), name="parent-directory"),
+    path("unlink/", ParentUnlinkView.as_view(), name="parent-unlink"),
+    path("links/<int:link_id>/", ParentUnlinkDeleteView.as_view(), name="parent-link-delete"),
 ]

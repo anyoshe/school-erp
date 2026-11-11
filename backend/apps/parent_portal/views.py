@@ -672,3 +672,159 @@ class ParentDirectoryView(APIView):
                 }
             )
         return Response({"count": len(items), "links": items})
+
+
+class ParentUnlinkView(APIView):
+    """Staff: remove a parent–student link so they can be invited fresh."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+        role = getattr(request.user, "role", "") or ""
+        if role in ("PARENT", "STUDENT"):
+            return Response({"detail": "Staff only"}, status=403)
+
+        from .models import GuardianProfile, ParentStudentLink
+
+        link_id = request.data.get("link_id") or request.data.get("id")
+        admission = (request.data.get("admission_number") or "").strip()
+        email = (request.data.get("email") or "").strip().lower()
+        delete_user = bool(request.data.get("delete_user"))
+
+        link = None
+        if link_id:
+            link = ParentStudentLink.objects.filter(school=school, pk=link_id).select_related(
+                "guardian_profile", "guardian_profile__user", "student"
+            ).first()
+        elif admission and email:
+            link = (
+                ParentStudentLink.objects.filter(school=school)
+                .filter(student__admission_number__iexact=admission)
+                .filter(
+                    Q(guardian_profile__email__iexact=email)
+                    | Q(guardian_profile__user__email__iexact=email)
+                )
+                .select_related("guardian_profile", "guardian_profile__user", "student")
+                .first()
+            )
+        if not link:
+            return Response(
+                {"detail": "Link not found. Provide link_id or admission_number + email."},
+                status=404,
+            )
+
+        profile = link.guardian_profile
+        user = profile.user if profile else None
+        student_adm = link.student.admission_number if link.student_id else None
+        parent_email = (profile.email if profile else None) or (
+            user.email if user else None
+        )
+
+        link.delete()
+
+        remaining = 0
+        profile_deleted = False
+        user_deleted = False
+        if profile is not None:
+            remaining = ParentStudentLink.objects.filter(guardian_profile=profile).count()
+            if remaining == 0:
+                # Drop empty guardian profile so invite is truly fresh
+                if user is not None and delete_user and (getattr(user, "role", "") or "").upper() == "PARENT":
+                    # Remove school membership then user
+                    try:
+                        school.users.remove(user)
+                    except Exception:
+                        pass
+                    user.delete()
+                    user_deleted = True
+                    profile_deleted = True  # cascade
+                else:
+                    profile.delete()
+                    profile_deleted = True
+                    if user is not None and (getattr(user, "role", "") or "").upper() == "PARENT":
+                        # Keep login but no profile until re-invited
+                        try:
+                            # only remove membership if no other parent links at this school
+                            still = ParentStudentLink.objects.filter(
+                                school=school, guardian_profile__user=user
+                            ).exists()
+                            if not still:
+                                school.users.remove(user)
+                        except Exception:
+                            pass
+
+        return Response(
+            {
+                "ok": True,
+                "unlinked": True,
+                "admission_number": student_adm,
+                "parent_email": parent_email,
+                "remaining_links_for_parent": remaining,
+                "profile_deleted": profile_deleted,
+                "user_deleted": user_deleted,
+                "message": (
+                    "Parent unlinked. Use Invite again with a password to create a fresh login."
+                    if not user_deleted
+                    else "Parent unlinked and login account removed. Invite again to create a new account."
+                ),
+            }
+        )
+
+
+class ParentUnlinkDeleteView(APIView):
+    """DELETE /parent-portal/links/<id>/ — same as post unlink."""
+
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, link_id):
+        request._full_data = request.data.copy() if hasattr(request, "data") else {}
+        # DRF Request: inject link_id into data for ParentUnlinkView
+        view = ParentUnlinkView()
+        view.request = request
+        # Build a minimal post
+        from rest_framework.test import APIRequestFactory
+        # Simpler: call logic inline
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+        role = getattr(request.user, "role", "") or ""
+        if role in ("PARENT", "STUDENT"):
+            return Response({"detail": "Staff only"}, status=403)
+        from .models import ParentStudentLink, GuardianProfile
+
+        link = ParentStudentLink.objects.filter(school=school, pk=link_id).select_related(
+            "guardian_profile", "guardian_profile__user", "student"
+        ).first()
+        if not link:
+            return Response({"detail": "Link not found"}, status=404)
+        profile = link.guardian_profile
+        user = profile.user if profile else None
+        student_adm = link.student.admission_number if link.student_id else None
+        parent_email = (profile.email if profile else None) or (user.email if user else None)
+        link.delete()
+        remaining = 0
+        profile_deleted = False
+        if profile is not None:
+            remaining = ParentStudentLink.objects.filter(guardian_profile=profile).count()
+            if remaining == 0:
+                profile.delete()
+                profile_deleted = True
+                if user is not None and (getattr(user, "role", "") or "").upper() == "PARENT":
+                    try:
+                        school.users.remove(user)
+                    except Exception:
+                        pass
+        return Response(
+            {
+                "ok": True,
+                "unlinked": True,
+                "admission_number": student_adm,
+                "parent_email": parent_email,
+                "remaining_links_for_parent": remaining,
+                "profile_deleted": profile_deleted,
+                "message": "Parent unlinked. Invite again with a password for a fresh login.",
+            }
+        )
