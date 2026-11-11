@@ -233,7 +233,15 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"Invalid module IDs: {invalid_ids}")
         return value
 
+    def validate_website(self, value):
+        if value in (None, ""):
+            return ""
+        return value
+
     def update(self, instance, validated_data):
+        from django.core.exceptions import ImproperlyConfigured
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+
         request = self.context.get('request')
         if not request:
             raise serializers.ValidationError("Request context is missing.")
@@ -246,22 +254,62 @@ class SchoolCreateUpdateSerializer(serializers.ModelSerializer):
             raise PermissionDenied("You do not have permission to update this school.")
 
         module_ids = validated_data.pop('module_ids', None)
+        new_logo = validated_data.pop("logo", serializers.empty)
 
         for attr, value in validated_data.items():
-            if attr == 'logo':
-                if value is None and instance.logo:
-                    instance.logo.delete(save=False)
-                elif value:
-                    if instance.logo:
-                        instance.logo.delete(save=False)
-                    setattr(instance, attr, value)
-            else:
-                setattr(instance, attr, value)
+            setattr(instance, attr, value)
 
         if module_ids is not None:
             instance.modules.set(module_ids)
 
+        if new_logo is not serializers.empty:
+            try:
+                if new_logo is None and instance.logo:
+                    try:
+                        instance.logo.delete(save=False)
+                    except Exception:
+                        pass
+                    instance.logo = None
+                elif new_logo:
+                    if instance.logo:
+                        try:
+                            instance.logo.delete(save=False)
+                        except Exception:
+                            pass
+                    instance.logo = new_logo
+            except Exception as exc:
+                raise DRFValidationError(
+                    {"logo": f"Could not process logo: {exc}"}
+                ) from exc
+
         from apps.core.upload_context import upload_owner
-        with upload_owner(instance):
-            instance.save()
+        try:
+            with upload_owner(instance):
+                instance.save()
+        except ImproperlyConfigured as exc:
+            raise DRFValidationError(
+                {
+                    "detail": str(exc),
+                    "hint": "Set CLOUDINARY_URL on Deplexo, or save without changing the logo.",
+                }
+            ) from exc
+        except OSError as exc:
+            raise DRFValidationError(
+                {
+                    "detail": "Server could not store the uploaded file.",
+                    "hint": "Set CLOUDINARY_URL on the backend host (Deplexo).",
+                    "error": str(exc),
+                }
+            ) from exc
+        except Exception as exc:
+            # Avoid opaque 500s for known storage/config issues
+            msg = str(exc)
+            if "cloudinary" in msg.lower() or "CLOUDINARY" in msg:
+                raise DRFValidationError(
+                    {
+                        "detail": "Media storage error (Cloudinary).",
+                        "error": msg[:300],
+                    }
+                ) from exc
+            raise
         return instance

@@ -28,18 +28,42 @@ class CloudinaryStorage(FileSystemStorage):
 
     @property
     def configured(self):
-        value = os.environ.get("CLOUDINARY_URL")
+        """True only when CLOUDINARY_URL is present and usable. Never raise here."""
+        value = (os.environ.get("CLOUDINARY_URL") or "").strip()
         if not value:
             return False
         parsed = urlsplit(value)
         if parsed.scheme != "cloudinary" or not parsed.hostname or not parsed.username or not parsed.password:
-            raise ImproperlyConfigured("CLOUDINARY_URL is malformed; configure it in the backend environment.")
-        self._sdk()
+            return False
+        try:
+            self._sdk()
+        except Exception:
+            return False
         return True
+
+    def _require_cloudinary(self):
+        value = (os.environ.get("CLOUDINARY_URL") or "").strip()
+        if not value:
+            raise ImproperlyConfigured(
+                "CLOUDINARY_URL is not set on this server. "
+                "Add it on Deplexo to store logos online, or omit the logo field when saving."
+            )
+        parsed = urlsplit(value)
+        if parsed.scheme != "cloudinary" or not parsed.hostname or not parsed.username or not parsed.password:
+            raise ImproperlyConfigured(
+                "CLOUDINARY_URL is malformed. Expected cloudinary://API_KEY:API_SECRET@CLOUD_NAME"
+            )
+        return self._sdk()
 
     def _save(self, name, content):
         if not self.configured:
-            return super()._save(name, content)
+            try:
+                return super()._save(name, content)
+            except OSError as exc:
+                raise ImproperlyConfigured(
+                    "This host cannot write local media files. Set CLOUDINARY_URL on the backend "
+                    "(Deplexo) so logos and uploads are stored in Cloudinary."
+                ) from exc
 
         from apps.core.file_validation import validate_image, validate_upload
 
@@ -152,7 +176,10 @@ class CloudinaryStorage(FileSystemStorage):
 
     def delete(self, name):
         if not name.startswith("cloudinary:"):
-            return super().delete(name)
+            try:
+                return super().delete(name)
+            except Exception:
+                return
         _, uploader, _, _ = self._sdk()
         _, resource_type, delivery_type, public_id, _ = self._parse_reference(name)
         result = uploader.destroy(public_id, resource_type=resource_type, type=delivery_type, invalidate=True)
