@@ -195,9 +195,8 @@ export default function EditSchoolBasicInfoPage() {
         payload.append("logo", formData.logo);
       }
 
-      await api.patch(`/schools/${currentSchool.id}/`, payload, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      // Do not set Content-Type manually — browser must add multipart boundary
+      await api.patch(`/schools/${currentSchool.id}/`, payload);
 
       // Reload FULL school detail so bank fields persist in context + form prefill
       try {
@@ -226,8 +225,35 @@ export default function EditSchoolBasicInfoPage() {
 
       setTimeout(() => setSuccess(false), 4000);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Failed to update school", {
-        style: { background: colors.danger, color: 'white' }
+      const status = err?.response?.status;
+      const data = err?.response?.data;
+      let msg =
+        (typeof data?.detail === "string" && data.detail) ||
+        (typeof data === "string" && data) ||
+        err?.message ||
+        "Failed to update school";
+      if (data && typeof data === "object" && !data.detail) {
+        const parts = Object.entries(data)
+          .slice(0, 4)
+          .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`);
+        if (parts.length) msg = parts.join(" · ");
+      }
+      if (!err?.response) {
+        msg =
+          "Network/CORS error — the hosted site cannot reach the API. Check NEXT_PUBLIC_API_URL on Netlify and CORS_ALLOWED_ORIGINS on the backend (Deplexo).";
+      } else if (status === 403) {
+        msg = msg || "Permission denied — you must be a member/owner of this school.";
+      } else if (status === 413) {
+        msg = "Logo file is too large for the server.";
+      } else if (status >= 500 && formData.logo) {
+        msg =
+          (typeof msg === "string" ? msg + " " : "") +
+          "Server error while saving (often logo/Cloudinary). Set CLOUDINARY_URL on Deplexo or save without a new logo.";
+      }
+      console.error("School basic-info save failed", status, data || err);
+      toast.error(String(msg).slice(0, 280), {
+
+        duration: 6000,
       });
     } finally {
       setIsSaving(false);
