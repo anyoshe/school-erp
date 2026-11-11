@@ -96,7 +96,12 @@ class SchoolSessionSerializer(serializers.ModelSerializer):
         fields = [
             "id", "owner", "name", "short_name",
             "email", "phone", "address", "city", "country",
+            "website",
             "currency", "currency_symbol",
+            "academic_year_start_month", "academic_year_end_month",
+            "term_system", "number_of_terms",
+            "grading_system", "passing_mark",
+            "official_registration_number", "registration_authority", "registration_date",
             "admission_number_format",
             "admission_prefix",
             "admission_seq_padding",
