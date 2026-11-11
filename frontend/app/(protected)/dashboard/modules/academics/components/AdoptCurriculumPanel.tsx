@@ -58,7 +58,7 @@ import {
   useMenuPosition,
 } from "./shared";
 
-export export function AdoptCurriculumPanel({
+export function AdoptCurriculumPanel({
   templates,
   loading,
   onAdopted,
