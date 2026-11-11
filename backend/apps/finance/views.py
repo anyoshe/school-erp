@@ -350,6 +350,16 @@ def _cash_positions_for_schools(school_ids):
 
 def _build_finance_dashboard_summary(request):
     school_ids = _resolve_school_ids(request)
+    # Keep a single Meals & catering category with items (drop empty shells)
+    try:
+        from apps.finance.lunch import ensure_meals_fee_defaults
+        from apps.school.models import School
+        for sid in school_ids:
+            school = School.objects.filter(pk=sid).first()
+            if school is not None:
+                ensure_meals_fee_defaults(school)
+    except Exception:
+        pass
     today = timezone.now().date()
     from django.db.models import Sum as DjSum, Count, Q as DjQ
 
@@ -911,6 +921,15 @@ class FeeCategoryViewSet(viewsets.ModelViewSet):
             school_id__in=accessible_school_ids(self.request)
         )
         if self.action == "list":
+            try:
+                from apps.finance.lunch import ensure_meals_fee_defaults
+                from apps.school.models import School
+                for sid in accessible_school_ids(self.request):
+                    school = School.objects.filter(pk=sid).first()
+                    if school is not None:
+                        ensure_meals_fee_defaults(school)
+            except Exception:
+                pass
             return qs.only("id", "name", "is_mandatory", "display_order", "school_id")
         return qs
 

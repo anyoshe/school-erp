@@ -20,19 +20,164 @@ def is_meals_fee_item(item) -> bool:
     return any(k in name for k in keys) or any(k in cat_name for k in keys)
 
 
+def _meals_like_categories(school):
+    """All fee categories that look like meals/catering (including empty duplicates)."""
+    from apps.finance.models import FeeCategory
+
+    return list(
+        FeeCategory.objects.filter(school=school).filter(
+            Q(name__icontains="meal")
+            | Q(name__icontains="catering")
+            | Q(name__icontains="lunch")
+            | Q(name__icontains="feeding")
+        )
+    )
+
+
+def consolidate_meals_categories(school):
+    """
+    Keep a single "Meals & catering" category with items; merge/delete empty duplicates.
+
+    - Prefer the category already named MEALS_CATEGORY_NAME
+    - Else prefer the one with the most fee items
+    - Move items + expense links from losers → winner
+    - Delete empty leftover categories
+    """
+    from apps.finance.models import FeeCategory, FeeItem, Expense
+
+    cats = _meals_like_categories(school)
+    if not cats:
+        return {"kept": None, "merged": 0, "deleted": 0, "items_moved": 0}
+
+    def sort_key(c):
+        exact = 1 if (c.name or "").strip() == MEALS_CATEGORY_NAME else 0
+        n_items = c.items.count()
+        return (exact, n_items)
+
+    cats_sorted = sorted(cats, key=sort_key, reverse=True)
+    keep = cats_sorted[0]
+
+    # Canonical name on the survivor (unique_together school+name)
+    if (keep.name or "").strip() != MEALS_CATEGORY_NAME:
+        clash = (
+            FeeCategory.objects.filter(school=school, name=MEALS_CATEGORY_NAME)
+            .exclude(pk=keep.pk)
+            .first()
+        )
+        if clash is None:
+            keep.name = MEALS_CATEGORY_NAME
+            keep.description = keep.description or "Student lunch and catering charges"
+            keep.is_mandatory = False
+            keep.save(update_fields=["name", "description", "is_mandatory"])
+        else:
+            # Exact-named empty/other exists — prefer that as keep if it has >= items
+            if clash.items.count() >= keep.items.count():
+                cats_sorted = [clash] + [c for c in cats_sorted if c.pk != clash.pk]
+                keep = clash
+            else:
+                # Move clash items into keep then delete clash so we can rename
+                pass
+
+    merged = 0
+    deleted = 0
+    items_moved = 0
+
+    for other in list(FeeCategory.objects.filter(school=school).filter(
+        Q(name__icontains="meal")
+        | Q(name__icontains="catering")
+        | Q(name__icontains="lunch")
+        | Q(name__icontains="feeding")
+    ).exclude(pk=keep.pk)):
+        for item in list(other.items.all()):
+            # Merge into same-named item on keep when possible
+            twin = FeeItem.objects.filter(category=keep, name=item.name).first()
+            if twin is None:
+                item.category = keep
+                item.save(update_fields=["category"])
+                items_moved += 1
+            else:
+                # Repoint invoice lines / structure refs that use this item id if any
+                try:
+                    from apps.finance.models import InvoiceLine, FeeStructure, FeeStructureItem
+                    InvoiceLine.objects.filter(item=item).update(item=twin)
+                    for si in list(FeeStructureItem.objects.filter(item=item)):
+                        if FeeStructureItem.objects.filter(
+                            structure=si.structure, item=twin
+                        ).exists():
+                            si.delete()
+                        else:
+                            si.item = twin
+                            si.save(update_fields=["item"])
+                    for st in FeeStructure.objects.filter(available_optional_items=item):
+                        st.available_optional_items.remove(item)
+                        st.available_optional_items.add(twin)
+                    # Student fee assignment selected optionals
+                    try:
+                        from apps.finance.models import StudentFeeAssignment
+                        for asg in StudentFeeAssignment.objects.filter(selected_optional_items=item):
+                            asg.selected_optional_items.remove(item)
+                            asg.selected_optional_items.add(twin)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+                item.delete()
+                items_moved += 1
+        # Expenses linked to the duplicate category
+        try:
+            Expense.objects.filter(related_fee_category=other).update(
+                related_fee_category=keep
+            )
+        except Exception:
+            pass
+        other.delete()
+        merged += 1
+        deleted += 1
+
+    # Ensure canonical name after merges
+    if (keep.name or "").strip() != MEALS_CATEGORY_NAME:
+        if not FeeCategory.objects.filter(school=school, name=MEALS_CATEGORY_NAME).exclude(pk=keep.pk).exists():
+            keep.name = MEALS_CATEGORY_NAME
+            keep.save(update_fields=["name"])
+
+    keep.refresh_from_db()
+    return {
+        "kept": keep,
+        "merged": merged,
+        "deleted": deleted,
+        "items_moved": items_moved,
+    }
+
+
 def ensure_meals_fee_defaults(school):
-    """Ensure Meals category + optional Lunch fee item exist for the school."""
+    """Ensure one Meals & catering category + optional Lunch fee item (no empty duplicates)."""
     from apps.finance.models import FeeCategory, FeeItem
 
-    cat, cat_created = FeeCategory.objects.get_or_create(
-        school=school,
-        name=MEALS_CATEGORY_NAME,
-        defaults={
-            "description": "Student lunch and catering charges",
-            "is_mandatory": False,
-            "display_order": 55,
-        },
-    )
+    consolid = consolidate_meals_categories(school)
+    cat = consolid.get("kept")
+    cat_created = False
+    if cat is None:
+        cat, cat_created = FeeCategory.objects.get_or_create(
+            school=school,
+            name=MEALS_CATEGORY_NAME,
+            defaults={
+                "description": "Student lunch and catering charges",
+                "is_mandatory": False,
+                "display_order": 55,
+            },
+        )
+    else:
+        # Normalize flags on survivor
+        dirty = False
+        if cat.is_mandatory:
+            cat.is_mandatory = False
+            dirty = True
+        if not (cat.description or "").strip():
+            cat.description = "Student lunch and catering charges"
+            dirty = True
+        if dirty:
+            cat.save()
+
     item, item_created = FeeItem.objects.get_or_create(
         category=cat,
         name=LUNCH_ITEM_NAME,
@@ -48,7 +193,34 @@ def ensure_meals_fee_defaults(school):
         item.is_optional = True
         item.is_active = True
         item.save(update_fields=["is_optional", "is_active"])
-    return {"category": cat, "item": item, "category_created": cat_created, "item_created": item_created}
+
+    # Delete any leftover empty meals-like categories (no items)
+    removed_empty = 0
+    for empty in FeeCategory.objects.filter(school=school).filter(
+        Q(name__icontains="meal")
+        | Q(name__icontains="catering")
+        | Q(name__icontains="lunch")
+        | Q(name__icontains="feeding")
+    ).exclude(pk=cat.pk):
+        if empty.items.count() == 0:
+            try:
+                from apps.finance.models import Expense
+                Expense.objects.filter(related_fee_category=empty).update(
+                    related_fee_category=cat
+                )
+            except Exception:
+                pass
+            empty.delete()
+            removed_empty += 1
+
+    return {
+        "category": cat,
+        "item": item,
+        "category_created": cat_created,
+        "item_created": item_created,
+        "consolidated": consolid,
+        "removed_empty": removed_empty,
+    }
 
 
 def active_lunch_enrollment(student, school=None):
