@@ -49,12 +49,20 @@ export default function ParentLoginPage() {
       }
       router.replace("/resolve");
     } catch (err: any) {
-      const msg =
-        err?.response?.data?.detail ||
-        err?.response?.data?.non_field_errors?.[0] ||
+      const data = err?.response?.data;
+      let msg =
+        (typeof data?.detail === "string" && data.detail) ||
+        data?.non_field_errors?.[0] ||
         err?.message ||
         "Could not sign in. Check your email and password.";
+      if (err?.response?.status === 401) {
+        msg =
+          "Wrong email or password. Use the temporary password the school shared when they invited you. If you never received one, ask the school to invite you again with a new password.";
+      } else if (err?.code === "ERR_NETWORK") {
+        msg = "Cannot reach the server. Check your internet connection or try again later.";
+      }
       setError(typeof msg === "string" ? msg : "Login failed");
+      toast.error(typeof msg === "string" ? msg : "Login failed");
     } finally {
       setLoading(false);
     }

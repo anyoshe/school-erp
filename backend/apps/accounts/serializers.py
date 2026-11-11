@@ -15,13 +15,24 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
-        # Accept either email or username in the login payload.
-        # This makes the token endpoint robust across custom and default JWT serializers.
-        if self.username_field == 'email':
-            attrs['username'] = attrs.get('email') or attrs.get('username')
+        # Accept either email or username; normalize email case for parent logins
+        raw = (attrs.get("email") or attrs.get("username") or "").strip()
+        if self.username_field == "email":
+            # Resolve case-insensitive email → canonical username field
+            if raw:
+                match = User.objects.filter(email__iexact=raw).first()
+                attrs["email"] = match.email if match else raw
+                attrs["username"] = attrs["email"]
+            else:
+                attrs["username"] = attrs.get("email") or attrs.get("username")
         else:
-            attrs[self.username_field] = attrs.get(self.username_field) or attrs.get('username')
-        return super().validate(attrs)
+            attrs[self.username_field] = attrs.get(self.username_field) or attrs.get("username") or raw
+        data = super().validate(attrs)
+        user = self.user
+        if not getattr(user, "is_active", True):
+            from rest_framework.exceptions import AuthenticationFailed
+            raise AuthenticationFailed("This account is inactive. Contact the school office.")
+        return data
 
 
 # =========================

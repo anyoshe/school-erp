@@ -133,7 +133,7 @@ export default function StaffParentPortalPage() {
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
               />
               <p className="text-[11px] text-muted-foreground">
-                If blank and the account is new, a temporary password is generated once.
+                New accounts: leave blank to auto-generate a one-time password. Existing parent who cannot log in: type a new password here to reset it.
               </p>
             </div>
             <Button
@@ -154,15 +154,19 @@ export default function StaffParentPortalPage() {
               )}
             </Button>
 
-            {lastInvite?.temporary_password && (
+            {lastInvite?.temporary_password ? (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm space-y-1">
                 <p className="font-medium text-amber-900">Temporary password (show once)</p>
                 <p className="font-mono text-base tracking-wide">{lastInvite.temporary_password}</p>
                 <p className="text-xs text-amber-800">
-                  Share securely with {lastInvite.parent_email}. Parent should change password after login.
+                  Parent login: /parent-login · email {lastInvite.parent_email}. They must change password on first login.
                 </p>
               </div>
-            )}
+            ) : lastInvite?.note ? (
+              <div className="rounded-lg border bg-slate-50 p-3 text-sm text-slate-700">
+                {lastInvite.note}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
 

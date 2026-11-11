@@ -41,7 +41,7 @@ function ChangePasswordForm() {
       });
 
       toast.success("Password updated successfully!");
-      router.replace("/dashboard");
+      router.replace("/resolve");
     } catch (err: any) {
       const message =
         err.response?.data?.old_password?.[0] ||

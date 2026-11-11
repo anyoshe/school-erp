@@ -518,6 +518,7 @@ class ParentInviteView(APIView):
 
         created_user = False
         temp_password = None
+        password_reset = False
         user = User.objects.filter(email__iexact=email).first()
         if not user:
             parts = full_name.split(None, 1) if full_name else ["", ""]
@@ -533,8 +534,38 @@ class ParentInviteView(APIView):
                 first_name=first or "Parent",
                 last_name=last or student.last_name or "",
                 force_change_password=True,
+                is_active=True,
             )
             created_user = True
+        else:
+            # Re-invite: ensure can log in (role, active, optional password reset)
+            updates = []
+            if user.role != User.Role.PARENT and user.role not in (
+                User.Role.SUPER_ADMIN,
+                User.Role.SCHOOL_ADMIN,
+                User.Role.PRINCIPAL,
+            ):
+                user.role = User.Role.PARENT
+                updates.append("role")
+            if not user.is_active:
+                user.is_active = True
+                updates.append("is_active")
+            if password:
+                user.set_password(password)
+                user.force_change_password = True
+                updates.extend(["password", "force_change_password"])
+                password_reset = True
+                temp_password = password
+            elif not user.has_usable_password():
+                password = secrets.token_urlsafe(9)
+                user.set_password(password)
+                user.force_change_password = True
+                updates.extend(["password", "force_change_password"])
+                temp_password = password
+                password_reset = True
+            if updates:
+                # password is not a concrete field for update_fields the same way
+                user.save()
 
         display_name = full_name or user.get_full_name() or email
         profile, _ = GuardianProfile.objects.get_or_create(
@@ -567,13 +598,23 @@ class ParentInviteView(APIView):
             "ok": True,
             "user_created": created_user,
             "link_created": link_created,
+            "password_reset": password_reset,
             "parent_email": user.email,
             "student": student.admission_number,
             "student_name": f"{student.first_name or ''} {student.last_name or ''}".strip(),
+            "login_path": "/parent-login",
         }
         if temp_password:
             payload["temporary_password"] = temp_password
-            payload["note"] = "Share this password securely; parent should change it on first login."
+            payload["note"] = (
+                "Share this password securely. Parent signs in at /parent-login "
+                "and must set a new password on first login."
+            )
+        elif not created_user:
+            payload["note"] = (
+                "Account already existed and was linked. If the parent cannot log in, "
+                "invite again with a Password filled in to reset it."
+            )
         return Response(
             payload,
             status=status.HTTP_201_CREATED if created_user or link_created else status.HTTP_200_OK,

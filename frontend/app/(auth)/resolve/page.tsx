@@ -18,14 +18,17 @@ export default function AuthResolvePage() {
         const user = await getCurrentUser(true);
         if (cancelled) return;
 
-        // Seed react-query cache so dashboard does not refetch immediately
         queryClient.setQueryData(["currentUser"], user);
         try {
           sessionStorage.setItem(
             "erp_current_user_cache",
             JSON.stringify({ user, cachedAt: Date.now() })
           );
-        } catch { /* */ }
+        } catch {
+          /* */
+        }
+
+        const role = (user.role || "").toUpperCase();
 
         if (user.force_change_password) {
           router.replace("/change-password?first=true");
@@ -34,6 +37,25 @@ export default function AuthResolvePage() {
 
         if (user.is_superuser) {
           router.replace("/platform-admin");
+          return;
+        }
+
+        // Parents never go through school onboarding / module setup
+        if (role === "PARENT") {
+          const schools = user.schools || [];
+          const savedId = getActiveSchoolId();
+          const activeSchool =
+            schools.find((s: { id: string }) => s.id === savedId) ||
+            user.active_school ||
+            schools[0];
+          if (activeSchool?.id) {
+            setActiveSchool(activeSchool.id);
+            cacheActiveSchool(activeSchool);
+          }
+          if (Array.isArray(schools) && schools.length) {
+            cacheSchoolsList(schools);
+          }
+          router.replace("/dashboard/modules/parent");
           return;
         }
 
@@ -64,13 +86,6 @@ export default function AuthResolvePage() {
         const modules = activeSchool.modules || [];
         if (modules.length === 0) {
           router.replace("/onboarding/select-modules");
-          return;
-        }
-
-        // Parents land on the parent portal, not the staff dashboard
-        const role = (user.role || "").toUpperCase();
-        if (role === "PARENT") {
-          router.replace("/dashboard/modules/parent");
           return;
         }
 
