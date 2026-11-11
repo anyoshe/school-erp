@@ -518,8 +518,8 @@ export default function ParentPortalPage() {
                     data={resultsQ.data}
                     learnerName={activeChild?.full_name}
                     admissionNumber={activeChild?.admission_number}
-                    gradeLabel={activeChild?.grade}
-                    sectionLabel={activeChild?.section}
+                    gradeLabel={activeChild?.grade ?? undefined}
+                    sectionLabel={activeChild?.section ?? undefined}
                   />
                 </div>
               )}

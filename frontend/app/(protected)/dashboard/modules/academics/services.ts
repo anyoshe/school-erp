@@ -587,7 +587,6 @@ export type ReportCard = {
   overall_marks_total?: number | null;
   overall_marks_max?: number | null;
   overall_grade_descriptor?: string | null;
-  out_of?: number | null;
   student: {
     id: string;
     first_name: string;

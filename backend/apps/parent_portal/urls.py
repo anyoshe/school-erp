@@ -1,6 +1,7 @@
 from django.urls import path
 
-from .views import ParentDigestView, (
+from .views import (
+    ParentDigestView,
     ParentChildrenView,
     ParentChildOverviewView,
     ParentChildResultsView,

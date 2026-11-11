@@ -95,7 +95,7 @@ export default function ReportsPage() {
           {
             label: "Collection rate",
             value:
-              rate != null && rate !== ""
+              rate != null
                 ? `${Number(rate).toFixed(1)}%`
                 : invoiced
                   ? `${((Number(collected) / Number(invoiced)) * 100).toFixed(1)}%`

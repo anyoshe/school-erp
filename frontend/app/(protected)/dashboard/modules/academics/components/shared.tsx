@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  BookOpen, CalendarRange, Layers, GraduationCap,
+  BookOpen, CalendarRange, Layers, GraduationCap, Sparkles,
   Users, ClipboardList, FileText, ChevronDown, TrendingUp,
 } from "lucide-react";
 import type { GradeLevel, Subject } from "../services";
@@ -317,5 +317,3 @@ export function Empty({ hint }: { hint: string }) {
     </div>
   );
 }
-
-
