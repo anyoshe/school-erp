@@ -83,14 +83,21 @@ export default function EditSchoolBasicInfoPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // If session school has no bank fields, fetch full detail so form prefills
+  // Session/list school is a mini payload (often no website, academic, registration).
+  // Always load full detail once so basic-info prefills correctly.
   useEffect(() => {
     if (!currentSchool?.id) return;
-    const missingBank =
-      !currentSchool.bank_name &&
-      !currentSchool.bank_account_number &&
-      !currentSchool.paybill_number;
-    if (!missingBank) return;
+    const full =
+      typeof (currentSchool as any).website === "string" ||
+      (currentSchool as any).academic_year_start_month != null ||
+      (currentSchool as any).official_registration_number != null;
+    // Still refresh when key detail fields are clearly missing from mini serializer
+    const needsFull =
+      (currentSchool as any).website === undefined ||
+      (currentSchool as any).academic_year_start_month === undefined ||
+      (currentSchool as any).term_system === undefined ||
+      (currentSchool as any).official_registration_number === undefined;
+    if (!needsFull) return;
     let cancelled = false;
     (async () => {
       try {
