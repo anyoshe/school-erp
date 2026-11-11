@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import api from "@/utils/api";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
-import { resolveMediaUrl, stripLogoBackground } from "@/utils/media";
+import { resolveMediaUrl, preparePrintLogo } from "@/utils/media";
 import { Loader2, ArrowLeft, Printer, Search } from "lucide-react";
 
 type PaymentRow = {
@@ -347,7 +347,7 @@ export default function ReceiptPrintPage() {
     setLogoSrc(null);
     if (!rawLogoSrc) return;
     (async () => {
-      const cleaned = await stripLogoBackground(rawLogoSrc);
+      const cleaned = await preparePrintLogo(rawLogoSrc);
       if (cancelled) return;
       setLogoSrc(cleaned || rawLogoSrc);
     })();

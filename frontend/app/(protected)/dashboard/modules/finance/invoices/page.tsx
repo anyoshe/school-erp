@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import api from "@/utils/api";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
-import { resolveMediaUrl, stripLogoBackground } from "@/utils/media";
+import { resolveMediaUrl, preparePrintLogo } from "@/utils/media";
 import { Loader2, Search, Download, Eye, ArrowLeft, Printer } from "lucide-react";
 import {
   Dialog,
@@ -75,7 +75,7 @@ const INVOICE_PRINT_CSS = `
     line-height: 1.35;
   }
   .inv-logo-wrap { display: flex; justify-content: center; margin-bottom: 8px; }
-  .inv-logo { width: 88px; height: 88px; object-fit: contain; background: transparent; }
+  .inv-logo { width: 104px; height: 104px; object-fit: contain; background: transparent; }
   .inv-logo-fallback {
     width: 80px; height: 80px; border-radius: 12px; background: #f0fdfa;
     border: 1px solid #99f6e4; display: flex; align-items: center; justify-content: center;
@@ -153,7 +153,7 @@ export default function InvoicesPage() {
     }
     (async () => {
       try {
-        const cleaned = await stripLogoBackground(String(raw));
+        const cleaned = await preparePrintLogo(String(raw));
         if (!cancelled) setLogoSrc(cleaned || String(raw));
       } catch {
         if (!cancelled) setLogoSrc(String(raw));

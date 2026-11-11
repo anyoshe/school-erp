@@ -145,3 +145,42 @@ export async function stripLogoBackground(
     img.src = src.includes("?") ? src : `${src}${src.startsWith("data:") ? "" : ""}`;
   });
 }
+
+
+/** True when the URL looks like an SVG (already transparent-friendly). */
+export function isSvgLogoUrl(src: string | null | undefined): boolean {
+  if (!src) return false;
+  const s = String(src).split("?")[0].toLowerCase();
+  return s.endsWith(".svg") || s.includes("image/svg") || s.startsWith("data:image/svg");
+}
+
+/**
+ * RULE: logos on printed school documents must be enlarged and free of
+ * solid/white backgrounds so they sit cleanly in the document header.
+ * - SVG → used as-is (best option; upload SVG when possible)
+ * - PNG/JPG → background stripped + tight crop via stripLogoBackground
+ * Falls back to the original resolved URL if processing fails.
+ */
+export async function preparePrintLogo(
+  pathOrUrl: string | null | undefined,
+  options?: { tolerance?: number; maxSize?: number }
+): Promise<string | null> {
+  const resolved = resolveMediaUrl(pathOrUrl) || (pathOrUrl && String(pathOrUrl).startsWith("http") ? String(pathOrUrl) : null);
+  if (!resolved) return null;
+  if (isSvgLogoUrl(resolved) || resolved.startsWith("data:image/svg")) {
+    return resolved;
+  }
+  // Already a processed transparent PNG data-URL
+  if (resolved.startsWith("data:image/png")) {
+    return resolved;
+  }
+  try {
+    const cleaned = await stripLogoBackground(resolved, {
+      tolerance: options?.tolerance ?? 48,
+      maxSize: options?.maxSize ?? 768,
+    });
+    return cleaned || resolved;
+  } catch {
+    return resolved;
+  }
+}

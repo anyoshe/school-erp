@@ -198,7 +198,7 @@ export default function BrandingPage() {
                       <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-[var(--accent)] hover:bg-[var(--accent)]/5 transition-all duration-300">
                         <Upload className="mx-auto h-10 w-10 text-slate-400 group-hover:text-[var(--accent)] transition-colors" />
                         <p className="mt-4 text-slate-700 font-medium">
-                          {logoFile ? logoFile.name : "Click or drag to upload new logo"}
+                          {logoFile ? logoFile.name : "Click or drag to upload logo (SVG preferred for print; PNG/JPG backgrounds are removed automatically)"}
                         </p>
                         <p className="text-xs text-slate-500 mt-1">
                           PNG, JPG • Max 5MB • Square recommended
