@@ -2911,7 +2911,7 @@ function ReportCardsPanel({
             )}
           </div>
         </div>
-      ) : () : (
+      ) : (
         !busy && (
           <p className="text-center text-sm text-muted-foreground py-12">
             Select year, term and grade, then load report cards.
