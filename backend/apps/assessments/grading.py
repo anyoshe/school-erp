@@ -72,3 +72,40 @@ def grade_label(
     if score >= 50:
         return "D"
     return "E"
+
+
+
+def grade_descriptor(label: str | None, grading_system: str = "percentage") -> str | None:
+    """Human-readable meaning for a grade code (CBC / letter / mastery)."""
+    if not label:
+        return None
+    code = str(label).strip().upper()
+    system = (grading_system or "percentage").lower().strip()
+
+    cbc = {
+        "EE1": "Exceeding Expectations (Level 1)",
+        "EE2": "Exceeding Expectations (Level 2)",
+        "ME1": "Meeting Expectations (Level 1)",
+        "ME2": "Meeting Expectations (Level 2)",
+        "AE1": "Approaching Expectations (Level 1)",
+        "AE2": "Approaching Expectations (Level 2)",
+        "BE1": "Below Expectations (Level 1)",
+        "BE2": "Below Expectations (Level 2)",
+    }
+    if system in ("cbc", "competency", "competency_based", "kjsea") or code in cbc:
+        if code in cbc:
+            return cbc[code]
+
+    letters = {
+        "A": "Excellent",
+        "B": "Very good",
+        "C": "Good",
+        "D": "Satisfactory",
+        "E": "Needs improvement",
+        "PASS": "Pass",
+        "FAIL": "Fail",
+        "MASTERY": "Mastery",
+        "APPROACHING MASTERY": "Approaching mastery",
+        "BEGINNING": "Beginning",
+    }
+    return letters.get(code) or letters.get(str(label).strip().title())

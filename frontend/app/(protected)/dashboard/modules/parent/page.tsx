@@ -303,7 +303,19 @@ export default function ParentPortalPage() {
                           <div>
                             <p className="text-xs text-muted-foreground">Position</p>
                             <p className="font-semibold">
-                              {overviewQ.data.results_preview.position ?? "—"}
+                              {overviewQ.data.results_preview.position != null
+                                ? `${overviewQ.data.results_preview.position}${
+                                    overviewQ.data.results_preview.out_of
+                                      ? ` / ${overviewQ.data.results_preview.out_of}`
+                                      : ""
+                                  }`
+                                : "—"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Grade</p>
+                            <p className="text-lg font-bold">
+                              {overviewQ.data.results_preview.overall_grade ?? "—"}
                             </p>
                           </div>
                           <div>

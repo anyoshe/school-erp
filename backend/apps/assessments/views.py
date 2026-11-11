@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.school.support import accessible_school_ids, selected_school
-from .grading import grade_label, grading_system_for_school
+from .grading import grade_label, grade_descriptor, grading_system_for_school
 from .models import Assessment, Mark
 from .serializers import AssessmentSerializer, AssessmentWriteSerializer, MarkSerializer
 
@@ -264,6 +264,94 @@ def _school_print_branding(school, request=None):
     }
 
 
+
+def _attach_class_position(card, student, school, year, term, grade):
+    """Rank this learner against classmates for the same year/term/grade."""
+    if not card or card.get("overall_average") is None or not grade or not year:
+        card["position"] = card.get("position")
+        card["out_of"] = card.get("out_of")
+        return card
+
+    from apps.students.models import Student
+
+    section_id = None
+    sec = card.get("section")
+    if isinstance(sec, dict):
+        section_id = sec.get("id")
+
+    peers = []
+    try:
+        from apps.assessments.roster import students_for_grade_period
+        peers = list(
+            students_for_grade_period(
+                school=school,
+                grade=grade,
+                academic_year=year,
+                term=term,
+                section_id=section_id,
+                include_inactive_statuses=True,
+                limit=400,
+                sort="name",
+            )
+        )
+    except Exception:
+        peers = []
+
+    if not peers:
+        qs = Student.objects.filter(school=school, current_class_id=getattr(grade, "id", None))
+        qs = qs.exclude(status__in=["WITHDRAWN", "TRANSFERRED", "GRADUATED", "ALUMNI"])
+        if section_id:
+            qs = qs.filter(section_id=section_id)
+        peers = list(qs[:400])
+
+    if not peers:
+        peers = [student]
+
+    prev_skip = getattr(_build_student_report, "_skip_position", False)
+    _build_student_report._skip_position = True
+    averages = []
+    try:
+        for peer in peers:
+            if str(getattr(peer, "id", "")) == str(getattr(student, "id", "")):
+                avg = card.get("overall_average")
+            else:
+                peer_card = _build_student_report(
+                    peer,
+                    school,
+                    academic_year_id=getattr(year, "id", None),
+                    term_id=getattr(term, "id", None) if term else None,
+                    grade_level_id=getattr(grade, "id", None),
+                )
+                avg = peer_card.get("overall_average")
+            if avg is not None:
+                averages.append(
+                    (
+                        str(getattr(peer, "id", "")),
+                        float(avg),
+                        (getattr(peer, "last_name", None) or ""),
+                    )
+                )
+    finally:
+        _build_student_report._skip_position = prev_skip
+
+    averages.sort(key=lambda x: (-x[1], x[2]))
+    out_of = len(averages)
+    rank = None
+    prev = None
+    pos = 0
+    sid = str(getattr(student, "id", ""))
+    for i, (pid, avg, _) in enumerate(averages, start=1):
+        if prev is None or avg != prev:
+            pos = i
+        prev = avg
+        if pid == sid:
+            rank = pos
+            break
+    card["position"] = rank
+    card["out_of"] = out_of or None
+    return card
+
+
 def _build_student_report(
     student,
     school,
@@ -472,7 +560,18 @@ def _build_student_report(
             f"{u.first_name or ''} {u.last_name or ''}".strip() or u.email
         )
 
-    return {
+    gsys = grading_system_for_school(
+        school,
+        grade.curriculum if grade else None,
+    )
+    overall_grade = grade_label(overall, gsys, school.passing_mark)
+    # Enrich subject rows with readable descriptors
+    for s in subjects:
+        gl = s.get("grade_letter")
+        s["grade_label"] = gl
+        s["grade_descriptor"] = grade_descriptor(gl, gsys)
+
+    card = {
         "student": {
             "id": str(student.id),
             "first_name": student.first_name or "",
@@ -482,10 +581,7 @@ def _build_student_report(
         },
         "school": {
             **_school_print_branding(school),
-            "grading_system": grading_system_for_school(
-                school,
-                grade.curriculum if grade else None,
-            ),
+            "grading_system": gsys,
             "passing_mark": school.passing_mark,
         },
         "academic_year": (
@@ -501,16 +597,20 @@ def _build_student_report(
         "class_teacher_name": class_teacher_name,
         "subjects": subjects,
         "overall_average": round(overall, 1) if overall is not None else None,
-        "overall_grade": grade_label(
-            overall,
-            grading_system_for_school(
-                school,
-                grade.curriculum if grade else None,
-            ),
-            school.passing_mark,
-        ),
+        "overall_grade": overall_grade,
+        "overall_grade_descriptor": grade_descriptor(overall_grade, gsys),
         "subjects_with_marks": overall_n,
+        "position": None,
+        "out_of": None,
     }
+
+    # Class position (skip when nested ranking pass sets _skip_position)
+    if not getattr(_build_student_report, "_skip_position", False):
+        try:
+            _attach_class_position(card, student, school, year, term, grade)
+        except Exception:
+            pass
+    return card
 
 
 class ReportCardView(APIView):

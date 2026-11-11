@@ -248,6 +248,8 @@ class ParentChildOverviewView(APIView):
             results_preview = {
                 "overall_average": card.get("overall_average"),
                 "position": card.get("position") or card.get("class_position"),
+                "out_of": card.get("out_of"),
+                "overall_grade": card.get("overall_grade"),
                 "term": card.get("term") or card.get("term_name"),
                 "academic_year": card.get("academic_year") or card.get("year_name"),
                 "subject_count": len(card.get("subjects") or []),
