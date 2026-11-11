@@ -54,7 +54,7 @@ export default function StudentStatementPage() {
             <SchoolPrintHeader
               school={data.school}
               documentTitle="Student Fee Statement"
-              subtitle={data.generated_at ? ` `Generated: ${data.generated_at}` : null}
+              subtitle={data.generated_at ? `Generated: ${data.generated_at}` : null}
             />
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
