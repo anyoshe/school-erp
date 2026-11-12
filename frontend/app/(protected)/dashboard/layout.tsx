@@ -63,7 +63,11 @@ function DashboardShell({ children }: { children: ReactNode }) {
 
       {mobileSidebarOpen ? (
         <aside className="lg:hidden fixed inset-y-0 left-0 z-50 w-[280px] bg-white shadow-2xl">
-          <Sidebar isCollapsed={false} onToggleCollapse={() => setMobileSidebarOpen(false)} />
+          <Sidebar
+            isCollapsed={false}
+            onToggleCollapse={() => setMobileSidebarOpen(false)}
+            onNavigate={() => setMobileSidebarOpen(false)}
+          />
         </aside>
       ) : null}
 

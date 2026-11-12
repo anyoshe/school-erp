@@ -15,6 +15,8 @@ import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 interface SidebarProps {
   isCollapsed: boolean;
   onToggleCollapse?: () => void;
+  /** Close mobile drawer after choosing a destination */
+  onNavigate?: () => void;
 }
 
 interface MenuItem {
@@ -76,7 +78,11 @@ const SETTINGS_LINKS: MenuItem[] = [
   { label: "Risk thresholds", href: "/dashboard/settings/school/risk", icon: Shield },
 ];
 
-export default function Sidebar({ isCollapsed }: SidebarProps) {
+export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: SidebarProps) {
+  const handleNavigate = () => {
+    onNavigate?.();
+  };
+
   const pathname = usePathname();
   const { currentSchool, isPlatformAdmin } = useCurrentSchool();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -191,7 +197,8 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
             <li>
               <Link
                 href="/platform-admin"
-                className={clsx(
+                onClick={handleNavigate}
+                  className={clsx(
                   "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
                   pathname === "/platform-admin"
                     ? "bg-primary-50 text-primary-800 font-medium"
@@ -208,7 +215,8 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
           <li>
             <Link
               href={isPlatformAdmin && !currentSchool ? "/platform-admin" : "/dashboard"}
-              className={clsx(
+              onClick={handleNavigate}
+                  className={clsx(
                 "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
                 pathname === "/dashboard" && (!isPlatformAdmin || Boolean(currentSchool))
                   ? "bg-primary-50 text-primary-800 font-medium"
@@ -227,6 +235,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
               <li key={item.href}>
                 <Link
                   href={item.href}
+                  onClick={handleNavigate}
                   className={clsx(
                     "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
                     pathname.startsWith(item.href)
@@ -245,7 +254,8 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
           <li>
             <Link
               href="/dashboard/modules/risks"
-              className={clsx(
+              onClick={handleNavigate}
+                  className={clsx(
                 "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
                 pathname.startsWith("/dashboard/modules/risks")
                   ? "bg-primary-50 text-primary-800 font-medium"
@@ -298,7 +308,8 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className={clsx(
+                      onClick={handleNavigate}
+                  className={clsx(
                         "flex items-center gap-2 px-3 py-3 min-h-[44px] rounded-lg text-sm transition-all",
                         isActive
                           ? "bg-primary-50 text-primary-800 font-medium"
@@ -319,7 +330,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
           {!isPlatformAdmin && (
           <li>
             <button
-              onClick={() => window.location.href = "/onboarding/setup?mode=new"}
+              onClick={() => { handleNavigate(); window.location.href = "/onboarding/setup?mode=new"; }}
               className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-secondary-600 hover:bg-secondary-50 hover:text-secondary-700 transition-all"
             >
               <Users className="w-4 h-4 flex-shrink-0" />
@@ -334,7 +345,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
       <div className="p-4 border-t border-gray-200">
         <button
           className="flex items-center gap-3 w-full px-3 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-all"
-          onClick={() => window.location.href = "/login"}
+          onClick={() => { handleNavigate(); window.location.href = "/login"; }}
         >
           <LogOut className="w-5 h-5" />
           <span>Logout</span>
