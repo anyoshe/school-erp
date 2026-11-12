@@ -239,3 +239,33 @@ main .overflow-x-auto {
   max-width: 100%;
   -webkit-overflow-scrolling: touch;
 }
+
+
+/* touch-friendly interactions */
+@layer base {
+  button,
+  [role="button"],
+  a {
+    touch-action: manipulation;
+  }
+}
+/* Prefer visible press feedback on coarse pointers */
+@media (hover: none) and (pointer: coarse) {
+  button:active,
+  [role="button"]:active,
+  a:active {
+    opacity: 0.92;
+  }
+  /* Avoid sticky hover styles on touch devices */
+  .hover\:bg-accent:hover {
+    background-color: inherit;
+  }
+}
+/* Icon-only controls in the app chrome */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

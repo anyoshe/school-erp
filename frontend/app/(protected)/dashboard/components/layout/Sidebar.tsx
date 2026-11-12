@@ -299,7 +299,7 @@ export default function Sidebar({ isCollapsed }: SidebarProps) {
                     <Link
                       href={link.href}
                       className={clsx(
-                        "flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-all",
+                        "flex items-center gap-2 px-3 py-3 min-h-[44px] rounded-lg text-sm transition-all",
                         isActive
                           ? "bg-primary-50 text-primary-800 font-medium"
                           : "text-gray-600 hover:bg-gray-50 hover:text-primary-700"

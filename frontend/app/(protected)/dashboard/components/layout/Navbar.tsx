@@ -72,7 +72,7 @@ export default function Navbar({
             {/* Mobile menu */}
             <button
               onClick={onMenuClick}
-              className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
+              className="lg:hidden touch-target p-2.5 hover:bg-gray-100 active:bg-gray-200 rounded-lg touch-manipulation"
             >
               <Menu className="w-5 h-5 text-gray-700" />
             </button>
@@ -80,7 +80,7 @@ export default function Navbar({
             {/* Desktop sidebar toggle */}
             <button
               onClick={onDesktopSidebarToggle}
-              className="hidden lg:flex p-2 hover:bg-gray-100 rounded-lg"
+              className="hidden lg:flex touch-target p-2.5 hover:bg-gray-100 active:bg-gray-200 rounded-lg touch-manipulation"
               aria-label="Toggle sidebar"
             >
               {isDesktopSidebarOpen ? (
@@ -150,7 +150,7 @@ export default function Navbar({
           {/* RIGHT - Notifications + User Profile */}
           <div className="flex items-center gap-3">
             {/* Mobile search */}
-            <button className="lg:hidden p-2 hover:bg-gray-100 rounded-lg">
+            <button className="lg:hidden touch-target p-2.5 hover:bg-gray-100 active:bg-gray-200 rounded-lg touch-manipulation">
               <Search className="w-5 h-5 text-gray-700" />
             </button>
 
