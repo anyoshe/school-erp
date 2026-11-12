@@ -691,7 +691,7 @@ def library_reports(request):
         asn = ResourceAssignment.objects.filter(school=school).select_related("resource")[:300]
         return Response({"type": "assignments", "results": ResourceAssignmentSerializer(asn, many=True).data})
     # default summary continues below
-return Response({
+    return Response({
         "physical": {
             "titles": Book.objects.filter(school=school).count(),
             "copies_total": copies.count(),
