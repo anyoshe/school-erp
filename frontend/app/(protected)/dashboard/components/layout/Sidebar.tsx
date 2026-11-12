@@ -184,7 +184,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
 
           {!isCollapsed && (
             <span className="text-xl font-bold text-gray-900 truncate max-w-[180px]">
-              {currentSchool?.name || "School ERP"}
+              {currentSchool?.name || "GETAXE SCHOOL MANAGEMENT"}
             </span>
           )}
         </div>

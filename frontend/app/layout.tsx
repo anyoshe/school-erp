@@ -1,19 +1,8 @@
 // // app/layout.tsx
 // import type { Metadata } from "next";
-// import { Geist, Geist_Mono } from "next/font/google";
-// import "./globals.css";
+// // import "./globals.css";
 // import { Toaster } from "react-hot-toast";
 // import { QueryProvider } from "./providers";
-
-// const geistSans = Geist({
-//   variable: "--font-geist-sans",
-//   subsets: ["latin"],
-// });
-
-// const geistMono = Geist_Mono({
-//   variable: "--font-geist-mono",
-//   subsets: ["latin"],
-// });
 
 // export const metadata: Metadata = {
 //   title: "School ERP",
@@ -27,7 +16,7 @@
 // }) {
 //   return (
 //     <html lang="en">
-//       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+//       <body className="antialiased">
 //         <QueryProvider>
 //         {children}
 //         <Toaster position="top-center" />
@@ -40,26 +29,41 @@
 // app/layout.tsx
 
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { QueryProvider } from "./providers";
 
 // Add Sonner
 import { Toaster } from "sonner";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
 export const metadata: Metadata = {
-  title: "School ERP",
-  description: "School ERP Dashboard",
+  metadataBase: new URL("https://getaxe.com"),
+  title: {
+    default: "GETAXE SCHOOL MANAGEMENT | GetAxe Technologies",
+    template: "%s | GETAXE SCHOOL MANAGEMENT",
+  },
+  description: "GETAXE SCHOOL MANAGEMENT brings academic, student, finance and learning workflows together for primary, junior secondary and senior secondary schools.",
+  applicationName: "GETAXE SCHOOL MANAGEMENT",
+  openGraph: {
+    title: "GETAXE SCHOOL MANAGEMENT",
+    description: "A connected platform for managing school operations and supporting learning across primary, junior secondary and senior secondary education.",
+    siteName: "GETAXE SCHOOL MANAGEMENT",
+    type: "website",
+    images: [{ url: "/School-erp-Logo.webp", width: 1999, height: 1999, alt: "GETAXE SCHOOL MANAGEMENT logo" }],
+  },
+  twitter: {
+    card: "summary",
+    title: "GETAXE SCHOOL MANAGEMENT",
+    description: "School management and learning tools by GetAxe Technologies.",
+  },
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/favicon-16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon-48x48.png", sizes: "48x48", type: "image/png" },
+    ],
+    apple: [{ url: "/android-chrome-192x192.png", sizes: "192x192", type: "image/png" }],
+  },
 };
 
 export default function RootLayout({
@@ -69,7 +73,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className="antialiased">
         <QueryProvider>
           {children}
 

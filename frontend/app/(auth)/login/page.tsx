@@ -22,6 +22,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 const colors = {
   primary: "#4F46E5",
@@ -131,17 +132,10 @@ export default function Welcome() {
         {/* Mobile Header */}
         <div className="lg:hidden w-full py-5 px-4 sm:px-6">
           <div className="flex items-center justify-center gap-3 mx-auto max-w-md sm:max-w-lg">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{
-                background: `linear-gradient(135deg, ${colors.primary}, ${colors.primaryHover})`,
-              }}
-            >
-              <AxeIcon className="text-white w-5 h-5" />
-            </div>
+            <Image src="/School-erp-Logo.webp" alt="GETAXE SCHOOL MANAGEMENT" width={48} height={48} className="h-10 w-10 rounded-full object-contain" />
             <div className="text-center">
               <h1 className="text-xl font-bold" style={{ color: colors.darkBg }}>
-                Axe<span style={{ color: colors.primary }}>EDU</span>
+                GETAXE SCHOOL MANAGEMENT
               </h1>
               <p className="text-xs" style={{ color: colors.textMuted }}>
                 Powered by GetAxe Technologies
@@ -162,20 +156,10 @@ export default function Welcome() {
                 className="hidden lg:block lg:w-1/2"
               >
                 <div className="flex items-center gap-3 mb-8">
-                  <div className="relative">
-                    <div
-                      className="w-14 h-14 rounded-xl flex items-center justify-center shadow-md"
-                      style={{
-                        background: `linear-gradient(135deg, ${colors.primary}, ${colors.primaryHover})`,
-                      }}
-                    >
-                      <AxeIcon className="text-white w-7 h-7" />
-                      <BookOpen className="absolute -bottom-1 -right-1 text-white w-4 h-4" />
-                    </div>
-                  </div>
+                  <Image src="/School-erp-Logo.webp" alt="GETAXE SCHOOL MANAGEMENT" width={64} height={64} className="h-14 w-14 rounded-full object-contain shadow-md" />
                   <div>
                     <h1 className="text-3xl font-bold" style={{ color: colors.darkBg }}>
-                      Axe<span style={{ color: colors.primary }}>EDU</span>
+                      GETAXE SCHOOL MANAGEMENT
                     </h1>
                     <div className="flex items-center gap-1">
                       <span className="text-sm font-medium" style={{ color: colors.textMuted }}>
@@ -197,7 +181,7 @@ export default function Welcome() {
                         backgroundImage: `linear-gradient(135deg, ${colors.primary}, ${colors.accent})`,
                       }}
                     >
-                      AxeEDU
+                      GETAXE SCHOOL MANAGEMENT
                     </span>
                   </h2>
                   <p className="text-lg leading-relaxed" style={{ color: colors.textMuted }}>
@@ -209,8 +193,8 @@ export default function Welcome() {
                   {[
                     { icon: <Users className="w-5 h-5" />, text: "Manage students & staff efficiently" },
                     { icon: <BookOpen className="w-5 h-5" />, text: "Track academic performance" },
-                    { icon: <Zap className="w-5 h-5" />, text: "Real-time analytics & insights" },
-                    { icon: <CheckCircle className="w-5 h-5" />, text: "Secure & GDPR compliant" },
+                    { icon: <Zap className="w-5 h-5" />, text: "Reports and school insights" },
+                    { icon: <CheckCircle className="w-5 h-5" />, text: "Tools for school administration" },
                   ].map((benefit, index) => (
                     <div key={index} className="flex items-center gap-3">
                       <div className="p-2 rounded-lg" style={{ backgroundColor: `${colors.primary}10` }}>
@@ -225,8 +209,8 @@ export default function Welcome() {
 
                 <div className="grid grid-cols-2 gap-4 max-w-sm">
                   {[
-                    { value: "500+", label: "Schools", color: colors.primary },
-                    { value: "99.9%", label: "Uptime", color: colors.accent },
+                    { value: "All in one", label: "Connected workflows", color: colors.primary },
+                    { value: "One school", label: "Shared information", color: colors.accent },
                   ].map((stat) => (
                     <div
                       key={stat.label}
@@ -339,7 +323,7 @@ export default function Welcome() {
                                   <h3 className="font-semibold text-primary-800">Create Your School Account</h3>
                                 </div>
                                 <p className="text-sm text-primary-700">
-                                  Sign up to set up your school on AxeEDU. You'll become the administrator and can invite teachers, staff and parents later.
+                                  Create your school account with GETAXE SCHOOL MANAGEMENT and invite teachers, staff and parents to join your school.
                                 </p>
                               </div>
                             )}
