@@ -21,7 +21,7 @@ class Lesson(models.Model):
     title = models.CharField(max_length=255)
     content = models.TextField(blank=True)
     video_url = models.URLField(blank=True)
-    attachment = models.FileField(upload_to='lessons/', blank=True, null=True)
+    attachment = models.FileField(upload_to='lessons/', blank=True, null=True, max_length=512)
     order = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -47,7 +47,7 @@ class Submission(models.Model):
     assignment = models.ForeignKey(Assignment, on_delete=models.CASCADE)
     student = models.ForeignKey('students.Student', on_delete=models.CASCADE)  # Link to students
     submitted_at = models.DateTimeField(auto_now_add=True)
-    file = models.FileField(upload_to='submissions/', blank=True, null=True)
+    file = models.FileField(upload_to='submissions/', blank=True, null=True, max_length=512)
     score = models.PositiveIntegerField(null=True, blank=True)
     feedback = models.TextField(blank=True)
 

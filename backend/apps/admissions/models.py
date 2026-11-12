@@ -142,7 +142,7 @@
 #     acceptance_notes = models.TextField(blank=True)
 
 #     # Documents / Media
-#     photo = models.ImageField(upload_to='admission_photos/', null=True, blank=True)
+#     photo = models.ImageField(upload_to='admission_photos/', null=True, blank=True, max_length=512)
 
 #     # Misc
 #     religion = models.CharField(max_length=50, blank=True)
@@ -562,7 +562,7 @@ class Application(models.Model):
     acceptance_notes = models.TextField(blank=True)
 
     # Documents / Misc
-    photo = models.ImageField(upload_to='admission_photos/', null=True, blank=True)
+    photo = models.ImageField(upload_to='admission_photos/', null=True, blank=True, max_length=512)
 
     religion = models.CharField(max_length=50, blank=True)
     category = models.CharField(max_length=50, blank=True)
@@ -916,7 +916,7 @@ class Application(models.Model):
 
 class ApplicationDocument(models.Model):
     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name='documents')
-    file = models.FileField(upload_to='admission_documents/')
+    file = models.FileField(upload_to='admission_documents/', max_length=512)
     description = models.CharField(max_length=255, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 

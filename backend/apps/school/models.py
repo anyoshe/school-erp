@@ -319,7 +319,8 @@ class School(models.Model):
     logo = models.ImageField(
         upload_to="school_logos/",
         blank=True,
-        null=True
+        null=True,
+        max_length=512,  # Cloudinary refs exceed Django default 100
     )
 
 

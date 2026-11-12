@@ -45,7 +45,7 @@ class Student(models.Model):
     date_of_birth = models.DateField(null=True, blank=True)
     nationality = models.CharField(max_length=100, blank=True)
     religion = models.CharField(max_length=50, blank=True)
-    photo = models.ImageField(upload_to='student_photos/', null=True, blank=True)
+    photo = models.ImageField(upload_to='student_photos/', null=True, blank=True, max_length=512)
 
     # Additional Personal Info
     birth_certificate_number = models.CharField(max_length=50, blank=True, verbose_name="Birth Certificate Number")
@@ -515,7 +515,7 @@ class MedicalDocument(models.Model):
     medical_record = models.ForeignKey(
         MedicalRecord, on_delete=models.CASCADE, related_name="documents"
     )
-    file = models.FileField(upload_to="medical_documents/")
+    file = models.FileField(upload_to="medical_documents/", max_length=512)
 
     def save(self, *args, **kwargs):
         if self.file and not getattr(self.file, "_committed", True):
