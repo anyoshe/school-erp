@@ -496,7 +496,7 @@ export default function FinanceDashboard() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { label: `${detectedTerm} · ${detectedYear}`, value: revenueByPeriod.term },
               { label: `Full year ${detectedYear}`, value: yearCollected || revenueByPeriod.year },
@@ -544,7 +544,7 @@ export default function FinanceDashboard() {
                     : cols === 3
                       ? "md:grid-cols-3"
                       : cols === 4
-                        ? "md:grid-cols-4"
+                        ? "md:grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
                         : "md:grid-cols-3";
               return (
             <div className={`grid grid-cols-2 ${mdClass} gap-3`}>
@@ -595,7 +595,7 @@ export default function FinanceDashboard() {
         <p className="text-xs text-muted-foreground mb-3">
           Optional setup and reporting. Day-to-day collect &amp; print lives in the top nav (Clearance, Record payment, Receipts).
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             {
               href: "/dashboard/modules/finance/payment-plans",
@@ -661,7 +661,7 @@ export default function FinanceDashboard() {
           <CardTitle className="text-base">Period snapshot</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
             {[
               { label: "Billed", value: stats.totalInvoiced, color: "text-slate-800" },
               { label: "Received", value: stats.totalRevenue, color: "text-emerald-700" },

@@ -266,6 +266,7 @@ export function SubjectsPanel({
             ) : (
               <>
                 <div className="rounded-xl border overflow-hidden">
+                  <div className="table-scroll">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground">
                       <tr>
@@ -328,6 +329,7 @@ export function SubjectsPanel({
                       )}
                     </tbody>
                   </table>
+                  </div>
                 </div>
 
                 {unassigned.length > 0 && (

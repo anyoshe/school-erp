@@ -110,6 +110,7 @@ export default function TranscriptPage() {
                   {t.academic_year?.name} · {t.term?.name}
                   {t.overall_average != null ? ` — Avg ${t.overall_average}% (${t.overall_grade || "—"})` : ""}
                 </h3>
+                <div className="table-scroll">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-muted-foreground border-b">
@@ -130,6 +131,7 @@ export default function TranscriptPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             ))}
 

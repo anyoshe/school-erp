@@ -322,7 +322,7 @@ ${html}
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Billed</CardTitle>
@@ -366,7 +366,7 @@ ${html}
           <CardTitle>Filters</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <Label htmlFor="search">Search</Label>
               <div className="relative mt-2">
@@ -655,6 +655,7 @@ ${html}
                         ) : null}
                       </div>
 
+                      <div className="table-scroll">
                       <table className="inv-table">
                         <thead>
                           <tr>
@@ -687,6 +688,7 @@ ${html}
                           )}
                         </tbody>
                       </table>
+                      </div>
 
                       <div className="inv-totals">
                         <div className="row">
@@ -722,6 +724,7 @@ ${html}
                           >
                             PAYMENTS RECEIVED
                           </p>
+                          <div className="table-scroll">
                           <table className="inv-table">
                             <thead>
                               <tr>
@@ -749,6 +752,7 @@ ${html}
                               ))}
                             </tbody>
                           </table>
+                          </div>
                         </>
                       )}
 

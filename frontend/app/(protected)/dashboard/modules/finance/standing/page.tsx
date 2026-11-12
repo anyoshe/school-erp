@@ -48,7 +48,7 @@ export default function OwnerStandingPage() {
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <Card className="border-emerald-100 bg-gradient-to-br from-emerald-50 to-white">
               <CardContent className="p-4">
                 <p className="text-xs font-medium text-emerald-800/70">Total income</p>

@@ -535,6 +535,7 @@ export default function ReceiptPrintPage() {
                     </div>
                   </div>
 
+                  <div className="table-scroll">
                   <table className="rcpt-table">
                     <thead>
                       <tr>
@@ -560,6 +561,7 @@ export default function ReceiptPrintPage() {
                       ))}
                     </tbody>
                   </table>
+                  </div>
 
                   <div className="rcpt-summary">
                     <div className="rcpt-row">

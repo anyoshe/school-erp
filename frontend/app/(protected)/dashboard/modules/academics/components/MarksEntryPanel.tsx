@@ -580,6 +580,7 @@ const load = async (opts?: { quiet?: boolean }) => {
           </div>
         ) : matrix ? (
           <div className={`flex-1 min-h-0 overflow-auto ${(matrix as any)?.term_locked ? "opacity-95" : ""}`}>
+            <div className="table-scroll">
             <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-slate-50 text-left text-xs uppercase text-muted-foreground sticky top-0 z-[1] shadow-sm">
                 <tr>
@@ -668,6 +669,7 @@ const load = async (opts?: { quiet?: boolean }) => {
                 </tr>
               </tfoot>
             </table>
+            </div>
           </div>
         ) : (
           <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground px-4 py-8">

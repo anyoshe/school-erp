@@ -81,8 +81,8 @@ function DashboardShell({ children }: { children: ReactNode }) {
           />
         </header>
 
-        <main className="flex-1 overflow-y-auto">
-          <div className="p-4 sm:p-6 lg:p-8">{children}</div>
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="p-3 sm:p-6 lg:p-8 max-w-[100vw]">{children}</div>
         </main>
       </div>
     </div>

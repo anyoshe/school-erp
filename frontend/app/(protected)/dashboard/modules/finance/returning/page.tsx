@@ -192,7 +192,7 @@ export default function ReturningStudentsBillingPage() {
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Filters</CardTitle>
         </CardHeader>
-        <CardContent className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <CardContent className="grid sm:grid-cols-2 lg:grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div>
             <Label className="text-xs">Academic year</Label>
             <select

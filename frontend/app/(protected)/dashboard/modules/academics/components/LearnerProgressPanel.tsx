@@ -171,6 +171,7 @@ export function LearnerProgressPanel() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
+                <div className="table-scroll">
                 <table className="w-full text-sm">
                   <thead className="text-xs text-muted-foreground border-b">
                     <tr>
@@ -191,6 +192,7 @@ export function LearnerProgressPanel() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </CardContent>
             </Card>
           ))}

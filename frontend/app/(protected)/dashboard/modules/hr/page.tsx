@@ -1465,6 +1465,7 @@ export default function HRPage() {
                   {payslip.employee?.bank_account ? `· ${payslip.employee.bank_account}` : ""}
                 </p>
               </div>
+              <div className="table-scroll">
               <table className="w-full text-sm border">
                 <tbody>
                   <tr className="border-b">
@@ -1493,6 +1494,7 @@ export default function HRPage() {
                   </tr>
                 </tbody>
               </table>
+              </div>
               <p className="text-xs text-muted-foreground">
                 Paid via {payslip.pay?.payment_method || "—"}
                 {payslip.pay?.paid_at ? ` on ${payslip.pay.paid_at}` : " (not marked paid yet)"}

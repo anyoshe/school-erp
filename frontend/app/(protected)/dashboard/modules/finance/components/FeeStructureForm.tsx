@@ -555,7 +555,7 @@ export default function FeeStructureForm({
               Loading grades / fee categories in the background…
             </div>
           )}
-            <section className="grid grid-cols-4 gap-4">
+            <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="col-span-2">
                 <Label>Structure Name</Label>
                 <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />

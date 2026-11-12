@@ -162,7 +162,7 @@ export default function Navbar({
 
             {/* User Profile */}
             <div className="flex items-center gap-2">
-              <div className="hidden sm:block text-right">
+              <div className="hidden md:block text-right min-w-0">
                 <p className="text-sm font-medium text-gray-900" suppressHydrationWarning>
                   {displayName}
                 </p>

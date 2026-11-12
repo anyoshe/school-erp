@@ -12,7 +12,8 @@ interface Props {
 
 export default function StudentTable({ students, onEdit, onDelete }: Props) {
   return (
-    <table className="w-full bg-white rounded-xl shadow">
+    <div className="table-scroll rounded-xl shadow bg-white">
+    <table className="w-full bg-white rounded-xl">
       <thead className="bg-gray-100">
         <tr className="text-left">
           <th className="p-3">Admission No</th>
@@ -92,5 +93,6 @@ export default function StudentTable({ students, onEdit, onDelete }: Props) {
         ))}
       </tbody>
     </table>
+    </div>
   );
 }

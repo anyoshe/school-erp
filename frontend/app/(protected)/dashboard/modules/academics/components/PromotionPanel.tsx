@@ -280,6 +280,7 @@ const rolloverMut = useMutation({
                 <p className="text-sm text-muted-foreground text-center py-6">No learners in this grade</p>
               ) : (
                 <div className="max-h-48 overflow-y-auto">
+                  <div className="table-scroll">
                   <table className="w-full text-sm">
                     <thead className="text-left text-xs text-muted-foreground">
                       <tr>
@@ -298,6 +299,7 @@ const rolloverMut = useMutation({
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
             </div>
