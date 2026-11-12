@@ -254,7 +254,7 @@ export default function DepartmentsPage() {
                       disabled={loading || !dept.id.startsWith("temp-")}
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <Label className="text-slate-700 font-medium">Short Name</Label>
                       <Input
@@ -301,7 +301,7 @@ export default function DepartmentsPage() {
               disabled={loading}
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label className="text-slate-700 font-medium">Short Name</Label>
               <Input

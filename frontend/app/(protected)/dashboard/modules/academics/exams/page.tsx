@@ -131,7 +131,7 @@ export default function ExamHallsPage() {
             <CardTitle className="text-base">Exam halls</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="grid grid-cols-3 gap-2 items-end">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 items-end">
               <div className="col-span-2">
                 <Label>Hall name</Label>
                 <Input value={hallName} onChange={(e) => setHallName(e.target.value)} placeholder="Hall A" />
@@ -169,7 +169,7 @@ export default function ExamHallsPage() {
                 placeholder="Grade 6 Math End of Term"
               />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <Label>Year</Label>
                 <select

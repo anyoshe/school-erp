@@ -170,7 +170,7 @@ export default function DashboardHome() {
               Open Finance to switch term
             </a>
           </p>
-          <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mb-4">
             {(pulse?.finance?.cash_positions?.accounts || []).map((a: any) => (
               <div key={a.code || a.id} className="rounded-lg border border-emerald-100 bg-emerald-50/50 px-2 py-2 text-center">
                 <p className="text-[10px] text-emerald-900/70 truncate">{a.name}</p>
@@ -263,7 +263,7 @@ export default function DashboardHome() {
         <Card className="lg:col-span-1 border-0 rounded-2xl shadow-md overflow-hidden"
           style={{ background: "linear-gradient(180deg, #F0FDFA 0%, #FFFFFF 40%)" }}>
           <CardContent className="p-5">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
               <h2 className="font-semibold text-stone-900">Students by class</h2>
               <Button variant="ghost" size="sm" className="text-teal-800" onClick={() => router.push("/dashboard/modules/students")}>
                 Open

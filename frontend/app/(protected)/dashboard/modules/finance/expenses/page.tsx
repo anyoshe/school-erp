@@ -328,7 +328,7 @@ export default function ExpensesPage() {
 
       {/* Record expense */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100%-1.25rem)] max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Record expense</DialogTitle>
           </DialogHeader>
@@ -341,7 +341,7 @@ export default function ExpensesPage() {
                 placeholder="e.g. October teaching salaries"
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Amount *</Label>
                 <Input
@@ -427,7 +427,7 @@ export default function ExpensesPage() {
                 Use when the cost is funded by a fee line (fuel → Transport, food → Meals).
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Payment method</Label>
                 <Select
@@ -522,7 +522,7 @@ export default function ExpensesPage() {
 
       {/* Categories */}
       <Dialog open={catOpen} onOpenChange={setCatOpen}>
-        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100%-1.25rem)] max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Expense categories</DialogTitle>
           </DialogHeader>

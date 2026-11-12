@@ -88,7 +88,7 @@ export default function AcceptOfferModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg rounded-2xl">
+      <DialogContent className="w-[calc(100%-1.25rem)] sm:max-w-lg rounded-2xl">
         <DialogHeader>
           <DialogTitle>Mark Offer Accepted</DialogTitle>
           <DialogDescription>

@@ -459,7 +459,7 @@ const load = async (opts?: { quiet?: boolean }) => {
             ) : null}
           </div>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 items-end">
           <div>
             <Label className="text-[11px]">Year</Label>
             <select

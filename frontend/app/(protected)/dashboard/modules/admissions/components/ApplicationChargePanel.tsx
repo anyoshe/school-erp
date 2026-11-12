@@ -213,7 +213,7 @@ export default function ApplicationChargePanel({
         </p>
         <ul className="text-xs text-emerald-900/90 space-y-1">
           {charges.map((c) => (
-            <li key={String(c.charge_type)} className="flex justify-between gap-2">
+            <li key={String(c.charge_type)} className="flex flex-col sm:flex-row sm:justify-between gap-2">
               <span>{LABELS[String(c.charge_type).toUpperCase()] || c.charge_type}</span>
               <span className="font-medium">
                 {String(c.policy || "").replace(/_/g, " ")}

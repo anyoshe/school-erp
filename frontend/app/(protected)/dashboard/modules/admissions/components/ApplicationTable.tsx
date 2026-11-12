@@ -187,7 +187,7 @@ export default function ApplicationTable({
                   <StatusBadge status={app.status} hasPayment={(app.fee_payments?.length ?? 0) > 0} />
                 </td>
                 <td className="p-4 text-right">
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
                     <Link href={`/dashboard/modules/admissions/${app.id}`}>
                       <Button variant="ghost" size="sm" className="rounded-xl" title="View">
                         <Eye className="h-4 w-4" />

@@ -1654,7 +1654,7 @@ export default function EnrollmentWizardModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto p-6 sm:p-8 rounded-2xl">
+      <DialogContent className="w-[calc(100%-1.25rem)] sm:max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 sm:p-8 rounded-2xl">
         <DialogHeader>
           <DialogTitle>Complete Student Enrollment</DialogTitle>
           <DialogDescription>

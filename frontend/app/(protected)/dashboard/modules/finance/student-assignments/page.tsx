@@ -384,7 +384,7 @@ export default function StudentAssignmentsPage() {
                 {currentFeeStructure && (
                   <div className="bg-primary-50 p-4 rounded-lg border border-primary-200">
                     <h4 className="font-semibold text-sm mb-2">Fee Structure Details</h4>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-muted-foreground">Academic Year:</span>
                         <p className="font-medium">{currentFeeStructure.academic_year}</p>
@@ -424,7 +424,7 @@ export default function StudentAssignmentsPage() {
 
                 {/* Waiver Section */}
                 <div className="border-t pt-4">
-                  <div className="flex items-center gap-2 mb-4">
+                  <div className="flex flex-wrap items-center gap-2 mb-4">
                     <Checkbox
                       id="is-waived"
                       checked={isWaived}

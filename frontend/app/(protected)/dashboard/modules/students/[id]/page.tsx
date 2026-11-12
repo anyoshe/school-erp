@@ -436,7 +436,7 @@ export default function StudentProfilePage() {
               )}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 min-w-[240px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0 w-full sm:min-w-[240px]">
             <div className="rounded-2xl bg-white/15 backdrop-blur px-4 py-3">
               <p className="text-[10px] uppercase font-bold tracking-wide" style={{ color: "#CCFBF1" }}>Class</p>
               <p className="text-lg font-bold text-white mt-0.5">{classLabel}</p>
@@ -815,7 +815,7 @@ export default function StudentProfilePage() {
                           </Badge>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                           <div>
                             <p className="text-muted-foreground">Originally Due</p>
                             <p className="font-medium">{financeSummary.currency} {invoice.amount_due.toLocaleString()}</p>

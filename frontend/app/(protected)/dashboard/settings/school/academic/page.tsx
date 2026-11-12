@@ -613,7 +613,7 @@ Academic Year Section */}
                 type="submit"
                 disabled={loading}
                 size="lg"
-                className="min-w-[240px] bg-gradient-to-r from-primary-800 to-primary-950 hover:from-primary-900 hover:to-black text-white shadow-lg transition-all"
+                className="min-w-0 w-full sm:min-w-[240px] bg-gradient-to-r from-primary-800 to-primary-950 hover:from-primary-900 hover:to-black text-white shadow-lg transition-all"
               >
                 {loading ? (
                   <>

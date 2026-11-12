@@ -351,7 +351,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">Contact Name</p>
                     <p className="text-lg font-black">{application.emergency_contact_name || "N/A"}</p>
                   </div>
-                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/10">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-white/10">
                     <div>
                       <p className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">Relationship</p>
                       <p className="font-bold text-sm">{application.emergency_relationship || "N/A"}</p>

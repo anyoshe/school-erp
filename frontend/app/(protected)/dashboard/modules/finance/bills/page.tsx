@@ -266,7 +266,7 @@ export default function BillsPage() {
       </Card>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="w-[calc(100%-1.25rem)] sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>New vendor bill</DialogTitle>
           </DialogHeader>
@@ -365,7 +365,7 @@ export default function BillsPage() {
       </Dialog>
 
       <Dialog open={vendorOpen} onOpenChange={setVendorOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[calc(100%-1.25rem)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>New vendor</DialogTitle>
           </DialogHeader>
@@ -385,7 +385,7 @@ export default function BillsPage() {
       </Dialog>
 
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="w-[calc(100%-1.25rem)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Pay bill {payBill?.bill_number}</DialogTitle>
           </DialogHeader>

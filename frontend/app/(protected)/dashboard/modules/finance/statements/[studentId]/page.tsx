@@ -58,7 +58,7 @@ export default function StudentStatementPage() {
             />
           </CardHeader>
           <CardContent className="space-y-4 text-sm">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <p className="text-xs text-muted-foreground">Student</p>
                 <p className="font-semibold">{data.student?.full_name}</p>
@@ -73,7 +73,7 @@ export default function StudentStatementPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-2 rounded-lg bg-slate-50 p-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 rounded-lg bg-slate-50 p-3">
               <div>
                 <p className="text-xs text-muted-foreground">Invoiced</p>
                 <p className="font-bold">
@@ -96,7 +96,7 @@ export default function StudentStatementPage() {
 
             {(data.invoices || []).map((inv: any) => (
               <div key={inv.invoice_number} className="border rounded-lg p-3 space-y-2">
-                <div className="flex justify-between gap-2">
+                <div className="flex flex-col sm:flex-row sm:justify-between gap-2">
                   <span className="font-mono text-xs">{inv.invoice_number}</span>
                   <span>
                     {inv.term} · {inv.academic_year}

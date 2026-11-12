@@ -232,7 +232,7 @@ export function YearsPanel({
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="rounded-2xl sm:max-w-md">
+        <DialogContent className="w-[calc(100%-1.25rem)] rounded-2xl sm:max-w-md">
           <DialogHeader>
             <DialogTitle>New academic year</DialogTitle>
           </DialogHeader>
@@ -241,7 +241,7 @@ export function YearsPanel({
               <Label>Name</Label>
               <Input placeholder="2026" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Start</Label>
                 <Input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} />
@@ -262,7 +262,7 @@ export function YearsPanel({
       </Dialog>
 
       <Dialog open={!!termOpen} onOpenChange={(v) => !v && setTermOpen(null)}>
-        <DialogContent className="rounded-2xl sm:max-w-md">
+        <DialogContent className="w-[calc(100%-1.25rem)] rounded-2xl sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add term to {termOpen?.name}</DialogTitle>
           </DialogHeader>
@@ -271,7 +271,7 @@ export function YearsPanel({
               <Label>Term name</Label>
               <Input placeholder="Term 1" value={termForm.name} onChange={(e) => setTermForm({ ...termForm, name: e.target.value })} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Start</Label>
                 <Input type="date" value={termForm.start_date} onChange={(e) => setTermForm({ ...termForm, start_date: e.target.value })} />

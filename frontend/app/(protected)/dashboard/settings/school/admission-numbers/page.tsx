@@ -256,7 +256,7 @@ export default function AdmissionNumbersSettingsPage() {
           </div>
         </div>
 
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
           <Button onClick={save} disabled={saving} className="gap-2">
             {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Save settings

@@ -986,7 +986,7 @@ export default function HRPage() {
 
       {/* Staff dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100%-1.25rem)] max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Edit staff" : "Add staff"}</DialogTitle>
           </DialogHeader>
@@ -1156,7 +1156,7 @@ export default function HRPage() {
                 Set salary once per staff. Each month, Generate payslips copies these amounts.
                 Fee group and expense class are per person (e.g. teachers from Tuition, ICT from ICT — not one group for all).
               </p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 <div>
                   <Label className="text-xs">Basic</Label>
                   <Input
@@ -1188,7 +1188,7 @@ export default function HRPage() {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs">Paid from fee group</Label>
                   <select
@@ -1283,7 +1283,7 @@ export default function HRPage() {
 
       {/* Payroll dialog */}
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[calc(100%-1.25rem)] max-w-md">
           <DialogHeader>
             <DialogTitle>Add payroll row</DialogTitle>
           </DialogHeader>
@@ -1311,7 +1311,7 @@ export default function HRPage() {
                 onChange={(e) => setPayForm((f) => ({ ...f, month: e.target.value }))}
               />
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               <div>
                 <Label>Basic</Label>
                 <Input
@@ -1358,7 +1358,7 @@ export default function HRPage() {
 
       {/* Leave dialog */}
       <Dialog open={leaveOpen} onOpenChange={setLeaveOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="w-[calc(100%-1.25rem)] max-w-md">
           <DialogHeader>
             <DialogTitle>Request leave</DialogTitle>
           </DialogHeader>
@@ -1392,7 +1392,7 @@ export default function HRPage() {
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div>
                 <Label>Start</Label>
                 <Input
@@ -1431,7 +1431,7 @@ export default function HRPage() {
 
       {/* Payslip print */}
       <Dialog open={!!payslip} onOpenChange={(o) => !o && setPayslip(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto print:max-w-none print:shadow-none">
+        <DialogContent className="w-[calc(100%-1.25rem)] max-w-lg max-h-[90vh] overflow-y-auto print:max-w-none print:shadow-none">
           <DialogHeader className="print:hidden">
             <DialogTitle>Payslip</DialogTitle>
           </DialogHeader>
@@ -1442,7 +1442,7 @@ export default function HRPage() {
                 documentTitle="Payslip"
                 subtitle={payslip.pay?.month_label || null}
               />
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <p className="text-xs text-muted-foreground">Employee</p>
                   <p className="font-semibold">{payslip.employee?.name}</p>
@@ -1456,7 +1456,7 @@ export default function HRPage() {
                   <p className="text-xs">Status: {payslip.pay?.status_display}</p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 <p>Emp no: {payslip.employee?.employee_number || "—"}</p>
                 <p>TSC: {payslip.employee?.tsc_number || "—"}</p>
                 <p>ID: {payslip.employee?.national_id || "—"}</p>

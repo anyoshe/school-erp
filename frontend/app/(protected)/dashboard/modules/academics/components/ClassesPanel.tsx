@@ -340,14 +340,14 @@ export function ClassesPanel({
 
       {/* New grade */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="rounded-2xl sm:max-w-md">
+        <DialogContent className="w-[calc(100%-1.25rem)] rounded-2xl sm:max-w-md">
           <DialogHeader><DialogTitle>New grade level</DialogTitle></DialogHeader>
           <div className="space-y-3 py-2">
             <div>
               <Label>Name</Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Grade 1" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <Label>Short name</Label>
                 <Input value={form.short_name} onChange={(e) => setForm({ ...form, short_name: e.target.value })} placeholder="G1" />
@@ -367,7 +367,7 @@ export function ClassesPanel({
 
       {/* New section */}
       <Dialog open={!!sectionFor} onOpenChange={(v) => !v && setSectionFor(null)}>
-        <DialogContent className="rounded-2xl sm:max-w-md">
+        <DialogContent className="w-[calc(100%-1.25rem)] rounded-2xl sm:max-w-md">
           <DialogHeader><DialogTitle>Section for {sectionFor?.name}</DialogTitle></DialogHeader>
           <div className="space-y-3 py-2">
             <div>
@@ -388,7 +388,7 @@ export function ClassesPanel({
 
       {/* Class register */}
       <Dialog open={!!register} onOpenChange={(v) => !v && setRegister(null)}>
-        <DialogContent className="rounded-2xl sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100%-1.25rem)] rounded-2xl sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Class register — {rosterMeta.title || register?.grade.name}

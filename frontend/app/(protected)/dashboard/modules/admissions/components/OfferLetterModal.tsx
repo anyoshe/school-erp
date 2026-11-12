@@ -892,7 +892,7 @@ export default function OfferLetterModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[95vh] overflow-y-auto rounded-2xl p-0 border-none shadow-2xl">
+      <DialogContent className="w-[calc(100%-1.25rem)] sm:max-w-3xl max-h-[95vh] overflow-y-auto rounded-2xl p-0 border-none shadow-2xl">
         <div className="p-8">
           <DialogHeader>
             <DialogTitle className="text-2xl font-bold">Issue Admission Offer Letter</DialogTitle>

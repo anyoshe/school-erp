@@ -570,7 +570,7 @@ function NewApplicationPageInner() {
             <p className="text-gray-600">
               Reference ID: <strong>{savedAppId || "—"}</strong>
             </p>
-            <div className="flex justify-center gap-4">
+            <div className="flex flex-col sm:flex-row justify-center gap-4 w-full">
               <Button variant="outline" onClick={() => router.push("/dashboard/modules/admissions")}>
                 Back to Applications
               </Button>
@@ -588,7 +588,7 @@ function NewApplicationPageInner() {
                 if (idx !== -1) setCurrentStep(idx);
               }}
             >
-              <TabsList className="grid w-full grid-cols-4 gap-2 mb-6">
+              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-2 mb-6 h-auto">
                 {steps.map((step) => (
                   <TabsTrigger key={step} value={step}>
                     {step}
@@ -890,7 +890,7 @@ function NewApplicationPageInner() {
                 )}
               </div>
 
-              <div className="flex gap-4">
+              <div className="flex flex-col sm:flex-row gap-4">
                 <Button
                   type="button"
                   variant="outline"

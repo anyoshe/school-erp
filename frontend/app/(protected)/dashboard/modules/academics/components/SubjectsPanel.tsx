@@ -366,7 +366,7 @@ export function SubjectsPanel({
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="rounded-2xl sm:max-w-sm">
+        <DialogContent className="w-[calc(100%-1.25rem)] rounded-2xl sm:max-w-sm">
           <DialogHeader><DialogTitle>New subject</DialogTitle></DialogHeader>
           <div className="space-y-3 py-2">
             <div>

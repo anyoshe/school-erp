@@ -521,7 +521,7 @@ ${html}
           else setDetailOpen(true);
         }}
       >
-        <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="w-[calc(100%-1.25rem)] max-w-3xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader className="print:hidden">
             <DialogTitle className="flex items-center justify-between gap-2 pr-6">
               <span>

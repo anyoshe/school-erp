@@ -583,7 +583,7 @@ export default function FinanceClearancePage() {
       </Card>
 
       <Dialog open={payOpen} onOpenChange={setPayOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100%-1.25rem)] sm:max-w-lg max-h-[90vh] overflow-y-auto">
         {(billingError || (!row?.structure && structureCandidates.length > 0)) && (
           <div className="mx-4 mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm space-y-2">
             <p className="font-medium text-amber-900">
@@ -671,7 +671,7 @@ export default function FinanceClearancePage() {
             <p className="text-xs text-muted-foreground">
               e.g. Assessment book, uniform — for items not on the term structure.
             </p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="col-span-2 sm:col-span-1">
                 <Label>Item name</Label>
                 <Input

@@ -339,7 +339,7 @@ export default function FinanceDashboard() {
               Assign fees, generate invoices, and record payments without digging.
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-3 min-w-[260px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0 w-full sm:min-w-[260px]">
             <div className="rounded-2xl bg-white/15 px-4 py-3">
               <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color: "#FDE68A" }}>Collected</p>
               <p className="text-xl font-bold text-white mt-1">
@@ -547,7 +547,7 @@ export default function FinanceDashboard() {
                         ? "md:grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
                         : "md:grid-cols-3";
               return (
-            <div className={`grid grid-cols-2 ${mdClass} gap-3`}>
+            <div className={`grid grid-cols-1 sm:grid-cols-2 ${mdClass} gap-3`}>
               {feeItemTotals.map((item) => {
                 const d = (item.description || "").toLowerCase();
                 const tone = d.includes("interview")

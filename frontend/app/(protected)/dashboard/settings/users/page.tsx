@@ -438,7 +438,7 @@ export default function UsersSettingsPage() {
                     </DialogHeader>
 
                     <div className="grid gap-5 py-4">
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                           <Label>First Name *</Label>
                           <Input
@@ -595,7 +595,7 @@ export default function UsersSettingsPage() {
               </DialogHeader>
 
               <div className="grid gap-6 py-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <Label>First Name</Label>
                     <Input
@@ -678,7 +678,7 @@ export default function UsersSettingsPage() {
                       New Role
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-lg">
+                  <DialogContent className="w-[calc(100%-1.25rem)] sm:max-w-lg">
                     <DialogHeader>
                       <DialogTitle>
                         {editingRole ? "Edit Role" : "Create New Role"}
