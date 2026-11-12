@@ -400,7 +400,7 @@ export default function PaymentsPage() {
   );
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-5xl mx-auto">
+    <div className="space-y-4 sm:space-y-6 max-w-5xl mx-auto">
       <FinanceNavLinks />
       <div className="flex flex-wrap items-center gap-3">
         <Button asChild variant="outline" size="sm">
@@ -420,7 +420,7 @@ export default function PaymentsPage() {
         <CardHeader className="bg-emerald-50/80 border-b">
           <CardTitle className="text-base">Receive payment</CardTitle>
         </CardHeader>
-        <CardContent className="grid sm:grid-cols-2 gap-4 pt-4">
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
           {/* DATE FIRST — always visible */}
           <div className="sm:col-span-2 rounded-xl border-2 border-emerald-600/30 bg-white p-4">
             <Label className="text-base font-semibold text-emerald-900">
@@ -428,7 +428,7 @@ export default function PaymentsPage() {
             </Label>
             <Input
               type="date"
-              className="mt-2 max-w-xs text-base h-11"
+              className="mt-2 w-full sm:max-w-xs text-base h-11"
               value={paymentDate}
               onChange={(e) => setPaymentDate(e.target.value)}
               required
@@ -476,14 +476,14 @@ export default function PaymentsPage() {
             <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-medium">Allocate payment to fee items</p>
-                <div className="flex flex-wrap gap-1.5">
-                  <Button type="button" size="sm" variant="outline" onClick={applyProportional}>
+                <div className="flex flex-col xs:flex-row flex-wrap gap-1.5 w-full sm:w-auto">
+                  <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={applyProportional}>
                     Split by ratio
                   </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={applyToFirst}>
+                  <Button type="button" size="sm" variant="outline" className="w-full sm:w-auto" onClick={applyToFirst}>
                     Apply to first item
                   </Button>
-                  <Button type="button" size="sm" variant="ghost" onClick={clearAllocations}>
+                  <Button type="button" size="sm" variant="ghost" className="w-full sm:w-auto" onClick={clearAllocations}>
                     Clear
                   </Button>
                 </div>
@@ -539,34 +539,40 @@ export default function PaymentsPage() {
                   {invoiceLines.map((ln) => (
                     <li
                       key={ln.id}
-                      className="grid grid-cols-[1fr_110px] gap-2 items-center text-sm bg-white rounded-lg border px-2 py-1.5"
+                      className="flex flex-col gap-2 text-sm bg-white rounded-lg border px-3 py-2.5 sm:grid sm:grid-cols-[1fr_120px] sm:items-center sm:gap-3"
                     >
-                      <span>
-                        {ln.description}
+                      <span className="min-w-0">
+                        <span className="font-medium block">{ln.description}</span>
                         {ln.category ? (
                           <span className="text-xs text-muted-foreground"> · {ln.category}</span>
                         ) : null}
-                        <span className="block text-xs text-muted-foreground tabular-nums">
-                          Billed {ln.amount.toLocaleString()} · previously allocated{" "}
-                          {ln.paid_amount.toLocaleString()} · remaining{" "}
+                        <span className="block text-xs text-muted-foreground tabular-nums mt-0.5 leading-relaxed">
+                          Billed {ln.amount.toLocaleString()} · paid{" "}
+                          {ln.paid_amount.toLocaleString()} · left{" "}
                           {ln.remaining_balance.toLocaleString()}
                         </span>
                       </span>
-                      <Input
-                        type="number"
-                        min="0"
-                        max={ln.remaining_balance}
-                        step="0.01"
-                        className="h-8"
-                        placeholder="0"
-                        value={allocations[ln.id] ?? ""}
-                        onChange={(e) =>
-                          setAllocations((prev) => ({ ...prev, [ln.id]: e.target.value }))
-                        }
-                      />
+                      <div className="flex items-center gap-2 sm:block">
+                        <Label className="text-xs text-muted-foreground sm:sr-only shrink-0">
+                          Allocate
+                        </Label>
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          min="0"
+                          max={ln.remaining_balance}
+                          step="0.01"
+                          className="h-11 sm:h-9 w-full"
+                          placeholder="0"
+                          value={allocations[ln.id] ?? ""}
+                          onChange={(e) =>
+                            setAllocations((prev) => ({ ...prev, [ln.id]: e.target.value }))
+                          }
+                        />
+                      </div>
                       {Math.round((Number(allocations[ln.id]) || 0) * 100) >
                         Math.round(ln.remaining_balance * 100) && (
-                        <span className="col-span-2 text-xs text-destructive">
+                        <span className="text-xs text-destructive sm:col-span-2">
                           Allocation exceeds this item&apos;s remaining balance.
                         </span>
                       )}
@@ -591,12 +597,14 @@ export default function PaymentsPage() {
             </div>
           )}
 
-          <div>
+          <div className="sm:col-span-1">
             <Label>Amount *</Label>
             <Input
               type="number"
+              inputMode="decimal"
               min="0"
               step="0.01"
+              className="h-11"
               value={paymentAmount}
               onChange={(e) => setPaymentAmount(e.target.value)}
             />
@@ -627,7 +635,7 @@ export default function PaymentsPage() {
             <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
 
-          <div className="sm:col-span-2 flex justify-end">
+          <div className="sm:col-span-2 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end w-full">
             <Button
               type="button"
               disabled={
@@ -636,7 +644,7 @@ export default function PaymentsPage() {
                 Boolean(lineLoadError) ||
                 overallocatedLines.length > 0
               }
-              className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[160px]"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white w-full sm:w-auto sm:min-w-[160px]"
               onClick={handleRecordPayment}
             >
               {submitting ? (
@@ -661,7 +669,30 @@ export default function PaymentsPage() {
           ) : payments.length === 0 ? (
             <p className="p-6 text-sm text-muted-foreground">No payments yet.</p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <ul className="divide-y sm:hidden">
+              {payments.map((p) => (
+                <li key={p.id} className="px-4 py-3 text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="font-semibold tabular-nums">
+                      {currency} {Number(p.amount || 0).toLocaleString()}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {p.payment_date ||
+                        (p.paid_at ? String(p.paid_at).slice(0, 10) : "—")}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {p.payment_method}
+                    {" · "}
+                    <span className="font-mono">
+                      {p.receipt_number || p.reference_number || "—"}
+                    </span>
+                  </p>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-xs uppercase text-slate-500 border-b">
@@ -690,6 +721,7 @@ export default function PaymentsPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>

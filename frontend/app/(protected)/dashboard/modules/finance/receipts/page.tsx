@@ -11,6 +11,12 @@ import api from "@/utils/api";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
 import { resolveMediaUrl, preparePrintLogo } from "@/utils/media";
 import { Loader2, ArrowLeft, Printer, Search } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type PaymentRow = {
   id: string;
@@ -122,6 +128,7 @@ const RECEIPT_CSS = `
     color: #0f766e;
     margin: 0 0 10px;
   }
+  .rcpt-grid,
   .rcpt-meta {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -218,6 +225,11 @@ const RECEIPT_CSS = `
     justify-content: space-between;
   }
   @page { size: A5 portrait; margin: 8mm; }
+  @media (max-width: 480px) {
+    .rcpt { padding: 8mm 6mm; font-size: 9.5pt; }
+    .rcpt-logo { width: 72px; height: 72px; }
+    .rcpt-grid { gap: 6px 10px; }
+  }
   @media print {
     body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .rcpt { max-width: none; padding: 0; }
@@ -262,6 +274,7 @@ export default function ReceiptPrintPage() {
 
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [selectedPaymentId, setSelectedPaymentId] = useState("");
+  const [modalOpen, setModalOpen] = useState(false);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingReceipt, setLoadingReceipt] = useState(false);
@@ -290,6 +303,7 @@ export default function ReceiptPrintPage() {
 
   const loadReceipt = async (paymentId: string) => {
     setSelectedPaymentId(paymentId);
+      setModalOpen(true);
     setLoadingReceipt(true);
     setReceipt(null);
     try {
@@ -364,7 +378,7 @@ export default function ReceiptPrintPage() {
   const hasAlloc = (receipt?.line_items || []).some((l) => l.allocated);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-6xl mx-auto">
+    <div className="space-y-4 sm:space-y-6 max-w-3xl mx-auto">
       <FinanceNavLinks />
       <style dangerouslySetInnerHTML={{ __html: RECEIPT_CSS }} />
 
@@ -380,162 +394,186 @@ export default function ReceiptPrintPage() {
             Preview and print match exactly (A5).
           </p>
         </div>
-        <Button
-          type="button"
-          className="bg-emerald-700 text-white"
-          disabled={!receipt}
-          onClick={printReceipt}
-        >
-          <Printer className="h-4 w-4 mr-1" /> Print
-        </Button>
+        <p className="text-xs text-muted-foreground w-full sm:w-auto sm:text-right">
+          Select a payment below to open the receipt.
+        </p>
       </div>
 
-      <div className="grid lg:grid-cols-[300px_1fr] gap-5">
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="border-b bg-slate-50/80 pb-3">
-            <CardTitle className="text-base">History</CardTitle>
-            <div className="relative mt-2">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                className="pl-9 h-9"
-                placeholder="Search…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-          </CardHeader>
-          <CardContent className="p-0 max-h-[70vh] overflow-y-auto">
-            {loading ? (
-              <p className="p-6 text-sm text-muted-foreground flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-              </p>
-            ) : filtered.length === 0 ? (
-              <p className="p-6 text-sm text-muted-foreground">No payments found.</p>
-            ) : (
-              <ul className="divide-y">
-                {filtered.map((p) => (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      onClick={() => loadReceipt(p.id)}
-                      className={`w-full text-left px-3 py-2.5 hover:bg-emerald-50/60 transition ${
-                        selectedPaymentId === p.id
-                          ? "bg-emerald-50 border-l-4 border-emerald-600"
-                          : ""
-                      }`}
-                    >
-                      <p className="font-semibold text-sm leading-tight">
-                        {studentLabel(p)}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {p.admission_number ? `${p.admission_number} · ` : ""}
-                        {p.invoice_number || "Invoice"}
-                      </p>
-                      <p className="text-sm mt-0.5 flex justify-between">
-                        <span className="font-medium tabular-nums">
-                          {money(p.amount, cur)}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {p.payment_date ||
-                            (p.paid_at ? String(p.paid_at).slice(0, 10) : "")}
-                        </span>
-                      </p>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+      {/* Full-width history; preview opens in modal */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader className="border-b bg-slate-50/80 pb-3">
+          <CardTitle className="text-base">Payment history</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Tap a payment to preview and print the receipt.
+          </p>
+          <div className="relative mt-2">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-9 h-11 sm:h-9"
+              placeholder="Search student, receipt, invoice…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </CardHeader>
+        <CardContent className="p-0 max-h-[min(70vh,560px)] overflow-y-auto">
+          {loading ? (
+            <p className="p-6 text-sm text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </p>
+          ) : filtered.length === 0 ? (
+            <p className="p-6 text-sm text-muted-foreground">No payments found.</p>
+          ) : (
+            <ul className="divide-y">
+              {filtered.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => loadReceipt(p.id)}
+                    className={`w-full text-left px-3 py-3 sm:py-2.5 touch-manipulation active:bg-emerald-50/80 transition ${
+                      selectedPaymentId === p.id
+                        ? "bg-emerald-50 border-l-4 border-emerald-600"
+                        : "hover:bg-emerald-50/60"
+                    }`}
+                  >
+                    <p className="font-semibold text-sm leading-tight">
+                      {studentLabel(p)}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {p.admission_number ? `${p.admission_number} · ` : ""}
+                      {p.invoice_number || "Invoice"}
+                      {p.receipt_number ? ` · ${p.receipt_number}` : ""}
+                    </p>
+                    <p className="text-sm mt-0.5 flex justify-between gap-2">
+                      <span className="font-medium tabular-nums">
+                        {money(p.amount, cur)}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground shrink-0">
+                        {p.payment_date ||
+                          (p.paid_at ? String(p.paid_at).slice(0, 10) : "")}
+                      </span>
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
-        <Card className="border-slate-200 shadow-sm">
-          <CardHeader className="border-b bg-slate-50/80 flex flex-row items-center justify-between py-3">
-            <CardTitle className="text-base">Preview (same as print)</CardTitle>
-            {receipt && (
-              <Button type="button" size="sm" variant="outline" onClick={printReceipt}>
-                <Printer className="h-4 w-4 mr-1" /> Print
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent className="p-4 flex justify-center bg-slate-100/60">
-            {loadingReceipt ? (
-              <p className="py-16 text-sm text-muted-foreground flex items-center gap-2">
-                <Loader2 className="h-5 w-5 animate-spin" /> Loading…
-              </p>
-            ) : !receipt ? (
-              <p className="py-16 text-sm text-muted-foreground">
-                Select a payment to preview the receipt.
-              </p>
-            ) : (
-              <div className="bg-white shadow-md border border-slate-200 w-full max-w-[148mm]">
-                <div className="rcpt" ref={printRef}>
-                  <div className="rcpt-logo-wrap">
-                    {logoSrc ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={logoSrc} alt={schoolName} className="rcpt-logo" />
-                    ) : (
-                      <div className="rcpt-logo-fallback">
-                        {(schoolName || "S").slice(0, 1)}
-                      </div>
-                    )}
-                  </div>
-                  <p className="rcpt-school">{schoolName}</p>
-                  {receipt.school?.address ? (
-                    <p className="rcpt-contact">{receipt.school.address}</p>
-                  ) : null}
+      <Dialog
+        open={modalOpen}
+        onOpenChange={(open) => {
+          setModalOpen(open);
+          if (!open) {
+            setSelectedPaymentId("");
+          }
+        }}
+      >
+        <DialogContent className="w-[calc(100%-1rem)] max-w-lg max-h-[92vh] overflow-y-auto p-3 sm:p-5">
+          <DialogHeader className="pr-8">
+            <DialogTitle className="text-base sm:text-lg">Receipt preview</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end mb-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={() => setModalOpen(false)}
+            >
+              Close
+            </Button>
+            <Button
+              type="button"
+              className="w-full sm:w-auto bg-emerald-700 text-white"
+              disabled={!receipt || loadingReceipt}
+              onClick={printReceipt}
+            >
+              <Printer className="h-4 w-4 mr-1" /> Print
+            </Button>
+          </div>
+
+          {loadingReceipt ? (
+            <p className="py-12 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading receipt…
+            </p>
+          ) : !receipt ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Could not load this receipt.
+            </p>
+          ) : (
+            <div className="overflow-x-auto -mx-1">
+              <div className="rcpt mx-auto" ref={printRef}>
+                <div className="rcpt-logo-wrap">
+                  {receipt.school?.logo_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={resolveMediaUrl(receipt.school.logo_url) || ""}
+                      alt=""
+                      className="rcpt-logo"
+                    />
+                  ) : (
+                    <div className="rcpt-logo-fallback">
+                      {(receipt.school?.name || "S").charAt(0)}
+                    </div>
+                  )}
+                </div>
+                <p className="rcpt-school">{receipt.school?.name || currentSchool?.name || "School"}</p>
+                {(receipt.school?.address || receipt.school?.phone || receipt.school?.email) && (
                   <p className="rcpt-contact">
-                    {[receipt.school?.phone, receipt.school?.email]
+                    {[receipt.school?.address, receipt.school?.phone, receipt.school?.email]
                       .filter(Boolean)
                       .join(" · ")}
                   </p>
-                  <hr className="rcpt-rule" />
-                  <p className="rcpt-title">FEE RECEIPT</p>
+                )}
+                <p className="rcpt-title">OFFICIAL PAYMENT RECEIPT</p>
 
-                  <div className="rcpt-meta">
-                    <div>
-                      <p className="lbl">Receipt No.</p>
-                      <p className="val">{receipt.receipt_number}</p>
-                    </div>
-                    <div>
-                      <p className="lbl">Date</p>
-                      <p className="val">{dateStr}</p>
-                    </div>
-                    <div>
-                      <p className="lbl">Student</p>
-                      <p className="val">{receipt.student_name}</p>
-                    </div>
-                    <div>
-                      <p className="lbl">Admission No.</p>
-                      <p className="val">{receipt.admission_number || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="lbl">Class</p>
-                      <p className="val">{receipt.grade || "—"}</p>
-                    </div>
-                    <div>
-                      <p className="lbl">Term / Year</p>
-                      <p className="val">
-                        {receipt.invoice_term || "—"} · {receipt.invoice_year || "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="lbl">Invoice</p>
-                      <p className="val" style={{ fontFamily: "ui-monospace, monospace", fontSize: "9pt" }}>
-                        {receipt.invoice_number}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="lbl">Method</p>
-                      <p className="val">
-                        {receipt.payment_method}
-                        {receipt.reference_number
-                          ? ` · ${receipt.reference_number}`
-                          : ""}
-                      </p>
-                    </div>
+                <div className="rcpt-grid">
+                  <div>
+                    <p className="lbl">Receipt No.</p>
+                    <p className="val">{receipt.receipt_number}</p>
                   </div>
+                  <div>
+                    <p className="lbl">Date</p>
+                    <p className="val">{dateStr}</p>
+                  </div>
+                  <div>
+                    <p className="lbl">Student</p>
+                    <p className="val">{receipt.student_name}</p>
+                  </div>
+                  <div>
+                    <p className="lbl">Admission No.</p>
+                    <p className="val">{receipt.admission_number || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="lbl">Class</p>
+                    <p className="val">{receipt.grade || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="lbl">Term / Year</p>
+                    <p className="val">
+                      {receipt.invoice_term || "—"} · {receipt.invoice_year || "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="lbl">Invoice</p>
+                    <p className="val" style={{ fontFamily: "ui-monospace, monospace", fontSize: "9pt" }}>
+                      {receipt.invoice_number}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="lbl">Method</p>
+                    <p className="val">
+                      {receipt.payment_method}
+                      {receipt.reference_number
+                        ? ` · ${receipt.reference_number}`
+                        : ""}
+                    </p>
+                  </div>
+                </div>
 
-                  <div className="table-scroll">
+                <div className="table-scroll">
                   <table className="rcpt-table">
                     <thead>
                       <tr>
@@ -561,37 +599,37 @@ export default function ReceiptPrintPage() {
                       ))}
                     </tbody>
                   </table>
-                  </div>
+                </div>
 
-                  <div className="rcpt-summary">
-                    <div className="rcpt-row">
-                      <span>Invoice total</span>
-                      <strong>{money(receipt.invoice_amount_due, cur)}</strong>
-                    </div>
-                    <div className="rcpt-row">
-                      <span>Paid to date</span>
-                      <strong>{money(receipt.invoice_amount_paid, cur)}</strong>
-                    </div>
-                    <div className="rcpt-row">
-                      <span>Balance due</span>
-                      <strong>{money(receipt.invoice_balance, cur)}</strong>
-                    </div>
-                    <div className="rcpt-paid">
-                      <span>Amount received</span>
-                      <span>{money(receipt.amount, cur)}</span>
-                    </div>
+                <div className="rcpt-summary">
+                  <div className="rcpt-row">
+                    <span>Invoice total</span>
+                    <strong>{money(receipt.invoice_amount_due, cur)}</strong>
                   </div>
-
-                  <div className="rcpt-foot">
-                    <span>Computer-generated · Keep for your records</span>
-                    <span>Thank you</span>
+                  <div className="rcpt-row">
+                    <span>Paid to date</span>
+                    <strong>{money(receipt.invoice_amount_paid, cur)}</strong>
+                  </div>
+                  <div className="rcpt-row">
+                    <span>Balance due</span>
+                    <strong>{money(receipt.invoice_balance, cur)}</strong>
+                  </div>
+                  <div className="rcpt-paid">
+                    <span>Amount received</span>
+                    <span>{money(receipt.amount, cur)}</span>
                   </div>
                 </div>
+
+                <div className="rcpt-foot">
+                  <span>Computer-generated · Keep for your records</span>
+                  <span>Thank you</span>
+                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
