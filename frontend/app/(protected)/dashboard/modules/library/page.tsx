@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BookOpen, Library, Search, Plus, RotateCcw, Package, LayoutDashboard,
-  FileText, Settings, Loader2, AlertCircle,
+  FileText, Settings, Loader2, AlertCircle, Users,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,8 @@ type Tab =
   | "issue"
   | "returns"
   | "overdue"
+  | "allocations"
+  | "stocktake"
   | "digital"
   | "settings";
 
@@ -33,6 +35,8 @@ const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
   { id: "issue", label: "Issue", icon: Library },
   { id: "returns", label: "Returns", icon: RotateCcw },
   { id: "overdue", label: "Overdue", icon: AlertCircle },
+  { id: "allocations", label: "Class books", icon: Users },
+  { id: "stocktake", label: "Stocktake", icon: Search },
   { id: "digital", label: "Digital", icon: FileText },
   { id: "settings", label: "Settings", icon: Settings },
 ];
@@ -67,6 +71,15 @@ export default function LibraryPage() {
   const [regForm, setRegForm] = useState({ book_id: "", count: "1", accession_prefix: "ACC" });
   const [issueForm, setIssueForm] = useState({ copy_id: "", student_id: "", remarks: "" });
   const [students, setStudents] = useState<any[]>([]);
+  const [allocations, setAllocations] = useState<any[]>([]);
+  const [stocktakes, setStocktakes] = useState<any[]>([]);
+  const [allocForm, setAllocForm] = useState({
+    book_id: "", grade_label: "", academic_year: "", term: "", name: "", student_ids: [] as string[],
+  });
+  const [stockForm, setStockForm] = useState({ name: "", location_filter: "", accession: "", stocktake_id: "" });
+  const [digForm, setDigForm] = useState({ title: "", subject: "", grade_levels: "", external_url: "", resource_type: "PDF" });
+  const [digFile, setDigFile] = useState<File | null>(null);
+
 
   const loadDashboard = useCallback(async () => {
     if (!schoolId) return;
@@ -128,6 +141,23 @@ export default function LibraryPage() {
         if (tab === "overdue") await loadLoans(true);
         if (tab === "digital") await loadDigital();
         if (tab === "settings") await loadSettings();
+        if (tab === "allocations") {
+          await loadBooks();
+          try {
+            const { data } = await api.get("/library/class-allocations/", { headers });
+            setAllocations(asList(data));
+          } catch { setAllocations([]); }
+          try {
+            const { data } = await api.get("/students/", { headers });
+            setStudents(asList(data));
+          } catch { setStudents([]); }
+        }
+        if (tab === "stocktake") {
+          try {
+            const { data } = await api.get("/library/stocktakes/", { headers });
+            setStocktakes(asList(data));
+          } catch { setStocktakes([]); }
+        }
       } catch (e) {
         console.error(e);
         toast.error("Failed to load library data");
@@ -494,22 +524,100 @@ export default function LibraryPage() {
       )}
 
       {tab === "digital" && (
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card>
             <CardHeader>
+              <CardTitle className="text-base">Upload / register resource</CardTitle>
+              <p className="text-xs text-muted-foreground">Saves as pending until a librarian approves.</p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label>Title *</Label>
+                <Input value={digForm.title} onChange={(e) => setDigForm({ ...digForm, title: e.target.value })} />
+              </div>
+              <div>
+                <Label>Subject</Label>
+                <Input value={digForm.subject} onChange={(e) => setDigForm({ ...digForm, subject: e.target.value })} />
+              </div>
+              <div>
+                <Label>Grades</Label>
+                <Input value={digForm.grade_levels} onChange={(e) => setDigForm({ ...digForm, grade_levels: e.target.value })} placeholder="4,5" />
+              </div>
+              <div>
+                <Label>External URL (optional)</Label>
+                <Input value={digForm.external_url} onChange={(e) => setDigForm({ ...digForm, external_url: e.target.value })} placeholder="https://..." />
+              </div>
+              <div>
+                <Label>File (PDF/EPUB/image/audio)</Label>
+                <Input type="file" onChange={(e) => setDigFile(e.target.files?.[0] || null)} />
+              </div>
+              <Button
+                className="w-full"
+                onClick={async () => {
+                  if (!digForm.title.trim()) return toast.error("Title required");
+                  try {
+                    const fd = new FormData();
+                    fd.append("title", digForm.title);
+                    fd.append("subject", digForm.subject);
+                    fd.append("grade_levels", digForm.grade_levels);
+                    fd.append("resource_type", digForm.resource_type);
+                    if (digForm.external_url) fd.append("external_url", digForm.external_url);
+                    if (digFile) fd.append("file", digFile);
+                    await api.post("/library/digital/", fd, {
+                      headers: { ...headers, "Content-Type": "multipart/form-data" },
+                    });
+                    toast.success("Uploaded — pending approval");
+                    setDigForm({ title: "", subject: "", grade_levels: "", external_url: "", resource_type: "PDF" });
+                    setDigFile(null);
+                    await loadDigital();
+                  } catch (e: any) {
+                    toast.error(e?.response?.data?.detail || "Upload failed");
+                  }
+                }}
+              >
+                Submit for approval
+              </Button>
+            </CardContent>
+          </Card>
+          <Card className="lg:col-span-2">
+            <CardHeader>
               <CardTitle className="text-base">Digital catalogue</CardTitle>
-              <p className="text-xs text-muted-foreground">
-                Upload PDFs via API multipart to /library/digital/ (file field). Approve before school-wide visibility.
-              </p>
             </CardHeader>
             <CardContent className="p-0">
               <ul className="divide-y">
                 {digital.map((d) => (
-                  <li key={d.id} className="px-4 py-3 flex flex-wrap justify-between gap-2 text-sm">
-                    <span className="font-medium">{d.title}</span>
-                    <span className="text-muted-foreground">
-                      {d.resource_type} · {d.approval_status} · {d.grade_levels || "All grades"}
-                    </span>
+                  <li key={d.id} className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm">
+                    <div>
+                      <p className="font-medium">{d.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {d.resource_type} · {d.approval_status} · {d.subject || "—"} · {d.grade_levels || "All grades"}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {d.external_url ? (
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={d.external_url} target="_blank" rel="noreferrer">Open link</a>
+                        </Button>
+                      ) : null}
+                      {d.approval_status === "PENDING" && (
+                        <>
+                          <Button size="sm" onClick={async () => {
+                            try {
+                              await api.post(`/library/digital/${d.id}/approve/`, {}, { headers });
+                              toast.success("Approved");
+                              await loadDigital();
+                            } catch { toast.error("Approve failed (need librarian role)"); }
+                          }}>Approve</Button>
+                          <Button size="sm" variant="outline" onClick={async () => {
+                            try {
+                              await api.post(`/library/digital/${d.id}/reject/`, {}, { headers });
+                              toast.success("Rejected");
+                              await loadDigital();
+                            } catch { toast.error("Reject failed"); }
+                          }}>Reject</Button>
+                        </>
+                      )}
+                    </div>
                   </li>
                 ))}
                 {digital.length === 0 && (
@@ -520,6 +628,221 @@ export default function LibraryPage() {
           </Card>
         </div>
       )}
+
+      
+      {tab === "allocations" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Allocate textbooks to class</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label>Book title</Label>
+                <Select value={allocForm.book_id} onValueChange={(v) => setAllocForm({ ...allocForm, book_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select book" /></SelectTrigger>
+                  <SelectContent>
+                    {books.map((b) => (
+                      <SelectItem key={b.id} value={String(b.id)}>
+                        {b.title} ({b.copies_available ?? 0} avail.)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Grade / class</Label>
+                <Input value={allocForm.grade_label} onChange={(e) => setAllocForm({ ...allocForm, grade_label: e.target.value })} placeholder="e.g. Grade 4" />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label>Academic year</Label>
+                  <Input value={allocForm.academic_year} onChange={(e) => setAllocForm({ ...allocForm, academic_year: e.target.value })} placeholder="2026" />
+                </div>
+                <div>
+                  <Label>Term</Label>
+                  <Input value={allocForm.term} onChange={(e) => setAllocForm({ ...allocForm, term: e.target.value })} placeholder="Term 1" />
+                </div>
+              </div>
+              <div>
+                <Label>Batch name</Label>
+                <Input value={allocForm.name} onChange={(e) => setAllocForm({ ...allocForm, name: e.target.value })} placeholder="Optional" />
+              </div>
+              <div>
+                <Label>Learners (hold Ctrl/Cmd for multi)</Label>
+                <select
+                  multiple
+                  className="w-full min-h-[120px] border rounded-md p-2 text-sm"
+                  value={allocForm.student_ids}
+                  onChange={(e) => {
+                    const opts = Array.from(e.target.selectedOptions).map((o) => o.value);
+                    setAllocForm({ ...allocForm, student_ids: opts });
+                  }}
+                >
+                  {students.slice(0, 300).map((s) => (
+                    <option key={s.id} value={String(s.id)}>
+                      {s.admission_number} — {s.first_name} {s.last_name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Selected: {allocForm.student_ids.length}. One available copy will be issued per learner.
+                </p>
+              </div>
+              <Button
+                className="w-full"
+                onClick={async () => {
+                  if (!allocForm.book_id || allocForm.student_ids.length === 0) {
+                    return toast.error("Select book and learners");
+                  }
+                  try {
+                    await api.post("/library/class-allocations/allocate/", {
+                      book_id: allocForm.book_id,
+                      grade_label: allocForm.grade_label,
+                      academic_year: allocForm.academic_year,
+                      term: allocForm.term,
+                      name: allocForm.name,
+                      individual: true,
+                      student_ids: allocForm.student_ids,
+                    }, { headers });
+                    toast.success("Allocation created");
+                    const { data } = await api.get("/library/class-allocations/", { headers });
+                    setAllocations(asList(data));
+                  } catch (e: any) {
+                    toast.error(e?.response?.data?.detail || "Allocation failed");
+                  }
+                }}
+              >
+                Allocate to selected learners
+              </Button>
+            </CardContent>
+          </Card>
+          <Card className="lg:col-span-2">
+            <CardHeader className="flex flex-row items-center justify-between gap-2">
+              <CardTitle className="text-base">Allocation history</CardTitle>
+              <Button size="sm" variant="outline" className="print:hidden" onClick={() => window.print()}>
+                Print
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ul className="divide-y">
+                {allocations.map((a) => (
+                  <li key={a.id} className="px-4 py-3 text-sm">
+                    <p className="font-medium">{a.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {a.grade_label || "—"} · {a.academic_year || "—"} {a.term || ""} · {String(a.created_at || "").slice(0, 10)}
+                    </p>
+                  </li>
+                ))}
+                {allocations.length === 0 && (
+                  <li className="p-6 text-center text-muted-foreground text-sm">No allocations yet.</li>
+                )}
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {tab === "stocktake" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Start / scan stocktake</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label>New session name</Label>
+                <Input value={stockForm.name} onChange={(e) => setStockForm({ ...stockForm, name: e.target.value })} placeholder="Term 3 stocktake" />
+              </div>
+              <div>
+                <Label>Location filter (optional)</Label>
+                <Input value={stockForm.location_filter} onChange={(e) => setStockForm({ ...stockForm, location_filter: e.target.value })} placeholder="Shelf A" />
+              </div>
+              <Button
+                onClick={async () => {
+                  if (!stockForm.name.trim()) return toast.error("Name required");
+                  try {
+                    const { data } = await api.post("/library/stocktakes/", {
+                      name: stockForm.name,
+                      location_filter: stockForm.location_filter,
+                    }, { headers });
+                    toast.success("Stocktake started");
+                    setStockForm({ ...stockForm, stocktake_id: data.id, name: "" });
+                    const res = await api.get("/library/stocktakes/", { headers });
+                    setStocktakes(asList(res.data));
+                  } catch {
+                    toast.error("Could not start stocktake");
+                  }
+                }}
+              >
+                Start stocktake
+              </Button>
+              <div>
+                <Label>Active stocktake</Label>
+                <Select value={stockForm.stocktake_id || "none"} onValueChange={(v) => setStockForm({ ...stockForm, stocktake_id: v === "none" ? "" : v })}>
+                  <SelectTrigger><SelectValue placeholder="Select session" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select…</SelectItem>
+                    {stocktakes.map((s) => (
+                      <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.status})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Scan accession number</Label>
+                <Input value={stockForm.accession} onChange={(e) => setStockForm({ ...stockForm, accession: e.target.value })} placeholder="ACC-0001" />
+              </div>
+              <Button
+                variant="secondary"
+                onClick={async () => {
+                  if (!stockForm.stocktake_id || !stockForm.accession) return toast.error("Select session and accession");
+                  try {
+                    await api.post(`/library/stocktakes/${stockForm.stocktake_id}/scan/`, {
+                      accession_number: stockForm.accession,
+                    }, { headers });
+                    toast.success("Recorded");
+                    setStockForm({ ...stockForm, accession: "" });
+                  } catch (e: any) {
+                    toast.error(e?.response?.data?.detail || "Scan failed");
+                  }
+                }}
+              >
+                Record found
+              </Button>
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  if (!stockForm.stocktake_id) return;
+                  try {
+                    const { data } = await api.post(`/library/stocktakes/${stockForm.stocktake_id}/close/`, {}, { headers });
+                    toast.success(`Closed — missing: ${data?.summary?.missing ?? "?"}`);
+                    const res = await api.get("/library/stocktakes/", { headers });
+                    setStocktakes(asList(res.data));
+                  } catch (e: any) {
+                    toast.error(e?.response?.data?.detail || "Close failed");
+                  }
+                }}
+              >
+                Close & mark missing
+              </Button>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Sessions</CardTitle></CardHeader>
+            <CardContent className="p-0">
+              <ul className="divide-y">
+                {stocktakes.map((s) => (
+                  <li key={s.id} className="px-4 py-3 text-sm flex justify-between gap-2">
+                    <span className="font-medium">{s.name}</span>
+                    <span className="text-muted-foreground text-xs">{s.status}</span>
+                  </li>
+                ))}
+                {stocktakes.length === 0 && (
+                  <li className="p-6 text-center text-muted-foreground text-sm">No stocktakes yet.</li>
+                )}
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
 
       {tab === "settings" && settings && (
         <Card className="max-w-md">

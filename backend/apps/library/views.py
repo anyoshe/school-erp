@@ -11,7 +11,7 @@ from apps.students.models import Student
 from apps.staff.models import Staff
 
 from .models import (
-    Book, BookCopy, Borrowing, Acquisition, Reservation, ClassAllocation,
+    Book, BookCopy, Borrowing, Acquisition, Reservation, ClassAllocation, ClassAllocationItem,
     Stocktake, StocktakeItem, LibrarySettings, DigitalResource, ResourceAssignment,
     ReadingProgress, Bookmark,
 )
@@ -24,6 +24,12 @@ from .serializers import (
     ReadingProgressSerializer, BookmarkSerializer,
 )
 from . import services
+from .permissions import (
+    CanManageCatalogue, CanIssueReturn, CanApproveDigital, CanManageStocktake,
+    CanManageAllocations, CanManageSettings, is_student, is_librarian, is_teacher,
+    can_manage_physical,
+)
+
 
 
 def _school(request):
@@ -36,7 +42,7 @@ def _school(request):
 
 
 class BookViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanManageCatalogue]
 
     def get_queryset(self):
         qs = Book.objects.filter(school_id__in=accessible_school_ids(self.request)).annotate(
@@ -109,7 +115,7 @@ class BookViewSet(viewsets.ModelViewSet):
 
 class BookCopyViewSet(viewsets.ModelViewSet):
     serializer_class = BookCopySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanManageCatalogue]
 
     def get_queryset(self):
         qs = BookCopy.objects.filter(school_id__in=accessible_school_ids(self.request)).select_related("book")
@@ -129,13 +135,15 @@ class BookCopyViewSet(viewsets.ModelViewSet):
 
 
 class BorrowingViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanIssueReturn]
 
     def get_queryset(self):
         qs = Borrowing.objects.filter(
             Q(school_id__in=accessible_school_ids(self.request))
             | Q(book__school_id__in=accessible_school_ids(self.request))
         ).select_related("book", "copy", "student", "staff", "user")
+        if is_student(self.request.user):
+            qs = qs.filter(user=self.request.user)
         st = self.request.query_params.get("status")
         if st:
             qs = qs.filter(status=st)
@@ -208,7 +216,7 @@ class BorrowingViewSet(viewsets.ModelViewSet):
 
 class AcquisitionViewSet(viewsets.ModelViewSet):
     serializer_class = AcquisitionSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanManageCatalogue]
 
     def get_queryset(self):
         return Acquisition.objects.filter(school_id__in=accessible_school_ids(self.request))
@@ -222,7 +230,10 @@ class ReservationViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Reservation.objects.filter(school_id__in=accessible_school_ids(self.request)).select_related("book")
+        qs = Reservation.objects.filter(school_id__in=accessible_school_ids(self.request)).select_related("book")
+        if is_student(self.request.user):
+            qs = qs.filter(user=self.request.user)
+        return qs
 
     def perform_create(self, serializer):
         serializer.save(school=selected_school(self.request))
@@ -230,7 +241,7 @@ class ReservationViewSet(viewsets.ModelViewSet):
 
 class ClassAllocationViewSet(viewsets.ModelViewSet):
     serializer_class = ClassAllocationSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanManageAllocations]
 
     def get_queryset(self):
         return ClassAllocation.objects.filter(school_id__in=accessible_school_ids(self.request))
@@ -238,10 +249,62 @@ class ClassAllocationViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(school=selected_school(self.request), created_by=self.request.user)
 
+    def retrieve(self, request, *args, **kwargs):
+        obj = self.get_object()
+        data = ClassAllocationSerializer(obj).data
+        items = obj.items.select_related("copy", "student", "loan", "copy__book")
+        data["items"] = [
+            {
+                "id": str(i.id),
+                "copy_id": str(i.copy_id),
+                "accession_number": i.copy.accession_number if i.copy_id else None,
+                "book_title": i.copy.book.title if i.copy_id else None,
+                "student_id": str(i.student_id) if i.student_id else None,
+                "student_name": (
+                    f"{i.student.first_name} {i.student.last_name}".strip()
+                    if i.student_id else None
+                ),
+                "loan_id": str(i.loan_id) if i.loan_id else None,
+                "loan_status": i.loan.status if i.loan_id else None,
+            }
+            for i in items
+        ]
+        return Response(data)
+
+    @action(detail=False, methods=["post"], url_path="allocate")
+    def allocate(self, request):
+        school = _school(request)
+        book_id = request.data.get("book_id")
+        book = Book.objects.filter(pk=book_id, school=school).first()
+        if not book:
+            raise ValidationError("Book not found.")
+        individual = str(request.data.get("individual", "true")).lower() in ("1", "true", "yes")
+        student_ids = request.data.get("student_ids") or []
+        if isinstance(student_ids, str):
+            student_ids = [s for s in student_ids.split(",") if s.strip()]
+        alloc, items = services.allocate_class_textbooks(
+            school=school,
+            name=request.data.get("name") or "",
+            grade_label=request.data.get("grade_label") or "",
+            academic_year=request.data.get("academic_year") or "",
+            term=request.data.get("term") or "",
+            book=book,
+            student_ids=student_ids,
+            quantity=request.data.get("quantity"),
+            individual=individual,
+            created_by=request.user,
+            due_date=request.data.get("due_date") or None,
+            notes=request.data.get("notes") or "",
+        )
+        return Response(
+            {"id": str(alloc.id), "name": alloc.name, "items_count": len(items)},
+            status=status.HTTP_201_CREATED,
+        )
+
 
 class StocktakeViewSet(viewsets.ModelViewSet):
     serializer_class = StocktakeSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanManageStocktake]
 
     def get_queryset(self):
         return Stocktake.objects.filter(school_id__in=accessible_school_ids(self.request))
@@ -267,29 +330,106 @@ class StocktakeViewSet(viewsets.ModelViewSet):
             notes=request.data.get("notes") or "",
         )
         return Response({"id": str(item.id), "result": item.result, "copy_id": str(copy.id) if copy else None})
+    @action(detail=True, methods=["post"])
+    def close(self, request, pk=None):
+        school = _school(request)
+        st = self.get_queryset().filter(pk=pk, school=school).first()
+        if not st:
+            raise ValidationError("Stocktake not found.")
+        # mark expected-but-not-scanned as MISSING
+        scanned_ids = set(
+            st.items.exclude(copy_id=None).values_list("copy_id", flat=True)
+        )
+        qs = BookCopy.objects.filter(school=school)
+        loc = (st.location_filter or "").strip()
+        if loc:
+            qs = qs.filter(storage_location__icontains=loc)
+        missing = 0
+        for copy in qs.exclude(id__in=scanned_ids):
+            StocktakeItem.objects.get_or_create(
+                stocktake=st,
+                copy=copy,
+                defaults={
+                    "accession_scanned": copy.accession_number,
+                    "result": StocktakeItem.Result.MISSING,
+                },
+            )
+            missing += 1
+        st.status = Stocktake.Status.CLOSED
+        st.closed_at = timezone.now()
+        st.save(update_fields=["status", "closed_at"])
+        summary = {
+            "found": st.items.filter(result=StocktakeItem.Result.FOUND).count(),
+            "missing": st.items.filter(result=StocktakeItem.Result.MISSING).count(),
+            "unregistered": st.items.filter(result=StocktakeItem.Result.UNREGISTERED).count(),
+        }
+        return Response({"status": st.status, "summary": summary})
+
+    @action(detail=True, methods=["get"])
+    def report(self, request, pk=None):
+        school = _school(request)
+        st = self.get_queryset().filter(pk=pk, school=school).first()
+        if not st:
+            raise ValidationError("Stocktake not found.")
+        items = st.items.select_related("copy", "copy__book")
+        return Response({
+            "id": str(st.id),
+            "name": st.name,
+            "status": st.status,
+            "items": [
+                {
+                    "accession": i.accession_scanned or (i.copy.accession_number if i.copy_id else ""),
+                    "title": i.copy.book.title if i.copy_id else "",
+                    "result": i.result,
+                    "notes": i.notes,
+                }
+                for i in items
+            ],
+        })
 
 
 class DigitalResourceViewSet(viewsets.ModelViewSet):
     serializer_class = DigitalResourceSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanApproveDigital]
 
     def get_queryset(self):
         qs = DigitalResource.objects.filter(school_id__in=accessible_school_ids(self.request))
+        role = (getattr(self.request.user, "role", None) or "").upper()
+        if role in ("STUDENT", "PARENT"):
+            qs = qs.filter(approval_status=DigitalResource.ApprovalStatus.APPROVED)
         st = self.request.query_params.get("approval_status")
-        if st:
+        if st and role not in ("STUDENT", "PARENT"):
             qs = qs.filter(approval_status=st)
         q = self.request.query_params.get("q")
         if q:
             qs = qs.filter(Q(title__icontains=q) | Q(subject__icontains=q))
+        grade = self.request.query_params.get("grade")
+        if grade:
+            qs = qs.filter(grade_levels__icontains=grade)
+        subject = self.request.query_params.get("subject")
+        if subject:
+            qs = qs.filter(subject__icontains=subject)
         return qs
 
     def perform_create(self, serializer):
         school = selected_school(self.request)
         f = self.request.FILES.get("file")
-        extra = {}
+        extra = {
+            "approval_status": DigitalResource.ApprovalStatus.PENDING,
+        }
         if f:
+            name = (getattr(f, "name", "") or "").lower()
+            allowed_ext = (".pdf", ".epub", ".png", ".jpg", ".jpeg", ".webp", ".mp3", ".mp4", ".m4a", ".wav")
+            if not any(name.endswith(ext) for ext in allowed_ext):
+                raise ValidationError("Unsupported file type. Allowed: PDF, EPUB, images, common audio/video.")
+            max_bytes = 50 * 1024 * 1024
+            if getattr(f, "size", 0) > max_bytes:
+                raise ValidationError("File must be 50 MB or smaller.")
             extra["file_size"] = f.size
             extra["mime_type"] = getattr(f, "content_type", "") or ""
+        elif not (self.request.data.get("external_url") or serializer.validated_data.get("external_url")):
+            # Allow metadata-only external later; for file-less require external URL
+            pass
         serializer.save(school=school, uploaded_by=self.request.user, **extra)
 
     @action(detail=True, methods=["post"])
@@ -353,7 +493,7 @@ class BookmarkViewSet(viewsets.ModelViewSet):
 
 
 @api_view(["GET", "PATCH"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanManageSettings])
 def library_settings(request):
     school = _school(request)
     obj = services.get_or_create_settings(school)
@@ -395,4 +535,49 @@ def library_dashboard(request):
             Borrowing.objects.filter(school=school).select_related("book", "copy", "student")[:8],
             many=True,
         ).data,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def library_reports(request):
+    """Summary reports for librarians/admins."""
+    school = _school(request)
+    role = (getattr(request.user, "role", None) or "").upper()
+    if role in ("STUDENT", "PARENT") and not is_librarian(request.user):
+        raise PermissionDenied("Not authorized for library reports.")
+    services.mark_overdue(school)
+    copies = BookCopy.objects.filter(school=school)
+    loans = Borrowing.objects.filter(school=school)
+    dig = DigitalResource.objects.filter(school=school)
+    allocations = ClassAllocation.objects.filter(school=school)
+    return Response({
+        "physical": {
+            "titles": Book.objects.filter(school=school).count(),
+            "copies_total": copies.count(),
+            "available": copies.filter(status=BookCopy.Status.AVAILABLE).count(),
+            "issued": copies.filter(status=BookCopy.Status.ISSUED).count(),
+            "overdue": loans.filter(
+                status__in=[Borrowing.Status.OVERDUE, Borrowing.Status.ACTIVE],
+                due_date__lt=timezone.localdate(),
+            ).count(),
+            "lost_damaged": copies.filter(
+                status__in=[BookCopy.Status.LOST, BookCopy.Status.DAMAGED]
+            ).count(),
+        },
+        "allocations": {
+            "batches": allocations.count(),
+            "items": ClassAllocationItem.objects.filter(allocation__school=school).count(),
+        },
+        "digital": {
+            "approved": dig.filter(approval_status=DigitalResource.ApprovalStatus.APPROVED).count(),
+            "pending": dig.filter(approval_status=DigitalResource.ApprovalStatus.PENDING).count(),
+            "by_subject": list(
+                dig.filter(approval_status=DigitalResource.ApprovalStatus.APPROVED)
+                .exclude(subject="")
+                .values("subject")
+                .annotate(n=Count("id"))
+                .order_by("-n")[:20]
+            ),
+        },
     })

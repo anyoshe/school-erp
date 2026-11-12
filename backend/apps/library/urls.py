@@ -17,6 +17,7 @@ router.register(r"bookmarks", views.BookmarkViewSet, basename="library-bookmarks
 
 urlpatterns = [
     path("dashboard/", views.library_dashboard, name="library-dashboard"),
+    path("reports/", views.library_reports, name="library-reports"),
     path("settings/", views.library_settings, name="library-settings"),
     path("", include(router.urls)),
 ]

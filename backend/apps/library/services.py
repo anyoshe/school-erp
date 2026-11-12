@@ -177,3 +177,101 @@ def mark_overdue(school) -> int:
         status=Borrowing.Status.ACTIVE,
         due_date__lt=today,
     ).update(status=Borrowing.Status.OVERDUE)
+
+
+@transaction.atomic
+def allocate_class_textbooks(
+    *,
+    school,
+    name: str,
+    grade_label: str = "",
+    academic_year: str = "",
+    term: str = "",
+    book: Book,
+    student_ids: list | None = None,
+    quantity: int | None = None,
+    individual: bool = True,
+    created_by=None,
+    due_date=None,
+    notes: str = "",
+):
+    """
+    Allocate available copies of a title to a class.
+    individual=True: one copy per student id (accountability).
+    individual=False: reserve `quantity` copies for class pool (no student).
+    """
+    from .models import ClassAllocation, ClassAllocationItem
+
+    available = list(
+        BookCopy.objects.select_for_update()
+        .filter(school=school, book=book, status=BookCopy.Status.AVAILABLE)
+        .order_by("accession_number")
+    )
+    if individual:
+        student_ids = student_ids or []
+        need = len(student_ids)
+        if need < 1:
+            raise ValidationError("Select at least one learner for individual allocation.")
+        if len(available) < need:
+            raise ValidationError(
+                f"Only {len(available)} available copies; need {need}."
+            )
+        alloc = ClassAllocation.objects.create(
+            school=school,
+            name=name or f"{book.title} — {grade_label}",
+            grade_label=grade_label or "",
+            academic_year=academic_year or "",
+            term=term or "",
+            notes=notes or "",
+            created_by=created_by,
+        )
+        from apps.students.models import Student
+
+        items = []
+        for sid, copy in zip(student_ids, available[:need]):
+            student = Student.objects.filter(pk=sid, school=school).first()
+            if not student:
+                raise ValidationError(f"Student {sid} not found in this school.")
+            loan = issue_copy(
+                school=school,
+                copy=copy,
+                student=student,
+                due_date=due_date,
+                issued_by=created_by,
+                academic_year=academic_year or "",
+                term=term or "",
+                remarks=f"Class allocation: {alloc.name}",
+            )
+            items.append(
+                ClassAllocationItem.objects.create(
+                    allocation=alloc, copy=copy, student=student, loan=loan
+                )
+            )
+        return alloc, items
+    else:
+        need = int(quantity or 0)
+        if need < 1:
+            raise ValidationError("quantity required for class-level allocation.")
+        if len(available) < need:
+            raise ValidationError(
+                f"Only {len(available)} available copies; need {need}."
+            )
+        alloc = ClassAllocation.objects.create(
+            school=school,
+            name=name or f"{book.title} — {grade_label} (class pool)",
+            grade_label=grade_label or "",
+            academic_year=academic_year or "",
+            term=term or "",
+            notes=notes or "",
+            created_by=created_by,
+        )
+        items = []
+        for copy in available[:need]:
+            copy.status = BookCopy.Status.ISSUED
+            copy.save(update_fields=["status"])
+            items.append(
+                ClassAllocationItem.objects.create(
+                    allocation=alloc, copy=copy, student=None, loan=None
+                )
+            )
+        return alloc, items
