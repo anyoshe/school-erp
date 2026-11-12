@@ -72,6 +72,7 @@ def issue_copy(
     academic_year: str = "",
     term: str = "",
     remarks: str = "",
+    is_allocation_loan: bool = False,
 ) -> Borrowing:
     if copy.school_id != school.id:
         raise ValidationError("Copy does not belong to this school.")
@@ -120,9 +121,15 @@ def issue_copy(
         academic_year=academic_year or "",
         term=term or "",
         remarks=remarks or "",
+        is_allocation_loan=is_allocation_loan,
     )
     copy.status = BookCopy.Status.ISSUED
     copy.save(update_fields=["status"])
+    try:
+        from .notifications import notify_loan_issued
+        notify_loan_issued(loan)
+    except Exception:
+        pass
     return loan
 
 
@@ -136,6 +143,7 @@ def return_loan(
     mark_lost: bool = False,
     mark_damaged: bool = False,
     remarks: str = "",
+    is_allocation_loan: bool = False,
 ) -> Borrowing:
     loan = Borrowing.objects.select_for_update().select_related("copy").get(pk=loan.pk)
     if loan.status == Borrowing.Status.RETURNED:
@@ -200,7 +208,7 @@ def allocate_class_textbooks(
     individual=True: one copy per student id (accountability).
     individual=False: reserve `quantity` copies for class pool (no student).
     """
-    from .models import ClassAllocation, ClassAllocationItem
+    from .models import ClassAllocation, ClassAllocationItem  # noqa: F401
 
     available = list(
         BookCopy.objects.select_for_update()
@@ -219,6 +227,7 @@ def allocate_class_textbooks(
         alloc = ClassAllocation.objects.create(
             school=school,
             name=name or f"{book.title} — {grade_label}",
+            kind=ClassAllocation.Kind.INDIVIDUAL,
             grade_label=grade_label or "",
             academic_year=academic_year or "",
             term=term or "",
@@ -241,6 +250,7 @@ def allocate_class_textbooks(
                 academic_year=academic_year or "",
                 term=term or "",
                 remarks=f"Class allocation: {alloc.name}",
+                is_allocation_loan=True,
             )
             items.append(
                 ClassAllocationItem.objects.create(
@@ -259,6 +269,7 @@ def allocate_class_textbooks(
         alloc = ClassAllocation.objects.create(
             school=school,
             name=name or f"{book.title} — {grade_label} (class pool)",
+            kind=ClassAllocation.Kind.CLASS_POOL,
             grade_label=grade_label or "",
             academic_year=academic_year or "",
             term=term or "",

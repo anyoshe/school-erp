@@ -196,6 +196,10 @@ class Borrowing(models.Model):
     academic_year = models.CharField(max_length=20, blank=True, default="")
     term = models.CharField(max_length=40, blank=True, default="")
     remarks = models.TextField(blank=True, default="")
+    is_allocation_loan = models.BooleanField(
+        default=False,
+        help_text="True when this loan is an academic-year / class textbook allocation, not a short-term borrow.",
+    )
     created_at = models.DateTimeField(auto_now_add=True, null=True)
 
     class Meta:
@@ -232,9 +236,15 @@ class Reservation(models.Model):
 class ClassAllocation(models.Model):
     """Batch allocation of textbooks to a grade/class (individual copy accountability)."""
 
+    class Kind(models.TextChoices):
+        INDIVIDUAL = "INDIVIDUAL", "Individual learner"
+        CLASS_POOL = "CLASS_POOL", "Class pool"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="library_class_allocations")
     name = models.CharField(max_length=200)
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.INDIVIDUAL)
+    subject = models.CharField(max_length=120, blank=True, default="")
     grade_label = models.CharField(max_length=80, blank=True, default="")
     academic_year = models.CharField(max_length=20, blank=True, default="")
     term = models.CharField(max_length=40, blank=True, default="")

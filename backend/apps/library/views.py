@@ -1,3 +1,4 @@
+from pathlib import Path
 from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -36,13 +37,33 @@ def _school(request):
     school = selected_school(request)
     if not school:
         raise ValidationError("School context required (X-School-ID).")
-    if school.id not in accessible_school_ids(request):
+    ids = list(accessible_school_ids(request))
+    if school.id not in ids:
         raise PermissionDenied("No access to this school.")
     return school
 
 
+def _assert_obj_school(request, obj):
+    """404-style isolation: hide other tenants' objects."""
+    school = getattr(obj, "school", None)
+    if school is None and hasattr(obj, "book"):
+        school = getattr(obj.book, "school", None)
+    if school is None:
+        return
+    ids = list(accessible_school_ids(request))
+    if school.id not in ids:
+        from rest_framework.exceptions import NotFound
+        raise NotFound()
+
+
 class BookViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, CanManageCatalogue]
+
+
+    def get_object(self):
+        obj = super().get_object()
+        _assert_obj_school(self.request, obj)
+        return obj
 
     def get_queryset(self):
         qs = Book.objects.filter(school_id__in=accessible_school_ids(self.request)).annotate(
@@ -117,6 +138,12 @@ class BookCopyViewSet(viewsets.ModelViewSet):
     serializer_class = BookCopySerializer
     permission_classes = [IsAuthenticated, CanManageCatalogue]
 
+
+    def get_object(self):
+        obj = super().get_object()
+        _assert_obj_school(self.request, obj)
+        return obj
+
     def get_queryset(self):
         qs = BookCopy.objects.filter(school_id__in=accessible_school_ids(self.request)).select_related("book")
         st = self.request.query_params.get("status")
@@ -136,6 +163,12 @@ class BookCopyViewSet(viewsets.ModelViewSet):
 
 class BorrowingViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, CanIssueReturn]
+
+
+    def get_object(self):
+        obj = super().get_object()
+        _assert_obj_school(self.request, obj)
+        return obj
 
     def get_queryset(self):
         qs = Borrowing.objects.filter(
@@ -243,6 +276,12 @@ class ClassAllocationViewSet(viewsets.ModelViewSet):
     serializer_class = ClassAllocationSerializer
     permission_classes = [IsAuthenticated, CanManageAllocations]
 
+
+    def get_object(self):
+        obj = super().get_object()
+        _assert_obj_school(self.request, obj)
+        return obj
+
     def get_queryset(self):
         return ClassAllocation.objects.filter(school_id__in=accessible_school_ids(self.request))
 
@@ -306,6 +345,12 @@ class StocktakeViewSet(viewsets.ModelViewSet):
     serializer_class = StocktakeSerializer
     permission_classes = [IsAuthenticated, CanManageStocktake]
 
+
+    def get_object(self):
+        obj = super().get_object()
+        _assert_obj_school(self.request, obj)
+        return obj
+
     def get_queryset(self):
         return Stocktake.objects.filter(school_id__in=accessible_school_ids(self.request))
 
@@ -332,11 +377,11 @@ class StocktakeViewSet(viewsets.ModelViewSet):
         return Response({"id": str(item.id), "result": item.result, "copy_id": str(copy.id) if copy else None})
     @action(detail=True, methods=["post"])
     def close(self, request, pk=None):
+        """Close stocktake. Issued/allocated copies not scanned are NOT marked missing."""
         school = _school(request)
         st = self.get_queryset().filter(pk=pk, school=school).first()
         if not st:
             raise ValidationError("Stocktake not found.")
-        # mark expected-but-not-scanned as MISSING
         scanned_ids = set(
             st.items.exclude(copy_id=None).values_list("copy_id", flat=True)
         )
@@ -344,24 +389,57 @@ class StocktakeViewSet(viewsets.ModelViewSet):
         loc = (st.location_filter or "").strip()
         if loc:
             qs = qs.filter(storage_location__icontains=loc)
-        missing = 0
+
+        # Result notes by status — do not rewrite loan history
         for copy in qs.exclude(id__in=scanned_ids):
-            StocktakeItem.objects.get_or_create(
-                stocktake=st,
-                copy=copy,
-                defaults={
-                    "accession_scanned": copy.accession_number,
-                    "result": StocktakeItem.Result.MISSING,
-                },
-            )
-            missing += 1
+            if copy.status == BookCopy.Status.ISSUED:
+                result = "ISSUED_OUT"
+                note = "Not scanned; copy is currently issued/allocated"
+            elif copy.status in (BookCopy.Status.LOST, BookCopy.Status.WRITTEN_OFF):
+                result = StocktakeItem.Result.MISSING
+                note = f"Already recorded as {copy.status}"
+            elif copy.status in (BookCopy.Status.DAMAGED, BookCopy.Status.UNDER_REPAIR):
+                result = "DAMAGED_OR_REPAIR"
+                note = f"Status {copy.status}"
+            elif copy.status == BookCopy.Status.AVAILABLE:
+                result = StocktakeItem.Result.MISSING
+                note = "Expected available but not verified in this stocktake"
+            else:
+                result = StocktakeItem.Result.MISSING
+                note = f"Status {copy.status}"
+            # Store extended result in notes when not in Result enum
+            if result not in dict(StocktakeItem.Result.choices):
+                StocktakeItem.objects.get_or_create(
+                    stocktake=st,
+                    copy=copy,
+                    defaults={
+                        "accession_scanned": copy.accession_number,
+                        "result": StocktakeItem.Result.MISSING,
+                        "notes": note,
+                    },
+                )
+            else:
+                StocktakeItem.objects.get_or_create(
+                    stocktake=st,
+                    copy=copy,
+                    defaults={
+                        "accession_scanned": copy.accession_number,
+                        "result": result,
+                        "notes": note,
+                    },
+                )
         st.status = Stocktake.Status.CLOSED
         st.closed_at = timezone.now()
         st.save(update_fields=["status", "closed_at"])
+        items = st.items.all()
         summary = {
-            "found": st.items.filter(result=StocktakeItem.Result.FOUND).count(),
-            "missing": st.items.filter(result=StocktakeItem.Result.MISSING).count(),
-            "unregistered": st.items.filter(result=StocktakeItem.Result.UNREGISTERED).count(),
+            "found": items.filter(result=StocktakeItem.Result.FOUND).count(),
+            "missing_available": items.filter(
+                result=StocktakeItem.Result.MISSING, notes__icontains="Expected available"
+            ).count(),
+            "issued_out_not_scanned": items.filter(notes__icontains="currently issued").count(),
+            "unregistered": items.filter(result=StocktakeItem.Result.UNREGISTERED).count(),
+            "total_items": items.count(),
         }
         return Response({"status": st.status, "summary": summary})
 
@@ -391,6 +469,12 @@ class StocktakeViewSet(viewsets.ModelViewSet):
 class DigitalResourceViewSet(viewsets.ModelViewSet):
     serializer_class = DigitalResourceSerializer
     permission_classes = [IsAuthenticated, CanApproveDigital]
+
+
+    def get_object(self):
+        obj = super().get_object()
+        _assert_obj_school(self.request, obj)
+        return obj
 
     def get_queryset(self):
         qs = DigitalResource.objects.filter(school_id__in=accessible_school_ids(self.request))
@@ -581,3 +665,63 @@ def library_reports(request):
             ),
         },
     })
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def digital_file(request, pk):
+    """Authorized PDF/file delivery — never expose Cloudinary secrets."""
+    school = _school(request)
+    obj = DigitalResource.objects.filter(pk=pk, school_id__in=accessible_school_ids(request)).first()
+    if not obj:
+        from rest_framework.exceptions import NotFound
+        raise NotFound()
+    role = (getattr(request.user, "role", None) or "").upper()
+    if role in ("STUDENT", "PARENT") and obj.approval_status != DigitalResource.ApprovalStatus.APPROVED:
+        raise PermissionDenied("Resource not available.")
+    if not obj.file:
+        raise ValidationError("No file attached (external link only).")
+    # Stream via storage
+    try:
+        f = obj.file.open("rb")
+    except Exception:
+        raise ValidationError("Unable to open file.")
+    from django.http import FileResponse
+    content_type = obj.mime_type or "application/pdf"
+    resp = FileResponse(f, content_type=content_type)
+    disp = "inline" if content_type.startswith("application/pdf") or content_type.startswith("image/") else "attachment"
+    if not obj.allow_download and role in ("STUDENT", "PARENT"):
+        disp = "inline"
+    fname = Path(obj.file.name).name if obj.file.name else "resource"
+    resp["Content-Disposition"] = f'{disp}; filename="{fname}"'
+    # touch reading progress
+    ReadingProgress.objects.update_or_create(
+        school=school,
+        resource=obj,
+        user=request.user,
+        defaults={"last_position": request.query_params.get("page") or ""},
+    )
+    return resp
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def digital_progress(request, pk):
+    school = _school(request)
+    obj = DigitalResource.objects.filter(pk=pk, school_id__in=accessible_school_ids(request)).first()
+    if not obj:
+        from rest_framework.exceptions import NotFound
+        raise NotFound()
+    page = str(request.data.get("page") or request.data.get("last_position") or "")
+    pct = request.data.get("progress_percent")
+    completed = bool(request.data.get("completed"))
+    defaults = {"last_position": page}
+    if pct is not None:
+        defaults["progress_percent"] = pct
+    if completed:
+        defaults["completed"] = True
+    prog, _ = ReadingProgress.objects.update_or_create(
+        school=school, resource=obj, user=request.user, defaults=defaults
+    )
+    return Response(ReadingProgressSerializer(prog).data)

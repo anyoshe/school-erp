@@ -113,3 +113,72 @@ class LibraryIssueReturnTests(TestCase):
         services.return_loan(loan=loan)
         c.refresh_from_db()
         self.assertEqual(c.status, BookCopy.Status.AVAILABLE)
+
+
+class StocktakeIssuedNotMissingTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="st@test.com", password="pass12345", role="LIBRARIAN")
+        self.school = School.objects.create(name="ST School", owner=self.user)
+        self.school.users.add(self.user)
+        self.book = Book.objects.create(school=self.school, title="Hist G5", author="X")
+        copies = services.register_copies(school=self.school, book=self.book, count=2, accession_prefix="ST")
+        self.available = copies[0]
+        self.issued = copies[1]
+        services.issue_copy(school=self.school, copy=self.issued, user=self.user, issued_by=self.user)
+
+    def test_close_does_not_treat_issued_as_available_missing(self):
+        from apps.library.models import Stocktake, StocktakeItem
+        st = Stocktake.objects.create(school=self.school, name="Check", created_by=self.user)
+        # only scan available one
+        StocktakeItem.objects.create(
+            stocktake=st, copy=self.available,
+            accession_scanned=self.available.accession_number,
+            result=StocktakeItem.Result.FOUND,
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        res = client.post(
+            f"/api/library/stocktakes/{st.id}/close/",
+            {},
+            format="json",
+            HTTP_X_SCHOOL_ID=str(self.school.id),
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        data = res.json()
+        self.assertGreaterEqual(data["summary"].get("issued_out_not_scanned", 0), 1)
+        # issued copy notes
+        item = StocktakeItem.objects.filter(stocktake=st, copy=self.issued).first()
+        self.assertIsNotNone(item)
+        self.assertIn("issued", (item.notes or "").lower())
+
+
+class AllocationLoanFlagTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="al@test.com", password="pass12345", role="LIBRARIAN")
+        self.school = School.objects.create(name="AL School", owner=self.user)
+        self.school.users.add(self.user)
+        self.book = Book.objects.create(school=self.school, title="Math", author="Y")
+        from apps.students.models import Student
+        self.student = Student.objects.create(
+            school=self.school,
+            admission_number="A1",
+            first_name="Ann",
+            last_name="Bee",
+        )
+
+    def test_individual_allocation_sets_flag(self):
+        services.register_copies(school=self.school, book=self.book, count=1, accession_prefix="AL")
+        alloc, items = services.allocate_class_textbooks(
+            school=self.school,
+            name="G4 Math",
+            grade_label="Grade 4",
+            academic_year="2026",
+            book=self.book,
+            student_ids=[str(self.student.id)],
+            individual=True,
+            created_by=self.user,
+        )
+        self.assertEqual(len(items), 1)
+        loan = items[0].loan
+        self.assertIsNotNone(loan)
+        self.assertTrue(loan.is_allocation_loan)

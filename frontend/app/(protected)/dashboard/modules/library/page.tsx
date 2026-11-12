@@ -26,6 +26,8 @@ type Tab =
   | "allocations"
   | "stocktake"
   | "digital"
+  | "assignments"
+  | "reader"
   | "settings";
 
 const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
@@ -38,6 +40,7 @@ const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
   { id: "allocations", label: "Class books", icon: Users },
   { id: "stocktake", label: "Stocktake", icon: Search },
   { id: "digital", label: "Digital", icon: FileText },
+  { id: "assignments", label: "Assignments", icon: FileText },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -49,6 +52,76 @@ function asList<T>(data: unknown): T[] {
     if (Array.isArray(o.data)) return o.data;
   }
   return [];
+}
+
+function AssignForm({ digital, students, headers, onDone }: any) {
+  const [resource, setResource] = useState("");
+  const [studentId, setStudentId] = useState("");
+  const [grade, setGrade] = useState("");
+  const [due, setDue] = useState("");
+  const [instructions, setInstructions] = useState("");
+  return (
+    <div className="space-y-3">
+      <div>
+        <Label>Approved resource</Label>
+        <Select value={resource} onValueChange={setResource}>
+          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+          <SelectContent>
+            {digital.map((d: any) => (
+              <SelectItem key={d.id} value={String(d.id)}>{d.title}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label>Learner (optional)</Label>
+        <Select value={studentId || "none"} onValueChange={(v) => setStudentId(v === "none" ? "" : v)}>
+          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Class-level only</SelectItem>
+            {students.slice(0, 200).map((s: any) => (
+              <SelectItem key={s.id} value={String(s.id)}>
+                {s.admission_number} — {s.first_name} {s.last_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div>
+        <Label>Grade label</Label>
+        <Input value={grade} onChange={(e) => setGrade(e.target.value)} placeholder="Grade 4" />
+      </div>
+      <div>
+        <Label>Due date</Label>
+        <Input type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+      </div>
+      <div>
+        <Label>Instructions</Label>
+        <Input value={instructions} onChange={(e) => setInstructions(e.target.value)} />
+      </div>
+      <Button
+        className="w-full"
+        onClick={async () => {
+          if (!resource) return toast.error("Select resource");
+          try {
+            await api.post("/library/assignments/", {
+              resource,
+              student: studentId || null,
+              grade_label: grade,
+              due_date: due || null,
+              instructions,
+            }, { headers });
+            toast.success("Assigned");
+            onDone?.();
+          } catch (e: any) {
+            toast.error(e?.response?.data?.detail || "Assign failed");
+          }
+        }}
+      >
+        Create assignment
+      </Button>
+    </div>
+  );
 }
 
 export default function LibraryPage() {
@@ -79,6 +152,11 @@ export default function LibraryPage() {
   const [stockForm, setStockForm] = useState({ name: "", location_filter: "", accession: "", stocktake_id: "" });
   const [digForm, setDigForm] = useState({ title: "", subject: "", grade_levels: "", external_url: "", resource_type: "PDF" });
   const [digFile, setDigFile] = useState<File | null>(null);
+  const [readerId, setReaderId] = useState<string>("");
+  const [readerUrl, setReaderUrl] = useState<string>("");
+  const [readerTitle, setReaderTitle] = useState("");
+  const [assignments, setAssignments] = useState<any[]>([]);
+
 
 
   const loadDashboard = useCallback(async () => {
@@ -113,6 +191,27 @@ export default function LibraryPage() {
     const { data } = await api.get("/library/digital/", { headers });
     setDigital(asList(data));
   }, [schoolId]);
+
+  const openReader = async (id: string, title: string) => {
+    try {
+      const res = await api.get(`/library/digital/${id}/file/`, {
+        headers,
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: res.headers["content-type"] || "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      if (readerUrl) URL.revokeObjectURL(readerUrl);
+      setReaderUrl(url);
+      setReaderId(id);
+      setReaderTitle(title);
+      setTab("digital");
+      try {
+        await api.post(`/library/digital/${id}/progress/`, { page: "1" }, { headers });
+      } catch { /* optional */ }
+    } catch {
+      toast.error("Unable to open resource (permission or missing file)");
+    }
+  };
 
   const loadSettings = useCallback(async () => {
     if (!schoolId) return;
@@ -157,6 +256,17 @@ export default function LibraryPage() {
             const { data } = await api.get("/library/stocktakes/", { headers });
             setStocktakes(asList(data));
           } catch { setStocktakes([]); }
+        }
+        if (tab === "assignments") {
+          await loadDigital();
+          try {
+            const { data } = await api.get("/library/assignments/", { headers });
+            setAssignments(asList(data));
+          } catch { setAssignments([]); }
+          try {
+            const { data } = await api.get("/students/", { headers });
+            setStudents(asList(data));
+          } catch { setStudents([]); }
         }
       } catch (e) {
         console.error(e);
@@ -599,6 +709,11 @@ export default function LibraryPage() {
                           <a href={d.external_url} target="_blank" rel="noreferrer">Open link</a>
                         </Button>
                       ) : null}
+                      {d.approval_status === "APPROVED" && (
+                        <Button size="sm" variant="secondary" onClick={() => openReader(String(d.id), d.title)}>
+                          Read PDF
+                        </Button>
+                      )}
                       {d.approval_status === "PENDING" && (
                         <>
                           <Button size="sm" onClick={async () => {
@@ -836,6 +951,69 @@ export default function LibraryPage() {
                 ))}
                 {stocktakes.length === 0 && (
                   <li className="p-6 text-center text-muted-foreground text-sm">No stocktakes yet.</li>
+                )}
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+
+      
+      {readerUrl && (
+        <Card className="border-primary/30">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <CardTitle className="text-base flex-1">Reading: {readerTitle}</CardTitle>
+            <Button size="sm" variant="outline" onClick={() => {
+              URL.revokeObjectURL(readerUrl);
+              setReaderUrl("");
+              setReaderId("");
+            }}>Close reader</Button>
+          </CardHeader>
+          <CardContent className="p-2 sm:p-4">
+            <iframe
+              title={readerTitle}
+              src={readerUrl}
+              className="w-full h-[70vh] min-h-[320px] rounded-lg border bg-white"
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {tab === "assignments" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Assign digital resource</CardTitle>
+              <p className="text-xs text-muted-foreground">Teachers: assign approved resources to learners.</p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <AssignForm
+                digital={digital.filter((d) => d.approval_status === "APPROVED")}
+                students={students}
+                headers={headers}
+                onDone={async () => {
+                  const { data } = await api.get("/library/assignments/", { headers });
+                  setAssignments(asList(data));
+                }}
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="text-base">Assignments</CardTitle></CardHeader>
+            <CardContent className="p-0">
+              <ul className="divide-y">
+                {assignments.map((a) => (
+                  <li key={a.id} className="px-4 py-3 text-sm">
+                    <p className="font-medium">Resource {String(a.resource).slice(0, 8)}…</p>
+                    <p className="text-xs text-muted-foreground">
+                      Due {a.due_date || "—"} · Grade {a.grade_label || "—"}
+                    </p>
+                    <p className="text-xs mt-1">{a.instructions}</p>
+                  </li>
+                ))}
+                {assignments.length === 0 && (
+                  <li className="p-6 text-center text-muted-foreground text-sm">No assignments yet.</li>
                 )}
               </ul>
             </CardContent>

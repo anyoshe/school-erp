@@ -66,7 +66,7 @@ class BorrowingSerializer(serializers.ModelSerializer):
             "id", "school", "book", "book_title", "copy", "accession_number",
             "user", "student", "student_name", "staff", "staff_name", "borrower_type",
             "borrow_date", "due_date", "return_date", "status", "return_condition",
-            "academic_year", "term", "remarks", "created_at",
+            "academic_year", "term", "remarks", "is_allocation_loan", "created_at",
         ]
         read_only_fields = ["school", "status"]
 
