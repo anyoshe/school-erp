@@ -36,7 +36,6 @@ CORE_MODULE_CODES = (
 
 # Present in catalogue but not auto-enabled (Coming soon / optional)
 SHELL_MODULE_CODES = (
-    "library",
     "events",
     "health",
     "alumni",
