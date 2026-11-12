@@ -145,7 +145,7 @@ export default function TranscriptPage() {
               </div>
               <div className="max-w-md text-xs leading-relaxed">
                 <p className="italic">{doc.certification}</p>
-                <div className="mt-8 grid grid-cols-2 gap-8">
+                <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-8">
                   <div>
                     <div className="border-b border-slate-400 h-8" />
                     <p className="mt-1">Principal / Head teacher</p>
