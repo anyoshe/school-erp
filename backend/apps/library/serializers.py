@@ -184,3 +184,19 @@ class BookmarkSerializer(serializers.ModelSerializer):
         model = Bookmark
         fields = "__all__"
         read_only_fields = ["school", "user", "created_at"]
+
+
+
+class LibraryDelegateSerializer(serializers.ModelSerializer):
+    user_email = serializers.CharField(source="user.email", read_only=True)
+
+    class Meta:
+        from .models import LibraryDelegate
+        model = LibraryDelegate
+        fields = (
+            "id", "school", "user", "user_email",
+            "can_catalogue", "can_issue", "can_allocate", "can_acquire",
+            "can_stocktake", "can_digital_upload", "can_digital_approve", "can_reports",
+            "granted_by", "created_at",
+        )
+        read_only_fields = ("id", "school", "granted_by", "created_at", "user_email")

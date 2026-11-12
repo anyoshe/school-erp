@@ -175,6 +175,11 @@ def return_loan(
                 condition=condition or BookCopy.Condition.GOOD,
             )
     loan.save()
+    try:
+        from .notifications import notify_loan_returned
+        notify_loan_returned(loan)
+    except Exception:
+        pass
     return loan
 
 
@@ -286,3 +291,39 @@ def allocate_class_textbooks(
                 )
             )
         return alloc, items
+
+
+
+def receive_acquisition(*, acquisition, received_by=None, accession_prefix: str = "") -> dict:
+    """Mark acquisition received and register physical copies for each line. Idempotent if already RECEIVED."""
+    from django.utils import timezone
+    from django.db import transaction
+    from .models import Acquisition, BookCopy
+
+    if acquisition.status == Acquisition.Status.RECEIVED:
+        return {"status": "already_received", "copies": 0}
+    if acquisition.status == Acquisition.Status.CANCELLED:
+        raise ValueError("Acquisition is cancelled.")
+
+    created = 0
+    with transaction.atomic():
+        for line in acquisition.lines.select_related("book"):
+            prefix = (accession_prefix or "ACQ").strip()[:12]
+            new_copies = register_copies(
+                school=acquisition.school,
+                book=line.book,
+                count=int(line.quantity or 0),
+                accession_prefix=prefix,
+                condition="NEW",
+                acquisition_source=acquisition.source_type,
+            )
+            created += len(new_copies)
+            for c in new_copies:
+                if acquisition.supplier_or_donor:
+                    BookCopy.objects.filter(pk=c.pk).update(
+                        acquisition_source=f"{acquisition.source_type}:{acquisition.supplier_or_donor}"[:120]
+                    )
+        acquisition.status = Acquisition.Status.RECEIVED
+        acquisition.received_at = timezone.now()
+        acquisition.save(update_fields=["status", "received_at"])
+    return {"status": "received", "copies": created}

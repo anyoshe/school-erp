@@ -1,8 +1,5 @@
-"""Library RBAC mapped to existing User.Role values."""
+"""Role-based library permissions with optional LibraryDelegate grants."""
 from rest_framework.permissions import BasePermission, SAFE_METHODS
-
-from apps.school.support import accessible_school_ids, selected_school
-
 
 ADMIN_ROLES = {
     "SUPER_ADMIN",
@@ -10,141 +7,141 @@ ADMIN_ROLES = {
     "PRINCIPAL",
     "DEPUTY_PRINCIPAL",
 }
-
 LIBRARIAN_ROLES = ADMIN_ROLES | {"LIBRARIAN"}
-
-STAFF_MANAGE_ROLES = LIBRARIAN_ROLES | {
-    "ACADEMIC_COORDINATOR",
-    "ADMISSIONS_OFFICER",
-    "ACCOUNTANT",
-}
-
-TEACHER_ROLES = STAFF_MANAGE_ROLES | {"TEACHER"}
-
-STUDENT_ROLES = {"STUDENT"}
-PARENT_ROLES = {"PARENT"}
+TEACHER_ROLES = LIBRARIAN_ROLES | {"TEACHER", "ACADEMIC_COORDINATOR"}
 
 
-def user_role(user) -> str:
+def _role(user) -> str:
     return (getattr(user, "role", None) or "").upper()
 
 
-def is_library_admin(user) -> bool:
-    if not user or not user.is_authenticated:
-        return False
-    if getattr(user, "is_superuser", False):
-        return True
-    return user_role(user) in ADMIN_ROLES
+def is_admin(user) -> bool:
+    return bool(user and user.is_authenticated and (
+        getattr(user, "is_superuser", False) or _role(user) in ADMIN_ROLES
+    ))
 
 
 def is_librarian(user) -> bool:
-    if is_library_admin(user):
-        return True
-    return user_role(user) in {"LIBRARIAN"}
+    return bool(user and user.is_authenticated and (
+        getattr(user, "is_superuser", False) or _role(user) in LIBRARIAN_ROLES
+    ))
 
 
 def is_teacher(user) -> bool:
-    if is_librarian(user):
-        return True
-    return user_role(user) in {"TEACHER", "ACADEMIC_COORDINATOR"}
+    return bool(user and user.is_authenticated and (
+        getattr(user, "is_superuser", False) or _role(user) in TEACHER_ROLES
+    ))
 
 
 def is_student(user) -> bool:
-    return user_role(user) == "STUDENT"
+    return _role(user) == "STUDENT"
 
 
-def can_manage_physical(user) -> bool:
-    return is_librarian(user) or user_role(user) in ADMIN_ROLES
+def is_parent(user) -> bool:
+    return _role(user) == "PARENT"
 
 
-def can_approve_digital(user) -> bool:
-    return is_librarian(user) or is_library_admin(user)
-
-
-def can_issue_return(user) -> bool:
-    return is_librarian(user) or is_library_admin(user)
-
-
-def school_in_scope(request, school_id) -> bool:
-    if school_id is None:
+def _delegate_flag(user, request, flag: str) -> bool:
+    if not user or not user.is_authenticated:
         return False
-    return accessible_school_ids(request).filter(pk=school_id).exists()
-
-
-class IsLibraryAuthenticated(BasePermission):
-    def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated)
+    if is_librarian(user):
+        return True
+    try:
+        from apps.core.tenancy import selected_school
+        school = selected_school(request)
+        if not school:
+            return False
+        from .models import LibraryDelegate
+        d = LibraryDelegate.objects.filter(school=school, user=user).first()
+        if not d:
+            return False
+        return bool(getattr(d, flag, False))
+    except Exception:
+        return False
 
 
 class CanManageCatalogue(BasePermission):
-    """Create/update books, copies, acquisitions."""
-
-    message = "Only librarians or school administrators can manage the catalogue."
-
     def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
         if request.method in SAFE_METHODS:
-            return True
-        return can_manage_physical(request.user)
+            return request.user and request.user.is_authenticated and not is_parent(request.user)
+        return is_librarian(request.user) or _delegate_flag(request.user, request, "can_catalogue")
 
 
-class CanIssueReturn(BasePermission):
-    message = "Only librarians or administrators can issue or return books."
-
+class CanIssueBooks(BasePermission):
     def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
         if request.method in SAFE_METHODS:
-            # Students may read own loans — view filters
-            return True
-        action = getattr(view, "action", None)
-        if action in ("issue", "return_loan", "create", "update", "partial_update", "destroy"):
-            return can_issue_return(request.user)
-        return can_manage_physical(request.user)
-
-
-class CanApproveDigital(BasePermission):
-    message = "Only librarians or administrators can approve digital resources."
-
-    def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-        action = getattr(view, "action", None)
-        if action in ("approve", "reject"):
-            return can_approve_digital(request.user)
-        if request.method in SAFE_METHODS:
-            return True
-        # upload: teachers + librarians + admin
-        if request.method in ("POST", "PUT", "PATCH"):
-            return is_teacher(request.user) or is_librarian(request.user)
-        if request.method == "DELETE":
-            return can_approve_digital(request.user)
-        return False
-
-
-class CanManageStocktake(BasePermission):
-    def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
-        if request.method in SAFE_METHODS:
-            return is_teacher(request.user) or is_librarian(request.user)
-        return can_manage_physical(request.user)
+            return request.user and request.user.is_authenticated
+        return is_librarian(request.user) or _delegate_flag(request.user, request, "can_issue")
 
 
 class CanManageAllocations(BasePermission):
     def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return request.user and request.user.is_authenticated and not is_parent(request.user)
+        return is_librarian(request.user) or _delegate_flag(request.user, request, "can_allocate")
+
+
+class CanManageAcquisitions(BasePermission):
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return is_librarian(request.user) or _delegate_flag(request.user, request, "can_acquire") or is_admin(request.user)
+        return is_librarian(request.user) or _delegate_flag(request.user, request, "can_acquire")
+
+
+class CanStocktake(BasePermission):
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return is_librarian(request.user) or _delegate_flag(request.user, request, "can_stocktake") or is_admin(request.user)
+        return is_librarian(request.user) or _delegate_flag(request.user, request, "can_stocktake")
+
+
+class CanUploadDigital(BasePermission):
+    def has_permission(self, request, view):
+        if request.method in SAFE_METHODS:
+            return request.user and request.user.is_authenticated and not is_parent(request.user)
+        if is_librarian(request.user) or is_teacher(request.user):
+            return True
+        return _delegate_flag(request.user, request, "can_digital_upload")
+
+
+class CanApproveDigital(BasePermission):
+    def has_permission(self, request, view):
+        return is_librarian(request.user) or _delegate_flag(request.user, request, "can_digital_approve")
+
+
+class CanViewLibraryReports(BasePermission):
+    def has_permission(self, request, view):
+        return (
+            is_librarian(request.user)
+            or is_admin(request.user)
+            or _delegate_flag(request.user, request, "can_reports")
+        )
+
+
+class IsNotParentAdminOnlyWrites(BasePermission):
+    def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
-        if request.method in SAFE_METHODS:
-            return is_teacher(request.user) or is_librarian(request.user)
-        return can_manage_physical(request.user) or is_teacher(request.user)
+        if is_parent(request.user) and request.method not in SAFE_METHODS:
+            return False
+        return True
+
+
+# Aliases expected by views (Phase 2/3 names)
+class CanIssueReturn(CanIssueBooks):
+    pass
+
+
+class CanManageStocktake(CanStocktake):
+    pass
 
 
 class CanManageSettings(BasePermission):
     def has_permission(self, request, view):
-        if not request.user or not request.user.is_authenticated:
-            return False
         if request.method in SAFE_METHODS:
-            return is_teacher(request.user) or is_librarian(request.user)
-        return is_library_admin(request.user) or is_librarian(request.user)
+            return request.user and request.user.is_authenticated and not is_parent(request.user)
+        return is_librarian(request.user) or is_admin(request.user)
+
+
+def can_manage_physical(user) -> bool:
+    return is_librarian(user) or is_admin(user)

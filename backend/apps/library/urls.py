@@ -21,5 +21,8 @@ urlpatterns = [
     path("digital/<uuid:pk>/file/", views.digital_file, name="library-digital-file"),
     path("digital/<uuid:pk>/progress/", views.digital_progress, name="library-digital-progress"),
     path("settings/", views.library_settings, name="library-settings"),
+    path("assignment-monitor/", views.assignment_monitor, name="library-assignment-monitor"),
+    path("my-learning/", views.my_learning, name="library-my-learning"),
+    path("delegates/", views.library_delegates, name="library-delegates"),
     path("", include(router.urls)),
 ]

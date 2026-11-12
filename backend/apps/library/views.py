@@ -25,6 +25,7 @@ from .serializers import (
     ReadingProgressSerializer, BookmarkSerializer,
 )
 from . import services
+from .permissions import CanManageAcquisitions, CanViewLibraryReports, CanStocktake, is_admin, is_teacher, is_parent, is_student, is_librarian  # noqa
 from .permissions import (
     CanManageCatalogue, CanIssueReturn, CanApproveDigital, CanManageStocktake,
     CanManageAllocations, CanManageSettings, is_student, is_librarian, is_teacher,
@@ -249,13 +250,30 @@ class BorrowingViewSet(viewsets.ModelViewSet):
 
 class AcquisitionViewSet(viewsets.ModelViewSet):
     serializer_class = AcquisitionSerializer
-    permission_classes = [IsAuthenticated, CanManageCatalogue]
+    permission_classes = [IsAuthenticated, CanManageAcquisitions]
 
     def get_queryset(self):
-        return Acquisition.objects.filter(school_id__in=accessible_school_ids(self.request))
+        return Acquisition.objects.filter(school_id__in=accessible_school_ids(self.request)).prefetch_related("lines", "lines__book")
 
     def perform_create(self, serializer):
         serializer.save(school=selected_school(self.request), created_by=self.request.user)
+
+    @action(detail=True, methods=["post"])
+    def receive(self, request, pk=None):
+        """Verify receipt and register accessioned copies (no stock before receive)."""
+        school = _school(request)
+        acq = self.get_queryset().filter(pk=pk, school=school).first()
+        if not acq:
+            raise ValidationError("Acquisition not found.")
+        prefix = (request.data.get("accession_prefix") or "ACQ").strip()
+        try:
+            result = services.receive_acquisition(
+                acquisition=acq, received_by=request.user, accession_prefix=prefix
+            )
+        except ValueError as e:
+            raise ValidationError(str(e))
+        return Response({"acquisition": AcquisitionSerializer(acq).data, **result})
+
 
 
 class ReservationViewSet(viewsets.ModelViewSet):
@@ -623,7 +641,7 @@ def library_dashboard(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAuthenticated, CanViewLibraryReports])
 def library_reports(request):
     """Summary reports for librarians/admins."""
     school = _school(request)
@@ -635,7 +653,45 @@ def library_reports(request):
     loans = Borrowing.objects.filter(school=school)
     dig = DigitalResource.objects.filter(school=school)
     allocations = ClassAllocation.objects.filter(school=school)
-    return Response({
+    
+    rtype = (request.query_params.get("type") or "summary").lower()
+    from .models import Acquisition, ClassAllocation, ClassAllocationItem, ResourceAssignment
+    if rtype == "overdue":
+        rows = Borrowing.objects.filter(school=school, status__in=["ACTIVE", "OVERDUE"]).filter(
+            due_date__lt=timezone.now().date()
+        ).select_related("book", "copy", "student", "user")[:500]
+        return Response({
+            "type": "overdue",
+            "results": BorrowingSerializer(rows, many=True).data,
+        })
+    if rtype == "issued":
+        rows = Borrowing.objects.filter(school=school, status__in=["ACTIVE", "OVERDUE"]).select_related(
+            "book", "copy", "student"
+        )[:500]
+        return Response({"type": "issued", "results": BorrowingSerializer(rows, many=True).data})
+    if rtype == "catalogue":
+        books = Book.objects.filter(school=school).annotate(
+            copies_total=Count("copies"),
+            copies_available=Count("copies", filter=Q(copies__status=BookCopy.Status.AVAILABLE)),
+        ).order_by("title")[:1000]
+        return Response({"type": "catalogue", "results": BookSerializer(books, many=True).data})
+    if rtype == "copies":
+        copies = BookCopy.objects.filter(school=school).select_related("book").order_by("accession_number")[:2000]
+        return Response({"type": "copies", "results": BookCopySerializer(copies, many=True).data})
+    if rtype == "allocations":
+        allocs = ClassAllocation.objects.filter(school=school).prefetch_related("items")[:200]
+        return Response({"type": "allocations", "results": ClassAllocationSerializer(allocs, many=True).data})
+    if rtype == "acquisitions":
+        acqs = Acquisition.objects.filter(school=school).prefetch_related("lines")[:200]
+        return Response({"type": "acquisitions", "results": AcquisitionSerializer(acqs, many=True).data})
+    if rtype == "digital":
+        dig = DigitalResource.objects.filter(school=school).order_by("-created_at")[:500]
+        return Response({"type": "digital", "results": DigitalResourceSerializer(dig, many=True).data})
+    if rtype == "assignments":
+        asn = ResourceAssignment.objects.filter(school=school).select_related("resource")[:300]
+        return Response({"type": "assignments", "results": ResourceAssignmentSerializer(asn, many=True).data})
+    # default summary continues below
+return Response({
         "physical": {
             "titles": Book.objects.filter(school=school).count(),
             "copies_total": copies.count(),
@@ -725,3 +781,99 @@ def digital_progress(request, pk):
         school=school, resource=obj, user=request.user, defaults=defaults
     )
     return Response(ReadingProgressSerializer(prog).data)
+
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def assignment_monitor(request):
+    """Teacher: assignments with learner progress counts."""
+    school = _school(request)
+    if is_student(request.user) or is_parent(request.user):
+        raise PermissionDenied("Teachers/staff only.")
+    qs = ResourceAssignment.objects.filter(school=school).select_related("resource", "student", "assigned_by")
+    grade = request.query_params.get("grade")
+    if grade:
+        qs = qs.filter(grade_label__icontains=grade)
+    out = []
+    for a in qs.order_by("-assigned_at")[:100]:
+        # progress by resource for assigned student or grade cohort
+        progress_qs = ReadingProgress.objects.filter(school=school, resource=a.resource)
+        if a.student_id and getattr(a.student, "user_id", None):
+            progress_qs = progress_qs.filter(user_id=a.student.user_id)
+        completed = progress_qs.filter(completed=True).count()
+        started = progress_qs.exclude(last_position="").count()
+        out.append({
+            "id": str(a.id),
+            "resource_id": str(a.resource_id),
+            "resource_title": a.resource.title,
+            "grade_label": a.grade_label,
+            "student_id": str(a.student_id) if a.student_id else None,
+            "student_name": (
+                f"{a.student.first_name} {a.student.last_name}".strip() if a.student_id else None
+            ),
+            "due_date": a.due_date.isoformat() if a.due_date else None,
+            "instructions": a.instructions,
+            "assigned_at": a.assigned_at.isoformat() if a.assigned_at else None,
+            "started": started,
+            "completed": completed,
+        })
+    return Response({"results": out})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_learning(request):
+    """Student (or parent for linked child): assignments, progress, bookmarks."""
+    school = _school(request)
+    user = request.user
+    assigns = ResourceAssignment.objects.filter(school=school).select_related("resource")
+    if is_parent(user):
+        assigns = assigns.none()
+    # Students see grade-wide and personal assignments; further filtering is client-side
+    progress = ReadingProgress.objects.filter(school=school, user=user)
+    bookmarks = Bookmark.objects.filter(school=school, user=user)
+    return Response({
+        "assignments": ResourceAssignmentSerializer(assigns.order_by("-assigned_at")[:50], many=True).data,
+        "progress": ReadingProgressSerializer(progress, many=True).data,
+        "bookmarks": BookmarkSerializer(bookmarks, many=True).data,
+        "approved_resources": DigitalResourceSerializer(
+            DigitalResource.objects.filter(
+                school=school, approval_status=DigitalResource.ApprovalStatus.APPROVED
+            ).order_by("-created_at")[:50],
+            many=True,
+        ).data,
+    })
+
+
+@api_view(["GET", "POST", "DELETE"])
+@permission_classes([IsAuthenticated])
+def library_delegates(request):
+    """School admin: list/create/delete library capability delegates."""
+    school = _school(request)
+    from .models import LibraryDelegate
+    from .serializers import LibraryDelegateSerializer
+    if request.method == "GET":
+        qs = LibraryDelegate.objects.filter(school=school).select_related("user")
+        return Response(LibraryDelegateSerializer(qs, many=True).data)
+    if not is_librarian(request.user) and not is_admin(request.user):
+        # only admin for writes
+        from .permissions import is_admin as _ia
+        if not _ia(request.user):
+            raise PermissionDenied("Only school administrators can manage library delegates.")
+    if request.method == "POST":
+        from .permissions import is_admin as _ia
+        if not _ia(request.user) and not is_librarian(request.user):
+            raise PermissionDenied("Not allowed.")
+        ser = LibraryDelegateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        obj = ser.save(school=school, granted_by=request.user)
+        return Response(LibraryDelegateSerializer(obj).data, status=201)
+    if request.method == "DELETE":
+        from .permissions import is_admin as _ia
+        if not _ia(request.user):
+            raise PermissionDenied("Not allowed.")
+        did = request.data.get("id") or request.query_params.get("id")
+        LibraryDelegate.objects.filter(school=school, pk=did).delete()
+        return Response(status=204)
+    return Response(status=405)

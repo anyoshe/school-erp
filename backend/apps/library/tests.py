@@ -182,3 +182,17 @@ class AllocationLoanFlagTests(TestCase):
         loan = items[0].loan
         self.assertIsNotNone(loan)
         self.assertTrue(loan.is_allocation_loan)
+
+
+class NotificationIdempotencyTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="n@test.com", password="pass12345", role="STUDENT")
+        self.school = School.objects.create(name="N School", owner=self.user)
+        self.school.users.add(self.user)
+
+    def test_notify_once(self):
+        from apps.library.notifications import notify_once
+        a = notify_once(self.school, self.user, "k1", "T", "M")
+        b = notify_once(self.school, self.user, "k1", "T", "M")
+        self.assertIsNotNone(a)
+        self.assertIsNone(b)

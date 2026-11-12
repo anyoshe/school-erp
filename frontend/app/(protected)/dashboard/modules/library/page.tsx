@@ -27,7 +27,9 @@ type Tab =
   | "stocktake"
   | "digital"
   | "assignments"
-  | "reader"
+  | "learning"
+  | "acquisitions"
+  | "reports"
   | "settings";
 
 const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
@@ -41,6 +43,9 @@ const TABS: { id: Tab; label: string; icon: typeof BookOpen }[] = [
   { id: "stocktake", label: "Stocktake", icon: Search },
   { id: "digital", label: "Digital", icon: FileText },
   { id: "assignments", label: "Assignments", icon: FileText },
+  { id: "learning", label: "My learning", icon: BookOpen },
+  { id: "acquisitions", label: "Acquisitions", icon: Package },
+  { id: "reports", label: "Reports", icon: FileText },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -156,6 +161,13 @@ export default function LibraryPage() {
   const [readerUrl, setReaderUrl] = useState<string>("");
   const [readerTitle, setReaderTitle] = useState("");
   const [assignments, setAssignments] = useState<any[]>([]);
+  const [acquisitions, setAcquisitions] = useState<any[]>([]);
+  const [reportType, setReportType] = useState("summary");
+  const [reportData, setReportData] = useState<any>(null);
+  const [learning, setLearning] = useState<any>(null);
+  const [monitor, setMonitor] = useState<any[]>([]);
+  const [delegates, setDelegates] = useState<any[]>([]);
+
 
 
 
@@ -257,7 +269,30 @@ export default function LibraryPage() {
             setStocktakes(asList(data));
           } catch { setStocktakes([]); }
         }
+        if (tab === "acquisitions") {
+          try {
+            const { data } = await api.get("/library/acquisitions/", { headers });
+            setAcquisitions(asList(data));
+          } catch { setAcquisitions([]); }
+        }
+        if (tab === "reports") {
+          try {
+            const { data } = await api.get("/library/reports/", { headers, params: { type: reportType } });
+            setReportData(data);
+          } catch { setReportData(null); }
+        }
+        if (tab === "learning") {
+          try {
+            const { data } = await api.get("/library/my-learning/", { headers });
+            setLearning(data);
+          } catch { setLearning(null); }
+        }
         if (tab === "assignments") {
+          try {
+            const { data } = await api.get("/library/assignment-monitor/", { headers });
+            setMonitor(asList(data?.results ?? data));
+          } catch { setMonitor([]); }
+
           await loadDigital();
           try {
             const { data } = await api.get("/library/assignments/", { headers });

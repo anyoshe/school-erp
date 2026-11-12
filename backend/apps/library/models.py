@@ -119,13 +119,23 @@ class Acquisition(models.Model):
         TRANSFER = "TRANSFER", "Transfer"
         OTHER = "OTHER", "Other"
 
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending receipt"
+        RECEIVED = "RECEIVED", "Received & registered"
+        CANCELLED = "CANCELLED", "Cancelled"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="library_acquisitions")
     source_type = models.CharField(max_length=20, choices=SourceType.choices, default=SourceType.PURCHASE)
     supplier_or_donor = models.CharField(max_length=200, blank=True, default="")
+    invoice_ref = models.CharField(max_length=120, blank=True, default="")
+    academic_year = models.CharField(max_length=20, blank=True, default="")
+    funding_source = models.CharField(max_length=120, blank=True, default="")
     acquisition_date = models.DateField()
     notes = models.TextField(blank=True, default="")
     total_cost = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    received_at = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
     )
@@ -424,3 +434,42 @@ class Bookmark(models.Model):
     position = models.CharField(max_length=120)
     label = models.CharField(max_length=120, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+
+class LibraryDelegate(models.Model):
+    """Grant selected library capabilities to a teacher/staff without full LIBRARIAN role."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="library_delegates")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="library_delegations"
+    )
+    can_catalogue = models.BooleanField(default=False)
+    can_issue = models.BooleanField(default=True)
+    can_allocate = models.BooleanField(default=False)
+    can_acquire = models.BooleanField(default=False)
+    can_stocktake = models.BooleanField(default=False)
+    can_digital_upload = models.BooleanField(default=False)
+    can_digital_approve = models.BooleanField(default=False)
+    can_reports = models.BooleanField(default=True)
+    granted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("school", "user")]
+
+
+class LibraryNotificationLog(models.Model):
+    """Idempotent notification sends (prevents duplicates on scheduled runs)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="library_notification_logs")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    event_key = models.CharField(max_length=200)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("school", "user", "event_key")]
