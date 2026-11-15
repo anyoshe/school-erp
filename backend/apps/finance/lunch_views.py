@@ -66,7 +66,7 @@ class LunchEnrollmentListCreateView(APIView):
             )
         return Response({"count": len(rows), "results": rows})
 
-        def post(self, request):
+    def post(self, request):
         """Retired: do not create parallel LunchEnrollment billing.
 
         Meals are billed via fee structure optional/mandatory lines and
@@ -85,6 +85,7 @@ class LunchEnrollmentListCreateView(APIView):
             },
             status=status.HTTP_410_GONE,
         )
+
 
 class LunchEnrollmentDetailView(APIView):
     permission_classes = [IsAuthenticated]
