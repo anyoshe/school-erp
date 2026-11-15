@@ -105,8 +105,16 @@ class CanUploadDigital(BasePermission):
 
 
 class CanApproveDigital(BasePermission):
+    """Anyone authenticated may list/read approved digital; staff approve/upload."""
     def has_permission(self, request, view):
-        return is_librarian(request.user) or _delegate_flag(request.user, request, "can_digital_approve")
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.method in SAFE_METHODS:
+            return True  # queryset restricts students to APPROVED
+        # uploads / approve / reject
+        return is_librarian(request.user) or is_admin(request.user) or _delegate_flag(
+            request.user, request, "can_digital_approve"
+        )
 
 
 class CanViewLibraryReports(BasePermission):

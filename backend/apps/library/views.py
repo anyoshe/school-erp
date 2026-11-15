@@ -824,25 +824,58 @@ def assignment_monitor(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def my_learning(request):
-    """Student (or parent for linked child): assignments, progress, bookmarks."""
+    """Student/staff: digital shelf, assignments, progress, and own loans."""
     school = _school(request)
     user = request.user
-    assigns = ResourceAssignment.objects.filter(school=school).select_related("resource")
-    if is_parent(user):
+    from apps.library.permissions import is_student, is_parent
+    from apps.students.models import Student
+
+    assigns = ResourceAssignment.objects.filter(school=school).select_related(
+        "resource", "student"
+    )
+    student = None
+    if is_student(user):
+        student = Student.objects.filter(school=school, user=user).first()
+        if student:
+            grade_name = getattr(getattr(student, "current_class", None), "name", "") or ""
+            assigns = assigns.filter(
+                Q(student=student)
+                | Q(student__isnull=True, grade_label__iexact=grade_name)
+                | Q(student__isnull=True, grade_label="")
+            )
+        else:
+            assigns = assigns.filter(student__isnull=True)
+    elif is_parent(user):
+        # Parents: approved digital only; no full assignment list
         assigns = assigns.none()
-    # Students see grade-wide and personal assignments; further filtering is client-side
+
     progress = ReadingProgress.objects.filter(school=school, user=user)
     bookmarks = Bookmark.objects.filter(school=school, user=user)
+    dig_qs = DigitalResource.objects.filter(
+        school=school, approval_status=DigitalResource.ApprovalStatus.APPROVED
+    ).order_by("-created_at")
+    q = (request.query_params.get("q") or "").strip()
+    if q:
+        dig_qs = dig_qs.filter(Q(title__icontains=q) | Q(subject__icontains=q))
+
+    loans = []
+    if student or is_student(user):
+        bqs = Borrowing.objects.filter(school=school).select_related("book", "copy")
+        if student:
+            bqs = bqs.filter(Q(student=student) | Q(user=user))
+        else:
+            bqs = bqs.filter(user=user)
+        bqs = bqs.filter(status__in=[Borrowing.Status.ACTIVE, Borrowing.Status.OVERDUE])
+        loans = BorrowingSerializer(bqs.order_by("-borrow_date")[:30], many=True).data
+
     return Response({
-        "assignments": ResourceAssignmentSerializer(assigns.order_by("-assigned_at")[:50], many=True).data,
+        "assignments": ResourceAssignmentSerializer(
+            assigns.order_by("-assigned_at")[:50], many=True
+        ).data,
         "progress": ReadingProgressSerializer(progress, many=True).data,
         "bookmarks": BookmarkSerializer(bookmarks, many=True).data,
-        "approved_resources": DigitalResourceSerializer(
-            DigitalResource.objects.filter(
-                school=school, approval_status=DigitalResource.ApprovalStatus.APPROVED
-            ).order_by("-created_at")[:50],
-            many=True,
-        ).data,
+        "approved_resources": DigitalResourceSerializer(dig_qs[:80], many=True).data,
+        "my_loans": loans,
     })
 
 
