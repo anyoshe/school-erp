@@ -203,7 +203,8 @@ def rehome_stray_optional_invoice_lines(school) -> dict:
     qs = InvoiceLine.objects.filter(invoice__school=school).select_related(
         "item", "item__category"
     )
-    for line in qs.iterator(chunk_size=200):
+    # Avoid .iterator() — Neon pooler drops server-side cursors
+    for line in qs:
         text = f"{line.description or ''} {getattr(line.item, 'name', '') or ''}"
         entry = match_catalog_entry(text)
         if not entry:
