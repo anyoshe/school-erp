@@ -6,10 +6,8 @@ stable so cashiers select existing items instead of inventing new names.
 """
 from __future__ import annotations
 
-from django.db.models import Q
 
-
-# code -> (category_name, item_name, keywords for matching free text / legacy lines)
+# code -> category/item + keywords for free text / legacy aliases
 CANONICAL_OPTIONALS = (
     {
         "code": "meals",
@@ -23,7 +21,7 @@ CANONICAL_OPTIONALS = (
         "code": "books",
         "category": "Books & learning materials",
         "item": "Textbooks / books",
-        "keywords": ("textbook", "text book", "books", "course book", "workbook"),
+        "keywords": ("textbook", "text book", "course book", "workbook", "text books"),
         "description": "Textbooks and learning materials",
         "display_order": 60,
     },
@@ -31,7 +29,16 @@ CANONICAL_OPTIONALS = (
         "code": "assessment_books",
         "category": "Books & learning materials",
         "item": "Assessment books",
-        "keywords": ("assessment book", "assessment books", "assesment", "exam book"),
+        "keywords": (
+            "assessment book",
+            "assessment books",
+            "assessmentbook",
+            "assessmentbooks",
+            "assesment book",
+            "assesment books",
+            "exam book",
+            "exam books",
+        ),
         "description": "Assessment / exam books",
         "display_order": 61,
     },
@@ -64,8 +71,12 @@ CANONICAL_OPTIONALS = (
 OTHER_CATEGORY = "Other charges"
 
 
+def _norm(text: str) -> str:
+    return " ".join((text or "").strip().lower().split())
+
+
 def _text_match(text: str, keywords: tuple) -> bool:
-    s = (text or "").strip().lower()
+    s = _norm(text)
     if not s:
         return False
     # Prefer longer keywords first so "assessment book" wins over "book"
@@ -77,17 +88,25 @@ def _text_match(text: str, keywords: tuple) -> bool:
 
 def match_catalog_entry(text: str):
     """Return best CANONICAL_OPTIONALS entry for free text, or None."""
-    s = (text or "").strip().lower()
+    s = _norm(text)
     if not s:
         return None
-    # assessment before general books
+    # assessment before general books; longer keywords first
     ordered = sorted(
         CANONICAL_OPTIONALS,
-        key=lambda e: (0 if e["code"] == "assessment_books" else 1, -max(len(k) for k in e["keywords"])),
+        key=lambda e: (
+            0 if e["code"] == "assessment_books" else 1,
+            -max(len(k) for k in e["keywords"]),
+        ),
     )
     for entry in ordered:
         if _text_match(s, entry["keywords"]):
             return entry
+    # Bare "books" (not assessment) → textbooks
+    if "book" in s and "assessment" not in s and "exam" not in s:
+        for entry in CANONICAL_OPTIONALS:
+            if entry["code"] == "books":
+                return entry
     return None
 
 
@@ -98,7 +117,6 @@ def ensure_optional_fee_catalog(school) -> list:
     from apps.finance.models import FeeCategory, FeeItem
     from apps.finance.lunch import ensure_meals_fee_defaults
 
-    # Keep meals consolidation behaviour from lunch module
     try:
         ensure_meals_fee_defaults(school)
     except Exception:
@@ -119,7 +137,7 @@ def ensure_optional_fee_catalog(school) -> list:
             cat.is_mandatory = False
             cat.save(update_fields=["is_mandatory"])
 
-        item, created = FeeItem.objects.get_or_create(
+        item, _created = FeeItem.objects.get_or_create(
             category=cat,
             name=entry["item"],
             defaults={
@@ -171,7 +189,6 @@ def resolve_fee_item_for_extra(school, *, fee_item_id=None, description: str = "
             pk=fee_item_id, category__school=school, is_active=True
         ).select_related("category").first()
         if item:
-            # If they picked a random item but text is meals, still ok — trust id
             return item, "selected"
 
     entry = match_catalog_entry(description)
@@ -187,16 +204,116 @@ def resolve_fee_item_for_extra(school, *, fee_item_id=None, description: str = "
     return None, None
 
 
-def rehome_stray_optional_invoice_lines(school) -> dict:
+def _find_alias_items(school, entry, canonical_id):
+    """FeeItems for this school whose name matches keywords but is not the canonical row."""
+    from apps.finance.models import FeeItem
+
+    aliases = []
+    for fi in FeeItem.objects.filter(category__school=school).select_related("category"):
+        if str(fi.id) == str(canonical_id):
+            continue
+        # Match on item name (and category name as weak signal)
+        text = f"{fi.name} {fi.category.name if fi.category_id else ''}"
+        matched = match_catalog_entry(text)
+        if matched and matched["code"] == entry["code"]:
+            aliases.append(fi)
+        elif _text_match(fi.name, entry["keywords"]):
+            aliases.append(fi)
+    return aliases
+
+
+def merge_alias_fee_items(school) -> dict:
     """
-    Re-point invoice lines that match catalog keywords but use non-canonical
-    items (e.g. Additional charges / Assessment book free-text) onto catalog items.
+    Point all alias FeeItems (e.g. 'Assessment Book') at the canonical
+    'Assessment books' item: invoice lines, structure lines, M2M, expenses.
+    Then deactivate aliases so cashiers only see one selection.
     """
-    from apps.finance.models import InvoiceLine, FeeItem
+    from apps.finance.models import (
+        Expense,
+        FeeItem,
+        FeeStructure,
+        FeeStructureItem,
+        InvoiceLine,
+        StudentFeeAssignment,
+    )
 
     catalog = ensure_optional_fee_catalog(school)
     by_code = {c["code"]: c for c in catalog}
-    # Build item id set that is already canonical
+    report = {}
+
+    for entry in CANONICAL_OPTIONALS:
+        code = entry["code"]
+        target_id = by_code[code]["fee_item_id"]
+        target = FeeItem.objects.filter(pk=target_id).first()
+        if not target:
+            continue
+        aliases = _find_alias_items(school, entry, target_id)
+        if not aliases:
+            report[code] = {"aliases": 0, "invoice_lines": 0, "structure_items": 0}
+            continue
+
+        inv_n = 0
+        str_n = 0
+        for alias in aliases:
+            # Invoice lines
+            inv_n += InvoiceLine.objects.filter(invoice__school=school, item=alias).update(
+                item=target
+            )
+            # Structure prices: move or merge if both exist on same structure
+            for si in FeeStructureItem.objects.filter(
+                structure__school=school, item=alias
+            ):
+                existing = FeeStructureItem.objects.filter(
+                    structure_id=si.structure_id, item=target
+                ).first()
+                if existing:
+                    # Keep higher amount or sum? Prefer keep existing target row; drop alias
+                    si.delete()
+                else:
+                    si.item = target
+                    si.save(update_fields=["item"])
+                str_n += 1
+            # M2M available_optional_items & selected_optional_items
+            for struct in FeeStructure.objects.filter(
+                school=school, available_optional_items=alias
+            ):
+                struct.available_optional_items.remove(alias)
+                struct.available_optional_items.add(target)
+            for asn in StudentFeeAssignment.objects.filter(
+                student__school=school, selected_optional_items=alias
+            ):
+                asn.selected_optional_items.remove(alias)
+                asn.selected_optional_items.add(target)
+            # Expenses
+            Expense.objects.filter(school=school, related_fee_item=alias).update(
+                related_fee_item=target
+            )
+            # Deactivate alias so it disappears from pickers
+            if alias.is_active:
+                alias.is_active = False
+                alias.save(update_fields=["is_active"])
+
+        report[code] = {
+            "aliases": len(aliases),
+            "alias_names": [a.name for a in aliases],
+            "invoice_lines": inv_n,
+            "structure_items": str_n,
+        }
+
+    return report
+
+
+def rehome_stray_optional_invoice_lines(school) -> dict:
+    """
+    1) Merge alias FeeItems (Assessment Book → Assessment books).
+    2) Re-point any remaining invoice lines matched by description keywords.
+    """
+    from apps.finance.models import InvoiceLine, FeeItem
+
+    merge_report = merge_alias_fee_items(school)
+
+    catalog = ensure_optional_fee_catalog(school)
+    by_code = {c["code"]: c for c in catalog}
     canonical_ids = {c["fee_item_id"] for c in catalog}
 
     moved = {c["code"]: 0 for c in catalog}
@@ -213,7 +330,6 @@ def rehome_stray_optional_invoice_lines(school) -> dict:
         current_id = str(line.item_id) if line.item_id else ""
         if current_id == target_id:
             continue
-        # Don't move unrelated lines that barely matched misc
         if entry["code"] == "misc" and not _text_match(
             text, ("misc", "miscellaneous", "sundry")
         ):
@@ -222,8 +338,11 @@ def rehome_stray_optional_invoice_lines(school) -> dict:
         if not target:
             continue
         line.item = target
-        # Keep original description for receipt clarity
         line.save(update_fields=["item"])
         moved[entry["code"]] = moved.get(entry["code"], 0) + 1
 
-    return {"moved": moved, "canonical_ids": list(canonical_ids)}
+    return {
+        "merged_aliases": merge_report,
+        "moved_lines": moved,
+        "canonical_ids": list(canonical_ids),
+    }
