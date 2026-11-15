@@ -15,7 +15,7 @@ from .views import (
     StudentFeeAssignmentViewSet, InvoiceViewSet, PaymentViewSet, PaymentPlanViewSet,
     FinanceDashboardSummaryView,
     AwaitingClearanceView,
-    ClearanceAddItemView, ClearancePrepareView, ClearanceAdjustLineView,
+    ClearanceAddItemView, ClearanceOptionalItemsView, ClearancePrepareView, ClearanceAdjustLineView,
 )
 from .accounting_views import (
     AccountViewSet, AccountBalancesView,
@@ -51,6 +51,7 @@ urlpatterns = [
     path('returning-students/bill/', ReturningStudentsBillView.as_view(), name='returning-students-bill'),
     path('opening-balances/', OpeningBalanceView.as_view(), name='opening-balances'),
     path('awaiting-clearance/', AwaitingClearanceView.as_view(), name='awaiting-clearance'),
+    path('clearance-optional-items/', ClearanceOptionalItemsView.as_view(), name='clearance-optional-items'),
     path('awaiting-clearance/<uuid:student_id>/add-item/', ClearanceAddItemView.as_view(), name='clearance-add-item'),
     path('awaiting-clearance/<uuid:student_id>/prepare/', ClearancePrepareView.as_view(), name='clearance-prepare'),
     path('clearance/lines/<str:line_id>/', ClearanceAdjustLineView.as_view(), name='clearance-adjust-line'),

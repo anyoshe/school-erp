@@ -87,7 +87,12 @@ def ensure_school_cash_accounts(school):
 def ensure_school_finance_defaults(school):
     """Seed expense categories + chart of accounts (cash + income + expense)."""
     from apps.finance.lunch import ensure_meals_fee_defaults
+    from apps.finance.fee_catalog import ensure_optional_fee_catalog
     meals = ensure_meals_fee_defaults(school)
+    try:
+        ensure_optional_fee_catalog(school)
+    except Exception:
+        pass
     return {
         "categories": ensure_school_expense_categories(school),
         "accounts": ensure_school_cash_accounts(school),

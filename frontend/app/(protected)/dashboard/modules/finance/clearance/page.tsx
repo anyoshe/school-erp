@@ -49,6 +49,11 @@ export default function FinanceClearancePage() {
   const [invoiceId, setInvoiceId] = useState("");
   const [saving, setSaving] = useState(false);
   const [extraName, setExtraName] = useState("");
+  const [extraItemId, setExtraItemId] = useState<string>("");
+  const [optionalCatalog, setOptionalCatalog] = useState<
+    { code: string; fee_item_id: string; name: string; category: string }[]
+  >([]);
+
   const [extraAmount, setExtraAmount] = useState("");
   const [addingExtra, setAddingExtra] = useState(false);
   const [invoiceLines, setInvoiceLines] = useState<
@@ -379,17 +384,45 @@ export default function FinanceClearancePage() {
 
   // Allocation is manual by default; use Split / First-item buttons when needed
 
-  const addExtra = async () => {
+  
+  useEffect(() => {
     if (!row?.id) return;
-    if (!extraName.trim() || !extraAmount || Number(extraAmount) <= 0) {
-      toast.error("Enter item name and amount");
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get("/finance/clearance-optional-items/", { headers });
+        const list = Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : [];
+        if (!cancelled) setOptionalCatalog(list);
+      } catch {
+        if (!cancelled) setOptionalCatalog([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [row?.id, headers]);
+
+  const addExtra = async () => {
+
+    if (!row?.id) return;
+    const isOther = extraItemId === "other";
+    if ((!extraItemId || (isOther && !extraName.trim())) || !extraAmount || Number(extraAmount) <= 0) {
+      toast.error(isOther || !extraItemId ? "Select a fee item (or Other + name) and amount" : "Enter amount");
       return;
     }
     setAddingExtra(true);
     try {
+      const selected = optionalCatalog.find((c) => c.fee_item_id === extraItemId);
+      const description = isOther
+        ? extraName.trim()
+        : selected?.name || extraName.trim() || "Fee";
       const res = await api.post(
         `/finance/awaiting-clearance/${row.id}/add-item/`,
-        { description: extraName.trim(), amount: extraAmount },
+        {
+          description,
+          amount: extraAmount,
+          fee_item_id: isOther ? undefined : extraItemId || undefined,
+        },
         { headers }
       );
       const billing = res.data?.billing;
@@ -405,6 +438,7 @@ export default function FinanceClearancePage() {
       const label = extraName.trim();
       const n = Number(extraAmount);
       setExtraName("");
+      setExtraItemId("");
       setExtraAmount("");
       toast.success(
         `Added ${label}${n ? ` · ${n.toLocaleString()}` : ""} — included in balance`
@@ -669,18 +703,35 @@ export default function FinanceClearancePage() {
               <Plus className="h-4 w-4" /> Add extra fee item
             </p>
             <p className="text-xs text-muted-foreground">
-              e.g. Assessment book, uniform — for items not on the term structure.
-              Names containing lunch/meals/catering are posted to the same Meals fee
-              item as structure optionals (not Additional charges).
+              Choose a standard optional fee (meals, books, assessment books, uniform,
+              transport, misc). Use Other only when the charge is not in the list.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="col-span-2 sm:col-span-1">
-                <Label>Item name</Label>
-                <Input
-                  value={extraName}
-                  onChange={(e) => setExtraName(e.target.value)}
-                  placeholder="Assessment book"
-                />
+              <div className="col-span-2 sm:col-span-1 space-y-2">
+                <Label>Fee item</Label>
+                <select
+                  className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                  value={extraItemId}
+                  onChange={(e) => {
+                    setExtraItemId(e.target.value);
+                    if (e.target.value !== "other") setExtraName("");
+                  }}
+                >
+                  <option value="">Select optional fee…</option>
+                  {optionalCatalog.map((c) => (
+                    <option key={c.fee_item_id} value={c.fee_item_id}>
+                      {c.category} — {c.name}
+                    </option>
+                  ))}
+                  <option value="other">Other (custom name)…</option>
+                </select>
+                {extraItemId === "other" && (
+                  <Input
+                    value={extraName}
+                    onChange={(e) => setExtraName(e.target.value)}
+                    placeholder="Describe custom charge"
+                  />
+                )}
               </div>
               <div>
                 <Label>Amount</Label>

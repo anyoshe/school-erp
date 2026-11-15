@@ -552,17 +552,21 @@ student, user=None, academic_year=None, period_name=None):
 
 def add_extra_fee_line(student, description, amount, user=None, fee_item_id=None):
     """
-    Add a one-off fee line (uniform, assessment book, etc.) onto the student's open invoice.
-    Creates invoice via ensure_student_billing if needed.
+    Add a one-off fee line onto the student's open invoice.
+
+    Prefer selecting a canonical optional fee item (meals, books, assessment books,
+    uniforms, transport, misc). Only free-text names that match no catalog entry
+    create a row under Other charges.
     """
     from .models import FeeItem, FeeCategory, Invoice, InvoiceLine
+    from apps.finance.fee_catalog import resolve_fee_item_for_extra, OTHER_CATEGORY
 
     amount = Decimal(str(amount))
     if amount <= 0:
         raise ValueError("Amount must be positive")
     description = (description or "").strip()
-    if not description:
-        raise ValueError("Description is required")
+    if not description and not fee_item_id:
+        raise ValueError("Select a fee item or enter a description")
 
     billing = ensure_student_billing(student, user=user)
     invoices = Invoice.objects.filter(student=student).order_by("due_date", "generated_at")
@@ -570,40 +574,31 @@ def add_extra_fee_line(student, description, amount, user=None, fee_item_id=None
     if not inv:
         raise ValueError("No invoice available — create a fee structure for this grade first")
 
-    item = None
-    if fee_item_id:
-        item = FeeItem.objects.filter(pk=fee_item_id).first()
-
-    # Unify meals/lunch extras onto the canonical Meals fee item (same flow as structure optionals)
-    from apps.finance.lunch import (
-        looks_like_meals_text,
-        is_meals_fee_item,
-        resolve_canonical_meals_item,
-        ensure_meals_fee_defaults,
+    item, matched = resolve_fee_item_for_extra(
+        student.school, fee_item_id=fee_item_id, description=description
     )
-    meals_intent = looks_like_meals_text(description) or (
-        item is not None and is_meals_fee_item(item)
-    )
-    if meals_intent:
-        ensure_meals_fee_defaults(student.school)
-        item = resolve_canonical_meals_item(student.school)
-    elif item is None:
-        # Non-meals one-off → misc category (not meals)
+    if item is None:
+        # True custom charge — single Other charges bucket, one item per distinct name
         cat, _ = FeeCategory.objects.get_or_create(
             school=student.school,
-            name="Additional charges",
-            defaults={"is_mandatory": True, "display_order": 99},
+            name=OTHER_CATEGORY,
+            defaults={"is_mandatory": False, "display_order": 99},
         )
+        label = (description or "Custom charge")[:100]
         item, _ = FeeItem.objects.get_or_create(
             category=cat,
-            name=description[:100],
-            # Not structure-optional — cashier extras must not be auto-stripped
-            defaults={"is_optional": False, "description": description, "is_active": True},
+            name=label,
+            defaults={
+                "is_optional": False,
+                "description": description or label,
+                "is_active": True,
+            },
         )
-        # Repair legacy rows created as optional extras
         if getattr(item, "is_optional", False):
             item.is_optional = False
             item.save(update_fields=["is_optional"])
+    if not description:
+        description = item.name
 
     line = InvoiceLine.objects.create(
         invoice=inv,

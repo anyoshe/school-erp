@@ -1754,6 +1754,22 @@ class AwaitingClearanceView(APIView):
         return Response({"count": len(rows), "results": rows})
 
 
+
+class ClearanceOptionalItemsView(APIView):
+    """Selectable canonical optional fee items for clearance / returning bills."""
+    permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
+
+    def get(self, request):
+        from apps.school.support import selected_school
+        from apps.finance.fee_catalog import ensure_optional_fee_catalog
+
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "School context required"}, status=400)
+        items = ensure_optional_fee_catalog(school)
+        return Response({"count": len(items), "results": items})
+
+
 class ClearanceAddItemView(APIView):
     """Add extra fee line (uniform, assessment book, etc.) for a clearance student."""
     permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
