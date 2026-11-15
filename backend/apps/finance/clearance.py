@@ -513,30 +513,72 @@ student, user=None, academic_year=None, period_name=None):
 
     meals_optional = None
     structure_line_amounts = {}
+    structure_optional_prices = []
     try:
         from apps.finance.lunch import (
             structure_line_amounts as _sla,
             structure_meals_amount,
             ensure_meals_fee_defaults,
+            is_meals_fee_item,
+            looks_like_meals_text,
         )
         if structure is not None:
             structure_line_amounts = _sla(structure)
-            amt = structure_meals_amount(structure)
             defaults = ensure_meals_fee_defaults(student.school)
             lunch_item = defaults["item"]
+            meal_amt = structure_meals_amount(structure)
+            # Prefer explicit price for the canonical lunch item if present
             if structure_line_amounts.get(str(lunch_item.id)):
-                amt = Decimal(str(structure_line_amounts[str(lunch_item.id)]))
-            if amt and float(amt) > 0:
+                meal_amt = Decimal(str(structure_line_amounts[str(lunch_item.id)]))
+            # Build per-line optional prices (id + name keys for reliable UI prefill)
+            optional_ids = set(structure.available_optional_items.values_list("id", flat=True))
+            for si in structure.structure_items.select_related("item", "item__category").all():
+                item = si.item
+                if item is None:
+                    continue
+                amt_f = float(si.amount or 0)
+                structure_line_amounts[str(item.id)] = amt_f
+                # name key helps when catalog id differs slightly
+                nm = (item.name or "").strip().lower()
+                if nm:
+                    structure_line_amounts[f"name:{nm}"] = amt_f
+                is_opt = (
+                    item.id in optional_ids
+                    or getattr(item, "is_optional", False)
+                    or structure.is_item_optional(item)
+                )
+                structure_optional_prices.append({
+                    "fee_item_id": str(item.id),
+                    "name": item.name,
+                    "amount": amt_f,
+                    "is_optional": bool(is_opt),
+                    "is_meals": bool(is_meals_fee_item(item) or looks_like_meals_text(item.name)),
+                })
+                if is_meals_fee_item(item) or looks_like_meals_text(item.name):
+                    if amt_f > float(meal_amt or 0):
+                        meal_amt = Decimal(str(amt_f))
+            if meal_amt and float(meal_amt) > 0:
                 meals_optional = {
-                    "amount": float(amt),
-                    "structure_amount": float(amt),
+                    "amount": float(meal_amt),
+                    "structure_amount": float(meal_amt),
                     "source": "structure",
                     "item_id": str(lunch_item.id),
+                    "item_ids": [
+                        p["fee_item_id"]
+                        for p in structure_optional_prices
+                        if p.get("is_meals")
+                    ],
                     "item_name": lunch_item.name,
                 }
+                # Ensure canonical lunch id also maps to meal amount for prefill
+                structure_line_amounts[str(lunch_item.id)] = float(meal_amt)
+                structure_line_amounts["name:lunch / meals"] = float(meal_amt)
+                structure_line_amounts["name:lunch"] = float(meal_amt)
+                structure_line_amounts["name:meals"] = float(meal_amt)
     except Exception:
         meals_optional = None
         structure_line_amounts = {}
+        structure_optional_prices = []
 
     return {
         "structure": {
@@ -548,6 +590,7 @@ student, user=None, academic_year=None, period_name=None):
         } if structure else None,
         "meals_optional": meals_optional,
         "structure_line_amounts": structure_line_amounts,
+        "structure_optional_prices": structure_optional_prices,
         "assignment_id": str(assignment.id) if assignment else None,
         "invoices": [
             {

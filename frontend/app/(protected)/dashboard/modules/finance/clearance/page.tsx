@@ -716,23 +716,39 @@ export default function FinanceClearancePage() {
                     const val = e.target.value;
                     setExtraItemId(val);
                     if (val !== "other") setExtraName("");
+                    if (val === "other" || !val) return;
                     const amounts = (row as any)?.structure_line_amounts || {};
+                    const prices = (row as any)?.structure_optional_prices || [];
                     const opt = (row as any)?.meals_optional;
                     const cat = optionalCatalog.find(
                       (c) => String(c.fee_item_id) === String(val)
                     );
-                    const name = `${cat?.name || ""} ${cat?.category || ""}`.toLowerCase();
+                    const catName = String(cat?.name || "").trim().toLowerCase();
+                    const name = `${catName} ${cat?.category || ""}`.toLowerCase();
                     const isMeals =
                       name.includes("lunch") ||
                       name.includes("meal") ||
                       name.includes("cater") ||
-                      (opt?.item_id && String(val) === String(opt.item_id));
-                    // Any structure-priced optional (meals, books, etc.)
-                    const fromStruct = amounts[String(val)];
-                    if (fromStruct != null && Number(fromStruct) > 0) {
-                      setExtraAmount(String(fromStruct));
-                    } else if (isMeals && opt?.amount) {
-                      setExtraAmount(String(opt.amount));
+                      (opt?.item_id && String(val) === String(opt.item_id)) ||
+                      (Array.isArray(opt?.item_ids) && opt.item_ids.map(String).includes(String(val)));
+                    // Prefill from structure (by id, by name, or meals package)
+                    let amt: number | null = null;
+                    const byId = amounts[String(val)];
+                    if (byId != null && Number(byId) > 0) amt = Number(byId);
+                    if (amt == null && catName && amounts[`name:${catName}`] != null) {
+                      amt = Number(amounts[`name:${catName}`]);
+                    }
+                    if (amt == null) {
+                      const hit = prices.find(
+                        (p: any) => String(p.fee_item_id) === String(val)
+                      );
+                      if (hit && Number(hit.amount) > 0) amt = Number(hit.amount);
+                    }
+                    if (amt == null && isMeals && opt?.amount != null && Number(opt.amount) > 0) {
+                      amt = Number(opt.amount);
+                    }
+                    if (amt != null && amt > 0) {
+                      setExtraAmount(String(amt));
                     }
                   }}
                 >
