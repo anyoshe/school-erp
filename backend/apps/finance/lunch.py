@@ -10,6 +10,15 @@ MEALS_CATEGORY_NAME = "Meals & catering"
 LUNCH_ITEM_NAME = "Lunch / meals"
 
 
+def looks_like_meals_text(text) -> bool:
+    """True if a free-text name/description is meals/lunch/catering related."""
+    s = (text or "").strip().lower()
+    if not s:
+        return False
+    keys = ("meal", "lunch", "catering", "feeding", "kitchen", "canteen")
+    return any(k in s for k in keys)
+
+
 def is_meals_fee_item(item) -> bool:
     if item is None:
         return False
@@ -221,6 +230,48 @@ def ensure_meals_fee_defaults(school):
         "consolidated": consolid,
         "removed_empty": removed_empty,
     }
+
+
+def resolve_canonical_meals_item(school):
+    """Single school Lunch / meals FeeItem under Meals & catering."""
+    result = ensure_meals_fee_defaults(school)
+    return result["item"]
+
+
+def rehome_stray_meals_invoice_lines(school) -> int:
+    """
+    Point invoice lines that look like meals but sit under Additional charges
+    (or other non-meals categories) at the canonical Lunch / meals item.
+    Does not change amounts — only item FK for reporting / kitty.
+    """
+    from apps.finance.models import InvoiceLine, FeeCategory
+
+    lunch = resolve_canonical_meals_item(school)
+    meals_cat_ids = set(
+        FeeCategory.objects.filter(school=school)
+        .filter(
+            Q(name__icontains="meal")
+            | Q(name__icontains="lunch")
+            | Q(name__icontains="cater")
+            | Q(name__icontains="feeding")
+        )
+        .values_list("id", flat=True)
+    )
+    qs = InvoiceLine.objects.filter(invoice__school=school).select_related("item", "item__category")
+    moved = 0
+    for line in qs:
+        item = line.item
+        desc = line.description or ""
+        name = getattr(item, "name", "") if item else ""
+        cat_id = getattr(getattr(item, "category", None), "id", None)
+        if item and cat_id in meals_cat_ids and item.id == lunch.id:
+            continue
+        if looks_like_meals_text(desc) or looks_like_meals_text(name):
+            if not item or item.id != lunch.id:
+                line.item = lunch
+                line.save(update_fields=["item"])
+                moved += 1
+    return moved
 
 
 def active_lunch_enrollment(student, school=None):

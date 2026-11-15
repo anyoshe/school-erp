@@ -88,6 +88,19 @@ class FeeItemCreateUpdateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         grade_level_ids = validated_data.pop('grade_level_ids', [])
+        school = _selected_school_for_serializer(self)
+        name = validated_data.get("name") or ""
+        from apps.finance.lunch import looks_like_meals_text, ensure_meals_fee_defaults
+        if looks_like_meals_text(name):
+            defaults = ensure_meals_fee_defaults(school)
+            existing = defaults["item"]
+            desc = validated_data.get("description")
+            if desc and not (existing.description or "").strip():
+                existing.description = desc
+                existing.save(update_fields=["description"])
+            if grade_level_ids:
+                existing.grade_levels.add(*grade_level_ids)
+            return existing
         fee_item = FeeItem.objects.create(**validated_data)
         if grade_level_ids:
             fee_item.grade_levels.set(grade_level_ids)

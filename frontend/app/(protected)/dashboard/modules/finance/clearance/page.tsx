@@ -670,6 +670,8 @@ export default function FinanceClearancePage() {
             </p>
             <p className="text-xs text-muted-foreground">
               e.g. Assessment book, uniform — for items not on the term structure.
+              Names containing lunch/meals/catering are posted to the same Meals fee
+              item as structure optionals (not Additional charges).
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="col-span-2 sm:col-span-1">

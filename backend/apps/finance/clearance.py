@@ -573,8 +573,22 @@ def add_extra_fee_line(student, description, amount, user=None, fee_item_id=None
     item = None
     if fee_item_id:
         item = FeeItem.objects.filter(pk=fee_item_id).first()
-    if item is None:
-        # Ensure a misc category + item for extras
+
+    # Unify meals/lunch extras onto the canonical Meals fee item (same flow as structure optionals)
+    from apps.finance.lunch import (
+        looks_like_meals_text,
+        is_meals_fee_item,
+        resolve_canonical_meals_item,
+        ensure_meals_fee_defaults,
+    )
+    meals_intent = looks_like_meals_text(description) or (
+        item is not None and is_meals_fee_item(item)
+    )
+    if meals_intent:
+        ensure_meals_fee_defaults(student.school)
+        item = resolve_canonical_meals_item(student.school)
+    elif item is None:
+        # Non-meals one-off → misc category (not meals)
         cat, _ = FeeCategory.objects.get_or_create(
             school=student.school,
             name="Additional charges",
