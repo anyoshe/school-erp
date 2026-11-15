@@ -161,3 +161,20 @@ class StudentTransportAssignmentsView(APIView):
             .order_by("-assigned_at")[:200]
         )
         return Response(StudentAssignmentSerializer(qs, many=True).data)
+
+
+class StudentTransportDeactivateView(APIView):
+    """End an active transport subscription without deleting history."""
+    permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
+
+    def post(self, request, assignment_id):
+        school = _school(request)
+        from .models import StudentAssignment
+        from .serializers import StudentAssignmentSerializer
+
+        asg = StudentAssignment.objects.filter(pk=assignment_id, school=school).first()
+        if not asg:
+            return Response({"detail": "Not found"}, status=404)
+        asg.is_active = False
+        asg.save(update_fields=["is_active", "updated_at"])
+        return Response(StudentAssignmentSerializer(asg).data)

@@ -85,7 +85,7 @@ def send_digest(
     dry_run: bool = False,
 ) -> dict:
     """
-    channel: LOG | WHATSAPP | EMAIL | BOTH
+    channel: LOG | WHATSAPP | EMAIL | SMS | BOTH
     Defaults to env RISK_DIGEST_CHANNEL or LOG.
     """
     from apps.risks.models import RiskDigestLog
@@ -98,12 +98,12 @@ def send_digest(
         except Exception:
             channel = None
     channel = (channel or os.getenv("RISK_DIGEST_CHANNEL") or "LOG").strip().upper()
-    if channel not in ("LOG", "WHATSAPP", "EMAIL", "BOTH"):
+    if channel not in ("LOG", "WHATSAPP", "EMAIL", "SMS", "BOTH"):
         channel = "LOG"
 
     built = build_digest_message(school, limit=limit)
     contacts = _admin_contacts(school)
-    results = {"whatsapp": None, "email": None}
+    results = {"whatsapp": None, "email": None, "sms": None}
     detail_parts = []
 
     if dry_run:
@@ -140,6 +140,18 @@ def send_digest(
     elif channel in ("WHATSAPP", "BOTH"):
         results["whatsapp"] = {"ok": False, "detail": "No school/owner phone"}
         detail_parts.append("wa:no_phone")
+
+    if channel in ("SMS", "BOTH") and contacts["phone"]:
+        try:
+            from apps.core.notify import send_sms
+            results["sms"] = send_sms(contacts["phone"], msg, school=school)
+            detail_parts.append(f"sms:{results['sms'].get('reason') or results['sms'].get('ok')}")
+        except Exception as exc:
+            results["sms"] = {"ok": False, "detail": str(exc)}
+            detail_parts.append(f"sms_err:{exc}")
+    elif channel in ("SMS", "BOTH"):
+        results["sms"] = {"ok": False, "detail": "No school/owner phone"}
+        detail_parts.append("sms:no_phone")
 
     if channel in ("EMAIL", "BOTH") and contacts["email"]:
         try:

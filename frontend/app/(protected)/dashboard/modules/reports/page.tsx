@@ -7,25 +7,7 @@ import api from "@/utils/api";
 import { RiskAttentionCard } from "../../components/RiskAttentionCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  BarChart3,
-  Wallet,
-  Users,
-  ClipboardList,
-  AlertTriangle,
-  ExternalLink,
-  RefreshCw,
-  Loader2,
-} from "lucide-react";
-
-type DashStats = {
-  total_collected?: number;
-  total_invoiced?: number;
-  outstanding?: number;
-  collection_rate?: number;
-  students_with_balance?: number;
-  [key: string]: unknown;
-};
+import { ExternalLink, Loader2, RefreshCw } from "lucide-react";
 
 function money(v?: number | string | null) {
   const n = Number(v ?? 0);
@@ -35,23 +17,27 @@ function money(v?: number | string | null) {
 
 export default function ReportsPage() {
   const { currentSchool } = useCurrentSchool();
-  const [stats, setStats] = useState<DashStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
+  const [finance, setFinance] = useState<any>(null);
+  const [attendance, setAttendance] = useState<any>(null);
+  const [payroll, setPayroll] = useState<any>(null);
 
   const load = useCallback(async () => {
     if (!currentSchool?.id) return;
     setLoading(true);
-    setErr(null);
+    const headers = { "X-School-ID": String(currentSchool.id) };
     try {
-      const res = await api.get("/finance/dashboard-summary/", {
-        headers: { "X-School-ID": String(currentSchool.id) },
-      });
-      const data = res.data || {};
-      setStats(data.stats || data || {});
-    } catch (e: any) {
-      setErr(e?.response?.data?.detail || "Could not load finance summary");
-      setStats(null);
+      const [f, a, p] = await Promise.all([
+        api.get("/finance/dashboard-summary/", { headers }).catch(() => ({ data: null })),
+        api.get("/attendance/summary/", { headers }).catch(() =>
+          api.get("/attendance/daily-summary/", { headers }).catch(() => ({ data: null }))
+        ),
+        api.get("/staff/payroll/", { headers, params: { limit: 20 } }).catch(() => ({ data: null })),
+      ]);
+      setFinance(f.data);
+      setAttendance(a.data);
+      const plist = Array.isArray(p.data) ? p.data : p.data?.results || [];
+      setPayroll(plist);
     } finally {
       setLoading(false);
     }
@@ -61,119 +47,176 @@ export default function ReportsPage() {
     void load();
   }, [load]);
 
-  const collected =
-    stats?.total_collected ?? stats?.collected ?? stats?.received ?? 0;
-  const invoiced = stats?.total_invoiced ?? stats?.total_billed ?? 0;
-  const outstanding = stats?.outstanding ?? stats?.outstanding_balance ?? 0;
-  const rate = stats?.collection_rate;
+  const stats = finance?.stats || finance || {};
+  const collected = stats.totalCollected ?? stats.collected ?? stats.total_collected;
+  const invoiced = stats.totalInvoiced ?? stats.total_invoiced ?? stats.totalBilled;
+  const outstanding = stats.totalOutstanding ?? stats.outstanding ?? stats.total_outstanding;
+  const rate = stats.collectionRate ?? stats.collection_rate;
+
+  const byGroup = finance?.revenueByFeeGroup || finance?.fee_groups || finance?.by_fee_group || [];
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto pb-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="space-y-6 p-4 md:p-6 max-w-5xl mx-auto">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-textPrimary tracking-tight flex items-center gap-2">
-            <BarChart3 className="h-7 w-7 text-primary" />
-            Reports & Analytics
-          </h1>
-          <p className="text-textMuted mt-1 text-sm">
-            Collections, balances and operational risks for{" "}
-            {currentSchool?.name || "your school"}.
+          <h1 className="text-2xl font-bold tracking-tight">Reports &amp; Analytics</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Owner snapshot — collections, risks, attendance and payroll. Export detail from each module.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-          Refresh
+        <Button variant="outline" size="sm" onClick={() => load()} disabled={loading}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          <span className="ml-1">Refresh</span>
         </Button>
       </div>
 
-      {/* Money pulse */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: "Collected", value: money(collected as number), icon: Wallet },
-          { label: "Total invoiced", value: money(invoiced as number), icon: ClipboardList },
-          { label: "Outstanding", value: money(outstanding as number), icon: AlertTriangle },
-          {
-            label: "Collection rate",
-            value:
-              rate != null
-                ? `${Number(rate).toFixed(1)}%`
-                : invoiced
-                  ? `${((Number(collected) / Number(invoiced)) * 100).toFixed(1)}%`
-                  : "—",
-            icon: Users,
-          },
-        ].map(({ label, value, icon: Icon }) => (
-          <Card key={label} className="border shadow-sm rounded-xl">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                <Icon className="h-3.5 w-3.5" /> {label}
-              </div>
-              <p className="text-xl font-semibold tabular-nums">
-                {loading ? "…" : value}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-      {err && <p className="text-sm text-destructive">{err}</p>}
-
-      {/* Risk digest */}
       <RiskAttentionCard />
 
-      {/* Quick reports */}
-      <Card className="border shadow-sm rounded-xl">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="rounded-xl">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Collected</p>
+            <p className="text-xl font-semibold tabular-nums">{loading ? "…" : money(collected)}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-xl">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Invoiced</p>
+            <p className="text-xl font-semibold tabular-nums">{loading ? "…" : money(invoiced)}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-xl">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Outstanding</p>
+            <p className="text-xl font-semibold tabular-nums">{loading ? "…" : money(outstanding)}</p>
+          </CardContent>
+        </Card>
+        <Card className="rounded-xl">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground">Collection rate</p>
+            <p className="text-xl font-semibold tabular-nums">
+              {loading
+                ? "…"
+                : rate != null
+                  ? `${Number(rate).toFixed(1)}%`
+                  : "—"}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {Array.isArray(byGroup) && byGroup.length > 0 ? (
+        <Card className="rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Money by fee group</CardTitle>
+          </CardHeader>
+          <CardContent className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {byGroup.map((g: any, i: number) => (
+              <div key={i} className="rounded-lg border px-3 py-2 text-sm">
+                <p className="font-medium">{g.name || g.label || g.group || "Group"}</p>
+                <p className="text-xs text-muted-foreground">
+                  Collected {money(g.collected ?? g.collected_amount)} · Pending{" "}
+                  {money(g.pending ?? g.pending_balance)}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card className="rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Attendance</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            {attendance ? (
+              <pre className="text-xs whitespace-pre-wrap bg-slate-50 rounded-lg p-3 overflow-auto max-h-40">
+                {JSON.stringify(attendance, null, 2).slice(0, 800)}
+              </pre>
+            ) : (
+              <p>
+                Open Attendance for class % reports.{" "}
+                <Link className="text-primary underline" href="/dashboard/modules/attendance">
+                  Go to attendance
+                </Link>
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card className="rounded-xl">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Recent payroll rows</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!payroll?.length ? (
+              <p className="text-sm text-muted-foreground">
+                No payroll rows.{" "}
+                <Link className="text-primary underline" href="/dashboard/modules/hr">
+                  HR → Payroll
+                </Link>
+              </p>
+            ) : (
+              <ul className="text-sm space-y-1">
+                {payroll.slice(0, 8).map((r: any) => (
+                  <li key={r.id} className="flex justify-between border-b border-slate-100 py-1">
+                    <span>
+                      {r.staff_name || r.staff?.full_name || "Staff"} ·{" "}
+                      {String(r.month || "").slice(0, 7)}
+                    </span>
+                    <span className="tabular-nums">{money(r.net_pay ?? r.basic_salary)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="rounded-xl">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Operational reports</CardTitle>
+          <CardTitle className="text-base">Deep links</CardTitle>
         </CardHeader>
-        <CardContent className="grid sm:grid-cols-2 gap-3">
-          <Link
-            href="/dashboard/modules/finance"
-            className="flex items-center justify-between rounded-lg border px-4 py-3 hover:bg-muted/40 transition"
-          >
-            <span>
-              <span className="font-medium block">Finance dashboard</span>
-              <span className="text-xs text-muted-foreground">
-                Collections by term, fee groups, P&amp;L
+        <CardContent className="grid gap-2">
+          {[
+            {
+              href: "/dashboard/modules/finance",
+              title: "Finance standing & payments",
+              sub: "Collections, clearance, expenses, reconcile",
+            },
+            {
+              href: "/dashboard/modules/finance/statements",
+              title: "Student fee statements",
+              sub: "Balances and payment history",
+            },
+            {
+              href: "/dashboard/modules/academics",
+              title: "Marks & report cards",
+              sub: "Markbooks, CSV, print forms",
+            },
+            {
+              href: "/dashboard/modules/attendance",
+              title: "Attendance",
+              sub: "Daily register and absence patterns",
+            },
+            {
+              href: "/dashboard/modules/library",
+              title: "Library",
+              sub: "Overdues, stock, digital resources",
+            },
+          ].map((l) => (
+            <Link
+              key={l.href}
+              href={l.href}
+              className="flex items-center justify-between rounded-lg border px-4 py-3 hover:bg-muted/40 transition"
+            >
+              <span>
+                <span className="font-medium block">{l.title}</span>
+                <span className="text-xs text-muted-foreground">{l.sub}</span>
               </span>
-            </span>
-            <ExternalLink className="h-4 w-4 text-muted-foreground" />
-          </Link>
-          <Link
-            href="/dashboard/modules/finance/clearance"
-            className="flex items-center justify-between rounded-lg border px-4 py-3 hover:bg-muted/40 transition"
-          >
-            <span>
-              <span className="font-medium block">Clearance queue</span>
-              <span className="text-xs text-muted-foreground">
-                Learners awaiting fee clearance
-              </span>
-            </span>
-            <ExternalLink className="h-4 w-4 text-muted-foreground" />
-          </Link>
-          <Link
-            href="/dashboard/modules/academics"
-            className="flex items-center justify-between rounded-lg border px-4 py-3 hover:bg-muted/40 transition"
-          >
-            <span>
-              <span className="font-medium block">Marks &amp; report cards</span>
-              <span className="text-xs text-muted-foreground">
-                Class markbooks, CSV import/export, print forms
-              </span>
-            </span>
-            <ExternalLink className="h-4 w-4 text-muted-foreground" />
-          </Link>
-          <Link
-            href="/dashboard/modules/attendance"
-            className="flex items-center justify-between rounded-lg border px-4 py-3 hover:bg-muted/40 transition"
-          >
-            <span>
-              <span className="font-medium block">Attendance reports</span>
-              <span className="text-xs text-muted-foreground">
-                Daily register and absence patterns
-              </span>
-            </span>
-            <ExternalLink className="h-4 w-4 text-muted-foreground" />
-          </Link>
+              <ExternalLink className="h-4 w-4 text-muted-foreground" />
+            </Link>
+          ))}
         </CardContent>
       </Card>
     </div>

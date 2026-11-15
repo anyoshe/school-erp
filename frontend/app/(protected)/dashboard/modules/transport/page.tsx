@@ -26,6 +26,8 @@ export default function TransportPage() {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [assignForm, setAssignForm] = useState({ admission_number: "", route_id: "", bill: true });
+  const [assigning, setAssigning] = useState(false);
   const [form, setForm] = useState({
     name: "",
     description: "",
@@ -84,6 +86,56 @@ export default function TransportPage() {
       toast.error(e?.response?.data?.detail || "Could not create route");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const assignStudent = async () => {
+    if (!assignForm.admission_number.trim() || !assignForm.route_id) {
+      toast.error("Admission number and route required");
+      return;
+    }
+    setAssigning(true);
+    try {
+      const st = await api.get("/students/", {
+        headers,
+        params: { search: assignForm.admission_number.trim() },
+      });
+      const list = Array.isArray(st.data) ? st.data : st.data?.results || [];
+      const student =
+        list.find(
+          (s: any) =>
+            String(s.admission_number || "").toLowerCase() ===
+            assignForm.admission_number.trim().toLowerCase()
+        ) || list[0];
+      if (!student?.id) {
+        toast.error("Student not found");
+        return;
+      }
+      await api.post(
+        `/transport/students/${student.id}/subscribe/`,
+        {
+          route_id: assignForm.route_id,
+          bill: assignForm.bill,
+        },
+        { headers }
+      );
+      toast.success("Transport assigned");
+      setAssignForm((f) => ({ ...f, admission_number: "" }));
+      load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Assign failed");
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const deactivate = async (id: string | number) => {
+    try {
+      await api.post(`/transport/assignments/${id}/deactivate/`, {}, { headers });
+      toast.success("Subscription ended");
+      load();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Could not deactivate");
     }
   };
 
@@ -165,6 +217,50 @@ export default function TransportPage() {
 
         <Card className="rounded-2xl border shadow-sm">
           <CardHeader className="pb-2">
+            <CardTitle className="text-base">Assign learner to route</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="space-y-1">
+              <Label>Admission #</Label>
+              <Input
+                value={assignForm.admission_number}
+                onChange={(e) => setAssignForm((f) => ({ ...f, admission_number: e.target.value }))}
+                placeholder="PSS-2026-0001"
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label>Route</Label>
+              <select
+                className="w-full h-10 rounded-md border px-2 text-sm"
+                value={assignForm.route_id}
+                onChange={(e) => setAssignForm((f) => ({ ...f, route_id: e.target.value }))}
+              >
+                <option value="">Select route…</option>
+                {routes.filter((r) => r.is_active).map((r) => (
+                  <option key={r.id} value={String(r.id)}>
+                    {r.name} · KSh {Number(r.term_amount || 0).toLocaleString()}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col justify-end gap-2">
+              <label className="flex items-center gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={assignForm.bill}
+                  onChange={(e) => setAssignForm((f) => ({ ...f, bill: e.target.checked }))}
+                />
+                Bill term fee now
+              </label>
+              <Button disabled={assigning} onClick={assignStudent}>
+                {assigning ? <Loader2 className="h-4 w-4 animate-spin" /> : "Assign"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border shadow-sm">
+          <CardHeader className="pb-2">
             <CardTitle className="text-base">Active subscriptions</CardTitle>
           </CardHeader>
           <CardContent>
@@ -182,6 +278,7 @@ export default function TransportPage() {
                       <th className="py-2 pr-2">Learner</th>
                       <th className="py-2 pr-2">Route</th>
                       <th className="py-2 pr-2 text-right">Term fee</th>
+                      <th className="py-2">Action</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -192,6 +289,11 @@ export default function TransportPage() {
                         <td className="py-2 pr-2">{a.route_name || "—"}</td>
                         <td className="py-2 pr-2 text-right tabular-nums">
                           KSh {Number(a.effective_amount ?? 0).toLocaleString()}
+                        </td>
+                        <td className="py-2">
+                          <Button size="sm" variant="outline" onClick={() => deactivate(a.id)}>
+                            End
+                          </Button>
                         </td>
                       </tr>
                     ))}

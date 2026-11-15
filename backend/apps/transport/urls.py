@@ -19,4 +19,9 @@ urlpatterns = [
         views.StudentTransportSubscribeView.as_view(),
         name="transport-subscribe",
     ),
+    path(
+        "assignments/<int:assignment_id>/deactivate/",
+        views.StudentTransportDeactivateView.as_view(),
+        name="transport-deactivate",
+    ),
 ]
