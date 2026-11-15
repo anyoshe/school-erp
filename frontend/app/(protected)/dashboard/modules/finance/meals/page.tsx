@@ -1,396 +1,76 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FinanceNavLinks } from "../components/FinanceNav";
-import api from "@/utils/api";
-import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Loader2, UtensilsCrossed, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { UtensilsCrossed } from "lucide-react";
 
-function money(v?: string | number | null) {
-  const n = Number(v ?? 0);
-  if (Number.isNaN(n)) return "—";
-  return `KSh ${n.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-}
+/**
+ * Meals is not a separate finance product.
+ * Billing: fee structure optional / Returning billing "Include lunch".
+ * Roster: Students → Lunch program.
+ */
+export default function MealsRedirectPage() {
+  const router = useRouter();
 
-export default function MealsLunchPage() {
-  const { currentSchool } = useCurrentSchool();
-  const qc = useQueryClient();
-  const [q, setQ] = useState("");
-  const [amountSource, setAmountSource] = useState<string>("");
-  const [form, setForm] = useState({
-    admission_number: "",
-    plan_type: "TERM",
-    amount: "",
-    absence_rule: "CHARGE_FULL",
-    academic_year: "",
-    notes: "",
-  });
-
-  const loadSuggest = async (admission: string) => {
-    const adm = admission.trim();
-    if (!adm) return;
-    try {
-      const { data } = await api.get("/finance/lunch/suggest/", {
-        params: { admission_number: adm },
-      });
-      const amt = data?.amount;
-      if (amt != null && Number(amt) > 0) {
-        setForm((f) => ({ ...f, amount: String(amt) }));
-        setAmountSource(
-          data?.source === "structure"
-            ? `From fee structure (${data?.structure_name || "meals option"})`
-            : data?.source === "enrollment_override"
-              ? "Custom / discounted amount"
-              : "Suggested package"
-        );
-      } else {
-        setAmountSource("No meals amount on structure — enter package or add Lunch on fee structure");
-      }
-    } catch {
-      setAmountSource("");
-    }
-  };
-
-  const listQ = useQuery({
-    queryKey: ["lunch-enrollments", currentSchool?.id, q],
-    queryFn: async () => {
-      const { data } = await api.get("/finance/lunch/enrollments/", {
-        params: q ? { q } : undefined,
-      });
-      return data as { count: number; results: any[] };
-    },
-    enabled: !!currentSchool?.id,
-  });
-
-  const kittyQ = useQuery({
-    queryKey: ["lunch-kitty", currentSchool?.id],
-    queryFn: async () => {
-      const { data } = await api.get("/finance/lunch/kitty/");
-      return data;
-    },
-    enabled: !!currentSchool?.id,
-  });
-
-  const ensureMut = useMutation({
-    mutationFn: async () => {
-      const { data } = await api.post("/finance/lunch/ensure-defaults/");
-      return data;
-    },
-    onSuccess: () => {
-      toast.success("Meals fee category & Lunch item ready");
-      qc.invalidateQueries({ queryKey: ["lunch-kitty"] });
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || "Failed"),
-  });
-
-  const createMut = useMutation({
-    mutationFn: async () => {
-      const { data } = await api.post("/finance/lunch/enrollments/", {
-        admission_number: form.admission_number.trim(),
-        plan_type: form.plan_type,
-        amount: form.amount || "0",
-        absence_rule: "CHARGE_FULL",
-        academic_year: form.academic_year,
-        notes: form.notes,
-        status: "ACTIVE",
-      });
-      return data;
-    },
-    onSuccess: () => {
-      toast.success("Learner added to lunch program");
-      setForm((f) => ({ ...f, admission_number: "", notes: "" }));
-      qc.invalidateQueries({ queryKey: ["lunch-enrollments"] });
-      qc.invalidateQueries({ queryKey: ["lunch-kitty"] });
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || "Could not enroll"),
-  });
-
-  const patchMut = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { data } = await api.patch(`/finance/lunch/enrollments/${id}/`, { status });
-      return data;
-    },
-    onSuccess: () => {
-      toast.success("Updated");
-      qc.invalidateQueries({ queryKey: ["lunch-enrollments"] });
-      qc.invalidateQueries({ queryKey: ["lunch-kitty"] });
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || "Update failed"),
-  });
-
-  const rows = listQ.data?.results || [];
-  const activeCount = useMemo(
-    () => rows.filter((r) => r.status === "ACTIVE").length,
-    [rows]
-  );
+  useEffect(() => {
+    const t = setTimeout(() => {
+      router.replace("/dashboard/modules/students/lunch");
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [router]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-4 md:p-6 max-w-2xl mx-auto">
       <FinanceNavLinks />
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-teal-800">Finance</p>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <UtensilsCrossed className="h-6 w-6 text-teal-700" />
-            Meals & lunch program
-          </h1>
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            Prefer putting <strong>Lunch / meals</strong> on the fee structure. For continuing
-            learners, tick “Include lunch / meals” under Returning billing. Track who is on lunch
-            under <strong>Students → Lunch program</strong>. Optional meals are not forced at new-student clearance.
+      <Card className="rounded-2xl border shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <UtensilsCrossed className="h-5 w-5 text-primary" />
+            Meals moved
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-slate-600">
+          <p>
+            The old Meals enrollment screen is retired. Lunch is part of school fees — not a
+            parallel program.
           </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={ensureMut.isPending}
-          onClick={() => ensureMut.mutate()}
-        >
-          {ensureMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
-          Ensure Meals fee item
-        </Button>
-      </div>
-
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
-        <Card>
-          <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Active subscriptions</p>
-            <p className="text-xl font-semibold">{kittyQ.data?.active_subscriptions ?? activeCount}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Meals invoiced</p>
-            <p className="text-xl font-semibold tabular-nums">{money(kittyQ.data?.meals_invoiced)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Collected (allocated)</p>
-            <p className="text-xl font-semibold tabular-nums">
-              {money(kittyQ.data?.meals_collected_allocated)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">Kitchen expenses</p>
-            <p className="text-xl font-semibold tabular-nums">{money(kittyQ.data?.kitchen_expenses)}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Est. surplus {money(kittyQ.data?.estimated_surplus)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid lg:grid-cols-5 gap-4">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Subscribe learner</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-1">
-              <Label>Admission number *</Label>
-              <Input
-                placeholder="PSS-2026-0001"
-                value={form.admission_number}
-                onBlur={() => loadSuggest(form.admission_number)}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setForm((f) => ({ ...f, admission_number: v }));
-                  if (v.trim().length >= 6) {
-                    void loadSuggest(v);
-                  }
-                }}
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label>Plan</Label>
-                <select
-                  className="w-full rounded-md border px-2 py-2 text-sm"
-                  value={form.plan_type}
-                  onChange={(e) => setForm({ ...form, plan_type: e.target.value })}
-                >
-                  <option value="TERM">Per term (full package)</option>
-                  <option value="MONTHLY">Monthly guide (×3 = term)</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label>
-                  {form.plan_type === "MONTHLY"
-                    ? "Monthly guide (KSh)"
-                    : "Full term package (KSh)"}
-                </Label>
-                <Input
-                  type="number"
-                  placeholder="0"
-                  value={form.amount}
-                  onChange={(e) => {
-                    setForm({ ...form, amount: e.target.value });
-                    setAmountSource("Adjusted for this learner (discount allowed)");
-                  }}
-                />
-                {amountSource ? (
-                  <p className="text-[11px] text-muted-foreground">{amountSource}</p>
-                ) : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-1 h-8"
-                  onClick={() => loadSuggest(form.admission_number)}
-                  disabled={!form.admission_number.trim()}
-                >
-                  Load amount from fee structure
-                </Button>
-              </div>
-            </div>
-            <p className="text-[11px] text-muted-foreground rounded-md border bg-muted/40 px-2 py-1.5">
-              No day-counting. Term package e.g. KSh 4,000 → monthly guide KSh 1,333.33 (÷ 3).
-              Parents may pay monthly; the billed amount is the full package.
-            </p>
-            <div className="space-y-1">
-              <Label>Academic year (optional)</Label>
-              <Input
-                placeholder="2026"
-                value={form.academic_year}
-                onChange={(e) => setForm({ ...form, academic_year: e.target.value })}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Notes</Label>
-              <Input
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              />
-            </div>
-            <Button
-              className="w-full"
-              disabled={createMut.isPending || !form.admission_number.trim()}
-              onClick={() => createMut.mutate()}
-            >
-              {createMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Activate lunch program
+          <ul className="list-disc pl-5 space-y-1">
+            <li>
+              <strong>Put Lunch on the fee structure</strong> (optional or mandatory item).
+            </li>
+            <li>
+              <strong>New learners:</strong> structure lines only (optional lunch is not forced at
+              clearance).
+            </li>
+            <li>
+              <strong>Continuing learners:</strong> Finance → Returning billing → “Include lunch /
+              meals on bill”.
+            </li>
+            <li>
+              <strong>Who is on lunch + balances:</strong> Students → Lunch program.
+            </li>
+            <li>
+              <strong>Collect money:</strong> Finance → Record payments (same as other fees).
+            </li>
+          </ul>
+          <div className="flex flex-wrap gap-2 pt-2">
+            <Button asChild>
+              <Link href="/dashboard/modules/students/lunch">Open lunch roster</Link>
             </Button>
-            <p className="text-[11px] text-muted-foreground">
-              Activating bills the full package to the learner&apos;s open invoice as Lunch / meals
-              (if not already billed). Clearance also auto-selects meals for new term billing.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-3">
-          <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
-            <CardTitle className="text-base">Subscriptions ({listQ.data?.count ?? 0})</CardTitle>
-            <Input
-              className="max-w-[180px] h-8"
-              placeholder="Search…"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-            />
-          </CardHeader>
-          <CardContent>
-            {listQ.isLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground py-8">
-                <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-              </div>
-            ) : !rows.length ? (
-              <p className="text-sm text-muted-foreground py-6">
-                No lunch subscriptions yet. Subscribe a learner by admission number.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left text-muted-foreground border-b">
-                      <th className="py-2 pr-2">Learner</th>
-                      <th className="py-2 pr-2">Plan</th>
-                      <th className="py-2 pr-2 text-right">Amount</th>
-                      <th className="py-2 pr-2">Status</th>
-                      <th className="py-2">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r) => (
-                      <tr key={r.id} className="border-b last:border-0">
-                        <td className="py-2 pr-2">
-                          <div className="font-medium">{r.student_name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {r.admission_number}
-                            {r.grade ? ` · ${r.grade}` : ""}
-                          </div>
-                        </td>
-                        <td className="py-2 pr-2">
-                          {r.plan_type}
-                          <div className="text-[11px] text-muted-foreground">Full package</div>
-                        </td>
-                        <td className="py-2 pr-2 text-right tabular-nums">{money(r.amount)}</td>
-                        <td className="py-2 pr-2">
-                          <span
-                            className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                              r.status === "ACTIVE"
-                                ? "bg-emerald-50 text-emerald-700"
-                                : r.status === "PAUSED"
-                                  ? "bg-amber-50 text-amber-700"
-                                  : "bg-slate-100 text-slate-600"
-                            }`}
-                          >
-                            {r.status}
-                          </span>
-                        </td>
-                        <td className="py-2">
-                          <div className="flex flex-wrap gap-1">
-                            {r.status !== "ACTIVE" && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-xs"
-                                disabled={patchMut.isPending}
-                                onClick={() => patchMut.mutate({ id: r.id, status: "ACTIVE" })}
-                              >
-                                Activate
-                              </Button>
-                            )}
-                            {r.status === "ACTIVE" && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-xs"
-                                disabled={patchMut.isPending}
-                                onClick={() => patchMut.mutate({ id: r.id, status: "PAUSED" })}
-                              >
-                                Pause
-                              </Button>
-                            )}
-                            {r.status !== "ENDED" && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 text-xs"
-                                disabled={patchMut.isPending}
-                                onClick={() => patchMut.mutate({ id: r.id, status: "ENDED" })}
-                              >
-                                End
-                              </Button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/modules/finance/returning">Returning billing</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/modules/finance/fee-structures">Fee structures</Link>
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">Redirecting to the lunch roster…</p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

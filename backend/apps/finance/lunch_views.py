@@ -66,76 +66,25 @@ class LunchEnrollmentListCreateView(APIView):
             )
         return Response({"count": len(rows), "results": rows})
 
-    def post(self, request):
-        school = selected_school(request)
-        if not school:
-            return Response({"detail": "No school selected"}, status=400)
-        ensure_meals_fee_defaults(school)
-        from apps.students.models import Student
-        from apps.finance.models import StudentFeeAssignment
+        def post(self, request):
+        """Retired: do not create parallel LunchEnrollment billing.
 
-        student_id = request.data.get("student_id") or request.data.get("student")
-        admission = (request.data.get("admission_number") or "").strip()
-        student = None
-        if student_id:
-            student = Student.objects.filter(pk=student_id, school=school).first()
-        elif admission:
-            student = Student.objects.filter(school=school, admission_number__iexact=admission).first()
-        if not student:
-            return Response({"detail": "Student not found"}, status=404)
-
-        plan_type = (request.data.get("plan_type") or LunchEnrollment.PlanType.TERM).upper()
-        if plan_type not in [c.value for c in LunchEnrollment.PlanType]:
-            plan_type = LunchEnrollment.PlanType.TERM
-        absence = LunchEnrollment.AbsenceRule.CHARGE_FULL  # full package; no day-counting
-        try:
-            amount = Decimal(str(request.data.get("amount") or "0"))
-        except Exception:
-            amount = Decimal("0")
-        st = (request.data.get("status") or LunchEnrollment.Status.ACTIVE).upper()
-        if st not in [c.value for c in LunchEnrollment.Status]:
-            st = LunchEnrollment.Status.ACTIVE
-
-        # One active enrollment per student: pause others when creating ACTIVE
-        if st == LunchEnrollment.Status.ACTIVE:
-            LunchEnrollment.objects.filter(
-                school=school, student=student, status=LunchEnrollment.Status.ACTIVE
-            ).update(status=LunchEnrollment.Status.ENDED)
-
-        enr = LunchEnrollment.objects.create(
-            school=school,
-            student=student,
-            status=st,
-            plan_type=plan_type,
-            amount=amount,
-            absence_rule=absence,
-            academic_year=(request.data.get("academic_year") or "")[:32],
-            notes=(request.data.get("notes") or "")[:255],
-            created_by=request.user if getattr(request.user, "is_authenticated", False) else None,
-        )
-        # Full package: select lunch on assignment + bill open invoice (no day counting)
-        billing = None
-        if st == LunchEnrollment.Status.ACTIVE:
-            assignment = StudentFeeAssignment.objects.filter(student=student).first()
-            if assignment:
-                apply_lunch_enrollment_to_assignment(assignment)
-            billing = ensure_lunch_invoice_line(student, user=request.user)
-
+        Meals are billed via fee structure optional/mandatory lines and
+        Finance → Returning billing (include_meals), then collected under payments.
+        """
         return Response(
             {
-                "id": str(enr.id),
-                "student_id": str(student.id),
-                "admission_number": student.admission_number,
-                "status": enr.status,
-                "plan_type": enr.plan_type,
-                "amount": str(enr.amount),
-                "commitment": str(term_commitment_amount(enr)),
-                "monthly_guide": str(monthly_guide_amount(enr)),
-                "billing": billing,
+                "detail": (
+                    "Direct meals enrollment is disabled. "
+                    "Add Lunch/meals on the fee structure, or use Returning billing "
+                    "→ Include lunch / meals on bill. "
+                    "View learners under Students → Lunch program."
+                ),
+                "roster": "/api/finance/lunch/roster/",
+                "returning_bill": "/api/finance/returning-students/bill/",
             },
-            status=status.HTTP_201_CREATED,
+            status=status.HTTP_410_GONE,
         )
-
 
 class LunchEnrollmentDetailView(APIView):
     permission_classes = [IsAuthenticated]

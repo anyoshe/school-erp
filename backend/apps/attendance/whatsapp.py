@@ -177,6 +177,29 @@ def notify_absence(student, *, school, date_str: str, grade_name: str = "") -> d
         grade_name=grade_name,
     )
     result = send_whatsapp(phone or "", msg)
+    # SMS fallback when WhatsApp is log-only or failed but phone exists
+    if phone and not result.get("ok"):
+        try:
+            from apps.core.notify import send_sms
+            sms = send_sms(phone, msg, school=school)
+            result["sms_fallback"] = sms
+            if sms.get("ok"):
+                result["ok"] = True
+                result["provider"] = "sms"
+                result["detail"] = sms.get("result") or "sent via SMS"
+        except Exception as exc:
+            result["sms_fallback"] = {"ok": False, "reason": str(exc)}
+    elif phone and result.get("provider") == "log":
+        try:
+            from apps.core.notify import send_sms
+            sms = send_sms(phone, msg, school=school)
+            result["sms_fallback"] = sms
+            if sms.get("ok"):
+                result["ok"] = True
+                result["provider"] = "sms"
+                result["detail"] = "sent via SMS (WhatsApp was log-only)"
+        except Exception as exc:
+            result["sms_fallback"] = {"ok": False, "reason": str(exc)}
     result["phone"] = phone
     result["student_id"] = str(student.id)
     result["message"] = msg

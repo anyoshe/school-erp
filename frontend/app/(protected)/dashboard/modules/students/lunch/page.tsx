@@ -58,9 +58,7 @@ export default function StudentsLunchProgramPage() {
             Lunch program
           </h1>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Learners with lunch/meals on their fee structure or invoice. Balances are collected under
-            Finance → Record payments (same as other school fees). Optional meals are added when
-            billing returning students or when meals is non-optional on the structure — not at new-student clearance.
+            Roster of learners with lunch/meals on their bill. Collect under Finance → Record payments. Add meals via fee structure (mandatory) or Returning billing → Include lunch. Not a separate Meals module.
           </p>
         </div>
         <div className="relative">

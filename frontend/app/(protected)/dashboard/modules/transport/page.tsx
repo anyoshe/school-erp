@@ -23,6 +23,7 @@ type RouteRow = {
 export default function TransportPage() {
   const { currentSchool } = useCurrentSchool();
   const [routes, setRoutes] = useState<RouteRow[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -39,9 +40,14 @@ export default function TransportPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get("/transport/routes/", { headers });
+      const [res, asg] = await Promise.all([
+        api.get("/transport/routes/", { headers }),
+        api.get("/transport/assignments/", { headers }).catch(() => ({ data: [] })),
+      ]);
       const data = res.data;
       setRoutes(Array.isArray(data) ? data : data?.results || []);
+      const ad = asg.data;
+      setAssignments(Array.isArray(ad) ? ad : ad?.results || []);
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || "Failed to load routes");
     } finally {
@@ -154,6 +160,45 @@ export default function TransportPage() {
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save route"}
               </Button>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Active subscriptions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!assignments.length ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                No active transport subscriptions. Assign via clearance (School transport + route) or
+                Returning billing → Include transport.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left border-b text-muted-foreground">
+                      <th className="py-2 pr-2">Adm #</th>
+                      <th className="py-2 pr-2">Learner</th>
+                      <th className="py-2 pr-2">Route</th>
+                      <th className="py-2 pr-2 text-right">Term fee</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {assignments.map((a) => (
+                      <tr key={a.id} className="border-b border-slate-100">
+                        <td className="py-2 pr-2 font-mono text-xs">{a.admission_number || "—"}</td>
+                        <td className="py-2 pr-2">{a.student_name || a.student}</td>
+                        <td className="py-2 pr-2">{a.route_name || "—"}</td>
+                        <td className="py-2 pr-2 text-right tabular-nums">
+                          KSh {Number(a.effective_amount ?? 0).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </CardContent>
         </Card>
 

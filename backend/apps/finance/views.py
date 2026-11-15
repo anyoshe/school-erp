@@ -1298,6 +1298,46 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+
+def assert_invoice_term_unlocked(invoice):
+    """Block new payments when academics term is locked for that year/period."""
+    if not invoice:
+        return
+    school = getattr(invoice, "school", None) or getattr(getattr(invoice, "student", None), "school", None)
+    term_name = (getattr(invoice, "term", None) or "").strip()
+    year_label = (getattr(invoice, "academic_year", None) or "").strip()
+    if not school or not term_name:
+        return
+    try:
+        from apps.academics.models import Term, AcademicYear
+        import re
+        qs = Term.objects.filter(academic_year__school=school, is_locked=True)
+        # Match "Term 2" style names
+        locked = qs.filter(name__icontains=term_name[:20])
+        if year_label:
+            m = re.search(r"(20\d{2})", year_label)
+            if m:
+                locked = locked.filter(
+                    Q(academic_year__name__icontains=m.group(1))
+                    | Q(academic_year__start_date__year=int(m.group(1)))
+                )
+        if locked.exists():
+            from rest_framework.exceptions import ValidationError as DRFValidationError
+            raise DRFValidationError(
+                {
+                    "detail": (
+                        f"This term ({term_name}) is locked in Academics. "
+                        "Unlock the term to record payments, or post under the open term."
+                    )
+                }
+            )
+    except Exception as ex:
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        if isinstance(ex, DRFValidationError):
+            raise
+        return
+
+
 class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.select_related('invoice__student', 'paid_by').all()
     pagination_class = None
@@ -1332,6 +1372,8 @@ class PaymentViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        inv = serializer.validated_data.get("invoice")
+        assert_invoice_term_unlocked(inv)
         payment = serializer.save()
         # Lite response — nested InvoiceSerializer was making record-payment feel slow
         inv = payment.invoice
