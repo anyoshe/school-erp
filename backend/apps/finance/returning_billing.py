@@ -184,6 +184,45 @@ class ReturningStudentsBillView(APIView):
                         # Still keep assignment even if regen partially fails
                         print(f"[returning-bill] invoice regen {student.id}: {e}")
 
+                    # Optional transport by route (distance-based term fee)
+                    include_transport = str(
+                        request.data.get("include_transport") or ""
+                    ).lower() in ("1", "true", "yes")
+                    route_id = (
+                        request.data.get("route_id")
+                        or request.data.get("transport_route_id")
+                    )
+                    transport_meta = None
+                    if include_transport and route_id:
+                        from apps.transport.models import Route
+                        from apps.transport.services import subscribe_student
+
+                        route = Route.objects.filter(
+                            pk=route_id, school=school, is_active=True
+                        ).first()
+                        if not route:
+                            raise ValueError("Transport route not found or inactive")
+                        amount_override = request.data.get("transport_amount")
+                        if amount_override is not None and amount_override != "":
+                            amount_override = Decimal(str(amount_override))
+                        else:
+                            amount_override = None
+                        asg, line = subscribe_student(
+                            student,
+                            route,
+                            user=user,
+                            academic_year=str(structure.academic_year or ""),
+                            term=str(structure.period_name or ""),
+                            amount_override=amount_override,
+                            bill=True,
+                        )
+                        transport_meta = {
+                            "route_id": str(route.id),
+                            "route_name": route.name,
+                            "amount": float(asg.effective_amount()),
+                            "line_id": str(line.id) if line else None,
+                        }
+
                     arrears_inv = None
                     outstanding = student_outstanding(student)
                     if carry and outstanding > 0:
@@ -201,6 +240,7 @@ class ReturningStudentsBillView(APIView):
                             "structure": structure.name,
                             "outstanding_before_carry": float(outstanding),
                             "arrears_invoice": getattr(arrears_inv, "invoice_number", None),
+                            "transport": transport_meta,
                         }
                     )
             except Exception as e:

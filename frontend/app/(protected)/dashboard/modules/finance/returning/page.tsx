@@ -53,6 +53,11 @@ export default function ReturningStudentsBillingPage() {
   const [onlyUnbilled, setOnlyUnbilled] = useState(true);
   const [carryBalances, setCarryBalances] = useState(true);
   const [includeMeals, setIncludeMeals] = useState(false);
+  const [includeTransport, setIncludeTransport] = useState(false);
+  const [transportRoutes, setTransportRoutes] = useState<
+    { id: string | number; name: string; distance_km?: number | null; term_amount: number }[]
+  >([]);
+  const [routeId, setRouteId] = useState("");
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [billing, setBilling] = useState(false);
@@ -107,6 +112,25 @@ export default function ReturningStudentsBillingPage() {
     void loadRows();
   }, [loadRows]);
 
+  useEffect(() => {
+    if (!includeTransport || !currentSchool?.id) return;
+    (async () => {
+      try {
+        const { data } = await api.get("/transport/routes/", {
+          params: { active: 1 },
+          headers: { "X-School-ID": String(currentSchool.id) },
+        });
+        const list = Array.isArray(data) ? data : data?.results || [];
+        setTransportRoutes(list);
+        if (list.length) {
+          setRouteId((prev) => prev || String(list[0].id));
+        }
+      } catch {
+        setTransportRoutes([]);
+      }
+    })();
+  }, [includeTransport, currentSchool?.id]);
+
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     if (!term) return rows;
@@ -138,6 +162,10 @@ export default function ReturningStudentsBillingPage() {
       toast.message("Choose the fee structure for the new grade / term");
       return;
     }
+    if (includeTransport && !routeId) {
+      toast.message("Select a transport route for learners who need transport");
+      return;
+    }
     setBilling(true);
     try {
       const { data } = await api.post(
@@ -146,6 +174,8 @@ export default function ReturningStudentsBillingPage() {
           student_ids: selectedIds,
           fee_structure_id: structureId,
           include_meals: includeMeals,
+          include_transport: includeTransport,
+          route_id: includeTransport ? routeId || undefined : undefined,
           carry_balances: carryBalances,
         },
         {
@@ -288,6 +318,38 @@ export default function ReturningStudentsBillingPage() {
               />
               Include lunch / meals on bill
             </label>
+            <label className="flex items-center gap-2 text-sm h-9" title="Adds School transport charged by selected route">
+              <input
+                type="checkbox"
+                checked={includeTransport}
+                onChange={(e) => setIncludeTransport(e.target.checked)}
+              />
+              Include transport on bill
+            </label>
+            {includeTransport ? (
+              <div className="sm:col-span-2 space-y-1">
+                <Label className="text-xs">Transport route</Label>
+                <select
+                  className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                  value={routeId}
+                  onChange={(e) => setRouteId(e.target.value)}
+                >
+                  <option value="">Select route…</option>
+                  {transportRoutes.map((r) => (
+                    <option key={r.id} value={String(r.id)}>
+                      {r.name}
+                      {r.distance_km != null ? ` · ${r.distance_km} km` : ""}
+                      {` · KSh ${Number(r.term_amount || 0).toLocaleString()}`}
+                    </option>
+                  ))}
+                </select>
+                {!transportRoutes.length ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    No active routes — create them under Transport, then refresh.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <Button
               type="button"
               variant="outline"
