@@ -87,7 +87,16 @@ class BookViewSet(viewsets.ModelViewSet):
         return BookSerializer
 
     def perform_create(self, serializer):
-        serializer.save(school=selected_school(self.request))
+        school = selected_school(self.request)
+        title = (serializer.validated_data.get("title") or "").strip()
+        isbn = (serializer.validated_data.get("isbn") or "").strip()
+        if isbn and Book.objects.filter(school=school, isbn__iexact=isbn, is_active=True).exists():
+            raise ValidationError(f"A book with ISBN {isbn} already exists in this school's catalogue.")
+        if not isbn and title and Book.objects.filter(school=school, title__iexact=title, is_active=True).exists():
+            raise ValidationError(
+                f'A book titled "{title}" already exists. Search the catalogue or change the title.'
+            )
+        serializer.save(school=school)
 
     def retrieve(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -486,8 +495,17 @@ class StocktakeViewSet(viewsets.ModelViewSet):
 
 class DigitalResourceViewSet(viewsets.ModelViewSet):
     serializer_class = DigitalResourceSerializer
-    permission_classes = [IsAuthenticated, CanApproveDigital]
+    permission_classes = [IsAuthenticated]
 
+    def get_permissions(self):
+        from .permissions import CanUploadDigital, CanApproveDigital
+        if self.action in ("list", "retrieve"):
+            return [IsAuthenticated(), CanApproveDigital()]
+        if self.action in ("create",):
+            return [IsAuthenticated(), CanUploadDigital()]
+        if self.action in ("approve", "reject", "update", "partial_update", "destroy"):
+            return [IsAuthenticated(), CanApproveDigital()]
+        return [IsAuthenticated()]
 
     def get_object(self):
         obj = super().get_object()
@@ -504,35 +522,104 @@ class DigitalResourceViewSet(viewsets.ModelViewSet):
             qs = qs.filter(approval_status=st)
         q = self.request.query_params.get("q")
         if q:
-            qs = qs.filter(Q(title__icontains=q) | Q(subject__icontains=q))
+            qs = qs.filter(
+                Q(title__icontains=q) | Q(subject__icontains=q) | Q(author__icontains=q)
+            )
         grade = self.request.query_params.get("grade")
         if grade:
             qs = qs.filter(grade_levels__icontains=grade)
         subject = self.request.query_params.get("subject")
         if subject:
             qs = qs.filter(subject__icontains=subject)
-        return qs
+        return qs.order_by("-created_at")
 
     def perform_create(self, serializer):
+        from pathlib import Path as _Path
         school = selected_school(self.request)
         f = self.request.FILES.get("file")
+        title = (serializer.validated_data.get("title") or self.request.data.get("title") or "").strip()
+        subject = (serializer.validated_data.get("subject") or self.request.data.get("subject") or "").strip()
+        external_url = (
+            serializer.validated_data.get("external_url")
+            or self.request.data.get("external_url")
+            or ""
+        ).strip()
+
+        # Avoid double-adding same title + file/URL while still pending/approved
+        dup_qs = DigitalResource.objects.filter(
+            school=school,
+            title__iexact=title,
+            approval_status__in=[
+                DigitalResource.ApprovalStatus.PENDING,
+                DigitalResource.ApprovalStatus.APPROVED,
+            ],
+        )
+        if subject:
+            dup_qs = dup_qs.filter(subject__iexact=subject)
+        if f:
+            fname = (getattr(f, "name", "") or "").lower()
+            for existing in dup_qs[:20]:
+                if existing.file and (_Path(existing.file.name).name or "").lower() == fname:
+                    raise ValidationError(
+                        f"A digital resource with the same title and file already exists "
+                        f"(status={existing.approval_status}). Edit or reject the existing one first."
+                    )
+        elif external_url:
+            if dup_qs.filter(external_url=external_url).exists():
+                raise ValidationError(
+                    "A digital resource with the same title and external URL already exists."
+                )
+        elif dup_qs.exists():
+            raise ValidationError(
+                "A digital resource with the same title already exists for this school. "
+                "Change the title or edit the existing entry."
+            )
+
+        auto_approve = is_librarian(self.request.user) or is_admin(self.request.user)
         extra = {
-            "approval_status": DigitalResource.ApprovalStatus.PENDING,
+            "approval_status": (
+                DigitalResource.ApprovalStatus.APPROVED
+                if auto_approve
+                else DigitalResource.ApprovalStatus.PENDING
+            ),
         }
+        if auto_approve:
+            extra["approved_by"] = self.request.user
         if f:
             name = (getattr(f, "name", "") or "").lower()
-            allowed_ext = (".pdf", ".epub", ".png", ".jpg", ".jpeg", ".webp", ".mp3", ".mp4", ".m4a", ".wav")
+            allowed_ext = (
+                ".pdf", ".epub", ".png", ".jpg", ".jpeg", ".webp",
+                ".mp3", ".mp4", ".m4a", ".wav", ".doc", ".docx",
+            )
             if not any(name.endswith(ext) for ext in allowed_ext):
-                raise ValidationError("Unsupported file type. Allowed: PDF, EPUB, images, common audio/video.")
+                raise ValidationError(
+                    "Unsupported file type. Allowed: PDF, EPUB, images, common audio/video, Word."
+                )
             max_bytes = 50 * 1024 * 1024
             if getattr(f, "size", 0) > max_bytes:
                 raise ValidationError("File must be 50 MB or smaller.")
             extra["file_size"] = f.size
             extra["mime_type"] = getattr(f, "content_type", "") or ""
-        elif not (self.request.data.get("external_url") or serializer.validated_data.get("external_url")):
-            # Allow metadata-only external later; for file-less require external URL
-            pass
+        elif not external_url:
+            raise ValidationError("Attach a file or provide an external URL.")
+
         serializer.save(school=school, uploaded_by=self.request.user, **extra)
+
+    def destroy(self, request, *args, **kwargs):
+        """Staff may delete REJECTED/PENDING; librarians any."""
+        obj = self.get_object()
+        is_lib = is_librarian(request.user) or is_admin(request.user)
+        if not is_lib:
+            if obj.uploaded_by_id != request.user.id:
+                raise PermissionDenied("You can only delete resources you uploaded.")
+            if obj.approval_status not in (
+                DigitalResource.ApprovalStatus.PENDING,
+                DigitalResource.ApprovalStatus.REJECTED,
+            ):
+                raise PermissionDenied(
+                    "Only pending or rejected resources can be deleted by the uploader."
+                )
+        return super().destroy(request, *args, **kwargs)
 
     @action(detail=True, methods=["post"])
     def approve(self, request, pk=None):
@@ -910,3 +997,30 @@ def library_delegates(request):
         LibraryDelegate.objects.filter(school=school, pk=did).delete()
         return Response(status=204)
     return Response(status=405)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def stock_audit_summary(request):
+    """Quick stock picture for the Stock audit tab (staff only)."""
+    role = (getattr(request.user, "role", None) or "").upper()
+    if role in ("STUDENT", "PARENT"):
+        raise PermissionDenied("Staff only.")
+    school = _school(request)
+    copies = BookCopy.objects.filter(school=school)
+    by_status = {s: copies.filter(status=s).count() for s, _ in BookCopy.Status.choices}
+    open_takes = Stocktake.objects.filter(school=school, status=Stocktake.Status.OPEN).count()
+    return Response({
+        "titles": Book.objects.filter(school=school, is_active=True).count(),
+        "copies_total": copies.count(),
+        "by_status": by_status,
+        "open_stocktakes": open_takes,
+        "available": by_status.get(BookCopy.Status.AVAILABLE, 0),
+        "issued": by_status.get(BookCopy.Status.ISSUED, 0),
+        "lost_or_damaged": (
+            by_status.get(BookCopy.Status.LOST, 0)
+            + by_status.get(BookCopy.Status.DAMAGED, 0)
+            + by_status.get(BookCopy.Status.WRITTEN_OFF, 0)
+        ),
+    })
+

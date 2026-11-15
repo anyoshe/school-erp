@@ -23,6 +23,7 @@ urlpatterns = [
     path("settings/", views.library_settings, name="library-settings"),
     path("assignment-monitor/", views.assignment_monitor, name="library-assignment-monitor"),
     path("my-learning/", views.my_learning, name="library-my-learning"),
+    path("stock-audit-summary/", views.stock_audit_summary, name="library-stock-audit-summary"),
     path("delegates/", views.library_delegates, name="library-delegates"),
     path("", include(router.urls)),
 ]

@@ -112,13 +112,21 @@ class ReturnSerializer(serializers.Serializer):
 
 class RegisterCopiesSerializer(serializers.Serializer):
     book_id = serializers.UUIDField()
-    count = serializers.IntegerField(min_value=1, max_value=500)
+    count = serializers.IntegerField(min_value=1, max_value=500, required=False)
+    quantity = serializers.IntegerField(min_value=1, max_value=500, required=False)
     accession_prefix = serializers.CharField(required=False, allow_blank=True)
     start_number = serializers.IntegerField(required=False)
     storage_location = serializers.CharField(required=False, allow_blank=True)
     acquisition_source = serializers.CharField(required=False, allow_blank=True)
     acquisition_date = serializers.DateField(required=False)
     purchase_price = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+
+    def validate(self, attrs):
+        n = attrs.get("count") or attrs.get("quantity")
+        if not n:
+            raise serializers.ValidationError("Provide count or quantity (1–500).")
+        attrs["count"] = n
+        return attrs
 
 
 class AcquisitionSerializer(serializers.ModelSerializer):
