@@ -22,6 +22,7 @@ export default function MealsLunchPage() {
   const { currentSchool } = useCurrentSchool();
   const qc = useQueryClient();
   const [q, setQ] = useState("");
+  const [amountSource, setAmountSource] = useState<string>("");
   const [form, setForm] = useState({
     admission_number: "",
     plan_type: "TERM",
@@ -30,6 +31,31 @@ export default function MealsLunchPage() {
     academic_year: "",
     notes: "",
   });
+
+  const loadSuggest = async (admission: string) => {
+    const adm = admission.trim();
+    if (!adm) return;
+    try {
+      const { data } = await api.get("/finance/lunch/suggest/", {
+        params: { admission_number: adm },
+      });
+      const amt = data?.amount;
+      if (amt != null && Number(amt) > 0) {
+        setForm((f) => ({ ...f, amount: String(amt) }));
+        setAmountSource(
+          data?.source === "structure"
+            ? `From fee structure (${data?.structure_name || "meals option"})`
+            : data?.source === "enrollment_override"
+              ? "Custom / discounted amount"
+              : "Suggested package"
+        );
+      } else {
+        setAmountSource("No meals amount on structure — enter package or add Lunch on fee structure");
+      }
+    } catch {
+      setAmountSource("");
+    }
+  };
 
   const listQ = useQuery({
     queryKey: ["lunch-enrollments", currentSchool?.id, q],
@@ -175,6 +201,7 @@ export default function MealsLunchPage() {
                 placeholder="PSS-2026-0001"
                 value={form.admission_number}
                 onChange={(e) => setForm({ ...form, admission_number: e.target.value })}
+                onBlur={() => loadSuggest(form.admission_number)}
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -199,8 +226,14 @@ export default function MealsLunchPage() {
                   type="number"
                   placeholder="0"
                   value={form.amount}
-                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                  onChange={(e) => {
+                    setForm({ ...form, amount: e.target.value });
+                    setAmountSource("Adjusted for this learner (discount allowed)");
+                  }}
                 />
+                {amountSource ? (
+                  <p className="text-[11px] text-muted-foreground">{amountSource}</p>
+                ) : null}
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground rounded-md border bg-muted/40 px-2 py-1.5">

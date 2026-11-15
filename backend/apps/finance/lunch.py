@@ -298,6 +298,89 @@ def meals_items_for_structure(structure):
     return items
 
 
+def structure_meals_amount(structure) -> Decimal:
+    """
+    Amount for Lunch/meals from the fee structure (first positive meals line).
+    This is the default full package when the structure has the meal option.
+    """
+    if structure is None:
+        return Decimal("0")
+    best = Decimal("0")
+    for si in structure.structure_items.select_related("item", "item__category").all():
+        if not is_meals_fee_item(si.item):
+            continue
+        amt = Decimal(str(si.amount or 0))
+        if amt > best:
+            best = amt
+    return best
+
+
+def suggested_meals_amount_for_student(student) -> dict:
+    """
+    Prefer fee-structure meals amount; enrollment amount is only an override
+    when set lower (discount) or when structure has no meals line.
+    """
+    from apps.finance.models import StudentFeeAssignment
+
+    school = getattr(student, "school", None)
+    out = {
+        "amount": Decimal("0"),
+        "source": "none",
+        "structure_amount": Decimal("0"),
+        "enrollment_amount": Decimal("0"),
+        "item_id": None,
+        "item_name": LUNCH_ITEM_NAME,
+        "structure_id": None,
+        "structure_name": None,
+    }
+    if school is None:
+        return out
+    defaults = ensure_meals_fee_defaults(school)
+    out["item_id"] = str(defaults["item"].id)
+    out["item_name"] = defaults["item"].name
+
+    structure = None
+    assignment = StudentFeeAssignment.objects.filter(student=student).select_related(
+        "fee_structure"
+    ).first()
+    if assignment and assignment.fee_structure_id:
+        structure = assignment.fee_structure
+    if structure is None:
+        structure = getattr(student, "fee_structure", None)
+    if structure is None:
+        try:
+            from apps.finance.clearance import find_fee_structure
+            structure = find_fee_structure(student)
+        except Exception:
+            structure = None
+
+    struct_amt = structure_meals_amount(structure) if structure else Decimal("0")
+    out["structure_amount"] = struct_amt
+    if structure:
+        out["structure_id"] = str(structure.id)
+        out["structure_name"] = structure.name
+
+    enr = active_lunch_enrollment(student, school)
+    enr_amt = Decimal(str(enr.amount or 0)) if enr else Decimal("0")
+    plan = (getattr(enr, "plan_type", None) or "TERM").upper() if enr else "TERM"
+    if enr and plan == "MONTHLY" and enr_amt > 0:
+        enr_amt = (enr_amt * Decimal("3")).quantize(Decimal("0.01"))
+    out["enrollment_amount"] = enr_amt
+
+    # Default = structure. Override only if enrollment has a positive amount
+    # (discounted or custom package for this learner).
+    if struct_amt > 0 and (enr_amt <= 0 or enr_amt >= struct_amt):
+        out["amount"] = struct_amt
+        out["source"] = "structure"
+    elif enr_amt > 0:
+        out["amount"] = enr_amt
+        out["source"] = "enrollment_override" if struct_amt > 0 else "enrollment"
+    elif struct_amt > 0:
+        out["amount"] = struct_amt
+        out["source"] = "structure"
+    return out
+
+
 def term_commitment_amount(enr) -> Decimal:
     """
     Full package the parent owes once subscribed.
@@ -354,12 +437,12 @@ def apply_lunch_enrollment_to_assignment(assignment) -> list:
         structure.available_optional_items.add(lunch_item)
         meals_items = [lunch_item]
 
-    commitment = term_commitment_amount(enr)
-    # Ensure structure has a price line for lunch (full package)
+    # Prefer structure meals price; only fill structure line if missing/zero
+    struct_amt = structure_meals_amount(structure)
+    commitment = struct_amt if struct_amt > 0 else term_commitment_amount(enr)
     if commitment > 0:
         si = FeeStructureItem.objects.filter(structure=structure, item=lunch_item).first()
         if si is None:
-            # Prefer any existing meals structure line amount
             for other in FeeStructureItem.objects.filter(
                 structure=structure, item__in=meals_items
             ):
@@ -388,8 +471,8 @@ def apply_lunch_enrollment_to_assignment(assignment) -> list:
 
 def ensure_lunch_invoice_line(student, user=None) -> dict:
     """
-    After subscribe: put the full lunch package on the learner's open invoice
-    if not already billed. Same idea as school fees — full amount, not per-day.
+    After subscribe: bill Lunch / meals at structure amount (or discounted override).
+    Full package — no day-counting.
     """
     from apps.finance.models import InvoiceLine, StudentFeeAssignment
     from apps.finance.clearance import add_extra_fee_line
@@ -403,7 +486,8 @@ def ensure_lunch_invoice_line(student, user=None) -> dict:
 
     defaults = ensure_meals_fee_defaults(school)
     lunch_item = defaults["item"]
-    commitment = term_commitment_amount(enr)
+    suggested = suggested_meals_amount_for_student(student)
+    commitment = Decimal(str(suggested.get("amount") or 0))
 
     assignment = StudentFeeAssignment.objects.filter(student=student).first()
     if assignment:
@@ -420,23 +504,17 @@ def ensure_lunch_invoice_line(student, user=None) -> dict:
             "line_id": str(existing.id),
             "amount": float(existing.amount or 0),
             "commitment": float(commitment),
-            "monthly_guide": float(monthly_guide_amount(enr)),
+            "monthly_guide": float((commitment / Decimal("3")).quantize(Decimal("0.01")) if commitment else 0),
+            "source": suggested.get("source"),
+            "structure_amount": float(suggested.get("structure_amount") or 0),
         }
 
     if commitment <= 0:
-        # Try structure amount
-        if assignment and assignment.fee_structure_id:
-            from apps.finance.models import FeeStructureItem
-            si = FeeStructureItem.objects.filter(
-                structure_id=assignment.fee_structure_id, item=lunch_item
-            ).first()
-            if si:
-                commitment = Decimal(str(si.amount or 0))
-    if commitment <= 0:
         return {
             "ok": False,
-            "detail": "Set the lunch amount on the subscription (full term total).",
+            "detail": "Add Lunch/meals on the fee structure with an amount, or enter a package amount.",
             "monthly_guide": 0,
+            "source": suggested.get("source"),
         }
 
     try:

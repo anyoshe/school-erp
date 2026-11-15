@@ -713,8 +713,20 @@ export default function FinanceClearancePage() {
                   className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
                   value={extraItemId}
                   onChange={(e) => {
-                    setExtraItemId(e.target.value);
-                    if (e.target.value !== "other") setExtraName("");
+                    const val = e.target.value;
+                    setExtraItemId(val);
+                    if (val !== "other") setExtraName("");
+                    // Prefill structure meals amount when Lunch/meals selected
+                    const opt = (row as any)?.meals_optional;
+                    const cat = optionalCatalog.find((c) => String(c.fee_item_id) === val);
+                    const name = `${cat?.name || ""} ${cat?.category || ""}`.toLowerCase();
+                    const isMeals =
+                      name.includes("lunch") ||
+                      name.includes("meal") ||
+                      (opt?.item_id && val === String(opt.item_id));
+                    if (isMeals && opt?.amount) {
+                      setExtraAmount(String(opt.amount));
+                    }
                   }}
                 >
                   <option value="">Select optional fee…</option>
@@ -740,6 +752,12 @@ export default function FinanceClearancePage() {
                   value={extraAmount}
                   onChange={(e) => setExtraAmount(e.target.value)}
                 />
+                {(row as any)?.meals_optional?.amount ? (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Structure meals: KSh {Number((row as any).meals_optional.amount).toLocaleString()}
+                    {" "}(edit to discount for this learner)
+                  </p>
+                ) : null}
               </div>
             </div>
             <Button

@@ -319,11 +319,17 @@ student, user=None, academic_year=None, period_name=None):
         assignment.fee_structure = structure
         assignment.save(update_fields=["fee_structure"])
 
-    # Active lunch program → select Meals optional lines on this assignment
+    # Active lunch program → select Meals optional + bill structure amount if needed
     if assignment is not None:
         try:
-            from apps.finance.lunch import apply_lunch_enrollment_to_assignment
+            from apps.finance.lunch import (
+                apply_lunch_enrollment_to_assignment,
+                ensure_lunch_invoice_line,
+                active_lunch_enrollment,
+            )
             apply_lunch_enrollment_to_assignment(assignment)
+            if active_lunch_enrollment(student):
+                ensure_lunch_invoice_line(student, user=None)
         except Exception:
             pass
 
@@ -516,6 +522,24 @@ student, user=None, academic_year=None, period_name=None):
                 base = getattr(ln, "original_amount", None) or 0
                 waived_total += Decimal(str(base or 0))
 
+    meals_optional = None
+    try:
+        from apps.finance.lunch import suggested_meals_amount_for_student
+        sug = suggested_meals_amount_for_student(student)
+        if sug and Decimal(str(sug.get("amount") or 0)) > 0:
+            meals_optional = {
+                "amount": float(sug["amount"]),
+                "structure_amount": float(sug.get("structure_amount") or 0),
+                "source": sug.get("source"),
+                "item_id": sug.get("item_id"),
+                "item_name": sug.get("item_name"),
+                "monthly_guide": float(
+                    (Decimal(str(sug["amount"])) / Decimal("3")).quantize(Decimal("0.01"))
+                ),
+            }
+    except Exception:
+        meals_optional = None
+
     return {
         "structure": {
             "id": str(structure.id),
@@ -524,6 +548,7 @@ student, user=None, academic_year=None, period_name=None):
             "period_name": structure.period_name,
             "total_amount": float(structure.total_amount or 0),
         } if structure else None,
+        "meals_optional": meals_optional,
         "assignment_id": str(assignment.id) if assignment else None,
         "invoices": [
             {

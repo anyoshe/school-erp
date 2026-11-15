@@ -12,6 +12,7 @@ from apps.finance.lunch import (
     ensure_meals_fee_defaults,
     apply_lunch_enrollment_to_assignment,
     ensure_lunch_invoice_line,
+    suggested_meals_amount_for_student,
     term_commitment_amount,
     monthly_guide_amount,
     meals_kitty_summary,
@@ -192,6 +193,47 @@ class LunchEnrollmentDetailView(APIView):
             "billing": billing,
         })
 
+
+
+
+class LunchSuggestAmountView(APIView):
+    """Default lunch amount from fee structure (adjustable discount on client)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+        from apps.students.models import Student
+
+        student_id = request.query_params.get("student_id") or request.query_params.get("student")
+        admission = (request.query_params.get("admission_number") or "").strip()
+        student = None
+        if student_id:
+            student = Student.objects.filter(pk=student_id, school=school).first()
+        elif admission:
+            student = Student.objects.filter(
+                school=school, admission_number__iexact=admission
+            ).first()
+        if not student:
+            return Response({"detail": "Student not found"}, status=404)
+        ensure_meals_fee_defaults(school)
+        sug = suggested_meals_amount_for_student(student)
+        amt = Decimal(str(sug.get("amount") or 0))
+        return Response(
+            {
+                "student_id": str(student.id),
+                "admission_number": student.admission_number,
+                "amount": float(amt),
+                "structure_amount": float(sug.get("structure_amount") or 0),
+                "enrollment_amount": float(sug.get("enrollment_amount") or 0),
+                "source": sug.get("source"),
+                "item_id": sug.get("item_id"),
+                "item_name": sug.get("item_name"),
+                "structure_name": sug.get("structure_name"),
+                "monthly_guide": float((amt / Decimal("3")).quantize(Decimal("0.01")) if amt else 0),
+            }
+        )
 
 class LunchKittyView(APIView):
     permission_classes = [IsAuthenticated]
