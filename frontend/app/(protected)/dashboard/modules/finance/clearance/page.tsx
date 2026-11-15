@@ -50,6 +50,7 @@ export default function FinanceClearancePage() {
   const [saving, setSaving] = useState(false);
   const [extraName, setExtraName] = useState("");
   const [extraItemId, setExtraItemId] = useState<string>("");
+  const [extraRouteId, setExtraRouteId] = useState<string>("");
   const [optionalCatalog, setOptionalCatalog] = useState<
     { code: string; fee_item_id: string; name: string; category: string }[]
   >([]);
@@ -406,6 +407,13 @@ export default function FinanceClearancePage() {
 
     if (!row?.id) return;
     const isOther = extraItemId === "other";
+    const cat0 = optionalCatalog.find((c) => String(c.fee_item_id) === String(extraItemId));
+    const isTransport0 = `${cat0?.name || ""} ${cat0?.category || ""}`.toLowerCase().includes("transport")
+      || `${cat0?.name || ""}`.toLowerCase().includes("bus");
+    if (isTransport0 && !extraRouteId) {
+      toast.error("Select a transport route");
+      return;
+    }
     if ((!extraItemId || (isOther && !extraName.trim())) || !extraAmount || Number(extraAmount) <= 0) {
       toast.error(isOther || !extraItemId ? "Select a fee item (or Other + name) and amount" : "Enter amount");
       return;
@@ -422,6 +430,7 @@ export default function FinanceClearancePage() {
           description,
           amount: extraAmount,
           fee_item_id: isOther ? undefined : extraItemId || undefined,
+          route_id: extraRouteId || undefined,
         },
         { headers }
       );
@@ -747,6 +756,24 @@ export default function FinanceClearancePage() {
                     if (amt == null && isMeals && opt?.amount != null && Number(opt.amount) > 0) {
                       amt = Number(opt.amount);
                     }
+                    const isTransport =
+                      name.includes("transport") ||
+                      name.includes("bus") ||
+                      (catName.includes("transport"));
+                    const tOpt = (row as any)?.transport_optional;
+                    if (isTransport && tOpt) {
+                      const defRoute = tOpt.default_route_id || tOpt.assigned?.route_id || tOpt.routes?.[0]?.id;
+                      if (defRoute) setExtraRouteId(String(defRoute));
+                      const routeAmt =
+                        tOpt.assigned?.amount ??
+                        tOpt.routes?.find((r: any) => String(r.id) === String(defRoute))?.term_amount ??
+                        tOpt.default_amount;
+                      if (routeAmt != null && Number(routeAmt) > 0) {
+                        amt = Number(routeAmt);
+                      }
+                    } else {
+                      setExtraRouteId("");
+                    }
                     if (amt != null && amt > 0) {
                       setExtraAmount(String(amt));
                     }
@@ -767,6 +794,43 @@ export default function FinanceClearancePage() {
                     placeholder="Describe custom charge"
                   />
                 )}
+                {(() => {
+                  const cat = optionalCatalog.find((c) => String(c.fee_item_id) === String(extraItemId));
+                  const n = `${cat?.name || ""} ${cat?.category || ""}`.toLowerCase();
+                  const isTransport = n.includes("transport") || n.includes("bus");
+                  const tOpt = (row as any)?.transport_optional;
+                  const routes = tOpt?.routes || [];
+                  if (!isTransport || !routes.length) return null;
+                  return (
+                    <div className="space-y-1 mt-2">
+                      <Label className="text-xs">Transport route</Label>
+                      <select
+                        className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm"
+                        value={extraRouteId}
+                        onChange={(e) => {
+                          const rid = e.target.value;
+                          setExtraRouteId(rid);
+                          const r = routes.find((x: any) => String(x.id) === String(rid));
+                          if (r && Number(r.term_amount) > 0) {
+                            setExtraAmount(String(r.term_amount));
+                          }
+                        }}
+                      >
+                        <option value="">Select route…</option>
+                        {routes.map((r: any) => (
+                          <option key={r.id} value={r.id}>
+                            {r.name}
+                            {r.distance_km != null ? ` · ${r.distance_km} km` : ""}
+                            {` · KSh ${Number(r.term_amount || 0).toLocaleString()}`}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-muted-foreground">
+                        Charge follows the selected route (by distance). Adjust amount only for a discount.
+                      </p>
+                    </div>
+                  );
+                })()}
               </div>
               <div>
                 <Label>Amount</Label>

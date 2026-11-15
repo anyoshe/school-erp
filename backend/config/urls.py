@@ -44,7 +44,7 @@ urlpatterns = [
     # path('api/health/', include('apps.health.urls')),
     # path('api/events/', include('apps.events.urls')),
     # path('api/alumni/', include('apps.alumni.urls')),
-    # path('api/transport/', include('apps.transport.urls')),
+    path('api/transport/', include('apps.transport.urls')),
     # path('api/inventory/', include('apps.inventory.urls')),
     # path('api/procurement/', include('apps.procurement.urls')),
     

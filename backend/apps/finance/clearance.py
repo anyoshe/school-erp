@@ -580,6 +580,13 @@ student, user=None, academic_year=None, period_name=None):
         structure_line_amounts = {}
         structure_optional_prices = []
 
+    transport_optional = None
+    try:
+        from apps.transport.services import transport_optional_for_student
+        transport_optional = transport_optional_for_student(student)
+    except Exception:
+        transport_optional = None
+
     return {
         "structure": {
             "id": str(structure.id),
@@ -589,6 +596,7 @@ student, user=None, academic_year=None, period_name=None):
             "total_amount": float(structure.total_amount or 0),
         } if structure else None,
         "meals_optional": meals_optional,
+        "transport_optional": transport_optional,
         "structure_line_amounts": structure_line_amounts,
         "structure_optional_prices": structure_optional_prices,
         "assignment_id": str(assignment.id) if assignment else None,

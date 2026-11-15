@@ -1774,17 +1774,53 @@ class ClearanceOptionalItemsView(APIView):
 
 
 class ClearanceAddItemView(APIView):
-    """Add extra fee line (uniform, assessment book, etc.) for a clearance student."""
+    """Add extra fee line (uniform, assessment book, transport route, etc.)."""
     permission_classes = [IsAuthenticated, IsAssociatedWithSchool]
 
     def post(self, request, student_id):
         from apps.students.models import Student
-        from apps.finance.clearance import add_extra_fee_line
+        from apps.finance.clearance import add_extra_fee_line, ensure_student_billing
 
         school_ids = _resolve_school_ids(request)
         student = Student.objects.filter(pk=student_id, school_id__in=school_ids).first()
         if not student:
             return Response({"detail": "Student not found"}, status=404)
+
+        route_id = request.data.get("route_id") or request.data.get("transport_route_id")
+        # Transport with route: subscribe + bill via transport services
+        if route_id:
+            try:
+                from apps.transport.models import Route
+                from apps.transport.services import subscribe_student
+                route = Route.objects.filter(pk=route_id, school_id=student.school_id, is_active=True).first()
+                if not route:
+                    return Response({"detail": "Transport route not found"}, status=400)
+                amount_override = request.data.get("amount")
+                if amount_override is not None and amount_override != "":
+                    from decimal import Decimal
+                    amount_override = Decimal(str(amount_override))
+                else:
+                    amount_override = None
+                asg, line = subscribe_student(
+                    student,
+                    route,
+                    user=request.user,
+                    amount_override=amount_override,
+                    bill=True,
+                )
+                billing = ensure_student_billing(student, user=request.user)
+                inv = line.invoice if line else None
+                return Response({
+                    "line_id": str(line.id) if line else None,
+                    "invoice_id": str(inv.id) if inv else None,
+                    "billing": billing,
+                    "transport_assignment_id": str(asg.id),
+                    "route_id": str(route.id),
+                    "route_name": route.name,
+                })
+            except Exception as e:
+                return Response({"detail": str(e)}, status=400)
+
         try:
             line, inv, billing = add_extra_fee_line(
                 student,

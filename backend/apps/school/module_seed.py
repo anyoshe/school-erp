@@ -39,7 +39,6 @@ SHELL_MODULE_CODES = (
     "events",
     "health",
     "alumni",
-    "transport",
     "elearning",
     "inventory",
     "procurement",
