@@ -52,6 +52,7 @@ export default function ReturningStudentsBillingPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [onlyUnbilled, setOnlyUnbilled] = useState(true);
   const [carryBalances, setCarryBalances] = useState(true);
+  const [includeMeals, setIncludeMeals] = useState(false);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [billing, setBilling] = useState(false);
@@ -144,6 +145,7 @@ export default function ReturningStudentsBillingPage() {
         {
           student_ids: selectedIds,
           fee_structure_id: structureId,
+          include_meals: includeMeals,
           carry_balances: carryBalances,
         },
         {
@@ -277,6 +279,14 @@ export default function ReturningStudentsBillingPage() {
                 onChange={(e) => setCarryBalances(e.target.checked)}
               />
               Carry prior unpaid balance
+            </label>
+            <label className="flex items-center gap-2 text-sm h-9" title="Adds Lunch/meals from the structure as part of the school fee bill">
+              <input
+                type="checkbox"
+                checked={includeMeals}
+                onChange={(e) => setIncludeMeals(e.target.checked)}
+              />
+              Include lunch / meals on bill
             </label>
             <Button
               type="button"

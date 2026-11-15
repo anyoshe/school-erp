@@ -239,6 +239,131 @@ class LunchSuggestAmountView(APIView):
             }
         )
 
+
+
+class LunchProgramRosterView(APIView):
+    """
+    Students on the lunch program (structure meals line and/or selected optional
+    and/or active LunchEnrollment) with meal and overall balances.
+    Used from Student Management — not a separate billing flow.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = selected_school(request)
+        if not school:
+            return Response({"detail": "No school selected"}, status=400)
+        from decimal import Decimal
+        from django.db.models import Sum, Q
+        from apps.students.models import Student
+        from apps.finance.models import InvoiceLine, Invoice, Payment, StudentFeeAssignment
+        from apps.finance.lunch import (
+            ensure_meals_fee_defaults,
+            is_meals_fee_item,
+            active_lunch_enrollment,
+        )
+        from apps.finance.carryover import student_outstanding
+
+        ensure_meals_fee_defaults(school)
+        defaults = ensure_meals_fee_defaults(school)
+        lunch_item = defaults["item"]
+
+        # Students with selected meals optional OR invoice line for meals OR active enrollment
+        selected_ids = set(
+            StudentFeeAssignment.objects.filter(
+                student__school=school,
+                selected_optional_items=lunch_item,
+            ).values_list("student_id", flat=True)
+        )
+        # Any meals-like item selected
+        from apps.finance.models import FeeItem
+        meal_item_ids = list(
+            FeeItem.objects.filter(category__school=school).filter(
+                Q(name__icontains="meal")
+                | Q(name__icontains="lunch")
+                | Q(category__name__icontains="meal")
+                | Q(category__name__icontains="cater")
+            ).values_list("id", flat=True)
+        )
+        if meal_item_ids:
+            selected_ids |= set(
+                StudentFeeAssignment.objects.filter(
+                    student__school=school,
+                    selected_optional_items__id__in=meal_item_ids,
+                ).values_list("student_id", flat=True)
+            )
+        line_student_ids = set(
+            InvoiceLine.objects.filter(
+                invoice__school=school,
+                item_id__in=meal_item_ids or [lunch_item.id],
+            ).values_list("invoice__student_id", flat=True)
+        )
+        enr_ids = set(
+            LunchEnrollment.objects.filter(
+                school=school, status=LunchEnrollment.Status.ACTIVE
+            ).values_list("student_id", flat=True)
+        )
+        all_ids = selected_ids | line_student_ids | enr_ids
+        q = (request.query_params.get("q") or "").strip()
+        students = Student.objects.filter(school=school, id__in=all_ids).select_related(
+            "current_class"
+        )
+        if q:
+            students = students.filter(
+                Q(admission_number__icontains=q)
+                | Q(first_name__icontains=q)
+                | Q(last_name__icontains=q)
+            )
+        students = students.order_by("last_name", "first_name")[:500]
+
+        rows = []
+        for s in students:
+            meal_due = (
+                InvoiceLine.objects.filter(
+                    invoice__student=s,
+                    item_id__in=meal_item_ids or [lunch_item.id],
+                ).aggregate(t=Sum("amount"))["t"]
+                or Decimal("0")
+            )
+            # Approximate meal paid as pro-rata of payments on invoices that have meal lines
+            meal_invoices = Invoice.objects.filter(
+                student=s,
+                lines__item_id__in=meal_item_ids or [lunch_item.id],
+            ).distinct()
+            meal_paid = Decimal("0")
+            for inv in meal_invoices:
+                inv_due = Decimal(str(inv.amount_due or 0)) or Decimal("0")
+                inv_paid = Decimal(str(inv.amount_paid or 0)) or Decimal("0")
+                meal_lines = sum(
+                    (
+                        Decimal(str(ln.amount or 0))
+                        for ln in inv.lines.all()
+                        if ln.item_id in (meal_item_ids or [lunch_item.id])
+                    ),
+                    Decimal("0"),
+                )
+                if inv_due > 0 and meal_lines > 0:
+                    meal_paid += (inv_paid * meal_lines / inv_due).quantize(Decimal("0.01"))
+                elif inv_due <= 0 and meal_lines > 0:
+                    meal_paid += meal_lines
+            meal_bal = max(Decimal("0"), Decimal(str(meal_due)) - meal_paid)
+            enr = active_lunch_enrollment(s, school)
+            rows.append(
+                {
+                    "student_id": str(s.id),
+                    "admission_number": s.admission_number or "",
+                    "name": f"{s.first_name or ''} {s.last_name or ''}".strip(),
+                    "grade": getattr(getattr(s, "current_class", None), "name", None),
+                    "status": s.status,
+                    "on_lunch_enrollment": bool(enr),
+                    "meals_billed": float(meal_due),
+                    "meals_paid_approx": float(meal_paid),
+                    "meals_balance": float(meal_bal),
+                    "total_outstanding": float(student_outstanding(s)),
+                }
+            )
+        return Response({"count": len(rows), "results": rows})
+
 class LunchKittyView(APIView):
     permission_classes = [IsAuthenticated]
 

@@ -141,9 +141,9 @@ export default function MealsLunchPage() {
             Meals & lunch program
           </h1>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Lunch is a full package — same idea as school fees. Subscribe once for the term (or
-            enter the monthly guide); the learner is billed the full amount on{" "}
-            <strong>Lunch / meals</strong>. Parents can pay monthly (term ÷ 3), but the commitment is the full package.
+            Prefer putting <strong>Lunch / meals</strong> on the fee structure. For continuing
+            learners, tick “Include lunch / meals” under Returning billing. Track who is on lunch
+            under <strong>Students → Lunch program</strong>. Optional meals are not forced at new-student clearance.
           </p>
         </div>
         <Button

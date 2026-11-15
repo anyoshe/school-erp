@@ -153,6 +153,31 @@ class ReturningStudentsBillView(APIView):
                     )
                     student.fee_structure = structure
                     student.save(update_fields=["fee_structure"])
+
+                    # Optional structure items (e.g. Lunch / meals) selected at billing time
+                    opt_ids = request.data.get("optional_item_ids") or []
+                    include_meals = str(request.data.get("include_meals") or "").lower() in (
+                        "1", "true", "yes",
+                    )
+                    if include_meals:
+                        from apps.finance.lunch import (
+                            ensure_meals_fee_defaults,
+                            is_meals_fee_item,
+                        )
+                        defaults = ensure_meals_fee_defaults(school)
+                        lunch = defaults["item"]
+                        # Prefer structure meals lines
+                        for si in structure.structure_items.select_related("item").all():
+                            if is_meals_fee_item(si.item):
+                                assignment.selected_optional_items.add(si.item)
+                        assignment.selected_optional_items.add(lunch)
+                        structure.available_optional_items.add(lunch)
+                    for oid in opt_ids:
+                        try:
+                            assignment.selected_optional_items.add(oid)
+                        except Exception:
+                            pass
+
                     try:
                         regenerate_invoices_for_assignment(assignment)
                     except Exception as e:

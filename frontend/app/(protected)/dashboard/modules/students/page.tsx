@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { Plus, Users, Filter, GraduationCap, UserPlus, AlertCircle, ArrowRightLeft, Search, Loader2 } from "lucide-react";
+import { Plus, Users, Filter, GraduationCap, UserPlus, AlertCircle, ArrowRightLeft, Search, Loader2, UtensilsCrossed } from "lucide-react";
 import { Input } from "@/components/ui/input";
 // promote link
 import { Button } from "@/components/ui/button";
@@ -172,6 +172,12 @@ export default function StudentsPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button asChild variant="secondary" className="bg-white/15 text-white border-0 hover:bg-white/25">
+              <Link href="/dashboard/modules/students/lunch">
+                <UtensilsCrossed className="h-4 w-4 mr-2" />
+                Lunch program
+              </Link>
+            </Button>
             <Button asChild variant="secondary" className="bg-white/15 text-white border-0 hover:bg-white/25">
               <Link href="/dashboard/modules/students/promote">
                 <ArrowRightLeft className="h-4 w-4 mr-2" />

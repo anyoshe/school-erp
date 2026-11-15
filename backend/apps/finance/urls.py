@@ -7,6 +7,7 @@ from .lunch_views import (
     LunchKittyView,
     LunchEnsureDefaultsView,
     LunchSuggestAmountView,
+    LunchProgramRosterView,
 )
 from .opening_balances import OpeningBalanceView
 from rest_framework.routers import DefaultRouter
@@ -59,6 +60,7 @@ urlpatterns = [
     path('owner-standing/', OwnerStandingView.as_view(), name='owner-standing'),
     path('students/<uuid:student_id>/statement/', StudentFeeStatementView.as_view(), name='student-fee-statement'),
     path('lunch/suggest/', LunchSuggestAmountView.as_view(), name='lunch-suggest'),
+    path('lunch/roster/', LunchProgramRosterView.as_view(), name='lunch-roster'),
     path('lunch/enrollments/', LunchEnrollmentListCreateView.as_view(), name='lunch-enrollments'),
     path('lunch/enrollments/<uuid:enrollment_id>/', LunchEnrollmentDetailView.as_view(), name='lunch-enrollment-detail'),
     path('lunch/kitty/', LunchKittyView.as_view(), name='lunch-kitty'),
