@@ -319,10 +319,8 @@ student, user=None, academic_year=None, period_name=None):
         assignment.fee_structure = structure
         assignment.save(update_fields=["fee_structure"])
 
-    # Meals: only on the fee structure.
-    # - Optional meals are NOT auto-added at clearance (continuing/new cashiers use
-    #   structure assignment / returning billing when meals are included).
-    # - Non-optional meals lines are already in mandatory invoice generation.
+    # Structure from enrollment/assignment; optionals (e.g. lunch) stay off the bill
+    # until selected on the assignment or added as an extra at clearance.
 
     year = academic_year or (structure.academic_year if structure else None)
     term = period_name or (structure.period_name if structure else None)
@@ -513,27 +511,31 @@ student, user=None, academic_year=None, period_name=None):
                 base = getattr(ln, "original_amount", None) or 0
                 waived_total += Decimal(str(base or 0))
 
-    meals_optional = None  # kept for API compat; optional meals hidden at clearance UI
+    meals_optional = None
     structure_line_amounts = {}
     try:
-        from apps.finance.lunch import structure_line_amounts as _sla, is_meals_fee_item
+        from apps.finance.lunch import (
+            structure_line_amounts as _sla,
+            structure_meals_amount,
+            ensure_meals_fee_defaults,
+        )
         if structure is not None:
-            # All structure prices except optional meals (optional meals not offered at clearance)
-            raw = _sla(structure)
-            optional_ids = set(structure.available_optional_items.values_list("id", flat=True))
-            for si in structure.structure_items.select_related("item", "item__category").all():
-                item = si.item
-                iid = str(si.item_id)
-                is_opt = (
-                    item.id in optional_ids
-                    or getattr(item, "is_optional", False)
-                    or structure.is_item_optional(item)
-                )
-                if is_meals_fee_item(item) and is_opt:
-                    continue  # optional meals: not part of clearance extras
-                structure_line_amounts[iid] = float(si.amount or 0)
-            # If meals is non-optional on structure, it is already on invoice lines
+            structure_line_amounts = _sla(structure)
+            amt = structure_meals_amount(structure)
+            defaults = ensure_meals_fee_defaults(student.school)
+            lunch_item = defaults["item"]
+            if structure_line_amounts.get(str(lunch_item.id)):
+                amt = Decimal(str(structure_line_amounts[str(lunch_item.id)]))
+            if amt and float(amt) > 0:
+                meals_optional = {
+                    "amount": float(amt),
+                    "structure_amount": float(amt),
+                    "source": "structure",
+                    "item_id": str(lunch_item.id),
+                    "item_name": lunch_item.name,
+                }
     except Exception:
+        meals_optional = None
         structure_line_amounts = {}
 
     return {

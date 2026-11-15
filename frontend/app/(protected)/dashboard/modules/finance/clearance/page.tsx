@@ -759,10 +759,6 @@ export default function FinanceClearancePage() {
                   value={extraAmount}
                   onChange={(e) => setExtraAmount(e.target.value)}
                 />
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Optional lunch is not added at clearance — include it on the fee structure or when
-                  billing returning students. Non-optional meals appear on the invoice lines above.
-                </p>
               </div>
             </div>
             <Button

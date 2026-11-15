@@ -1770,15 +1770,7 @@ class ClearanceOptionalItemsView(APIView):
         if not school:
             return Response({"detail": "School context required"}, status=400)
         items = ensure_optional_fee_catalog(school)
-        # Optional meals are assigned via fee structure / returning billing, not clearance extras
-        from apps.finance.lunch import is_meals_fee_item, looks_like_meals_text
-        filtered = []
-        for it in items:
-            name = f"{it.get('name', '')} {it.get('category', '')}"
-            if looks_like_meals_text(name):
-                continue
-            filtered.append(it)
-        return Response({"count": len(filtered), "results": filtered})
+        return Response({"count": len(items), "results": items})
 
 
 class ClearanceAddItemView(APIView):
