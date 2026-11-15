@@ -69,7 +69,7 @@ export default function MealsLunchPage() {
         admission_number: form.admission_number.trim(),
         plan_type: form.plan_type,
         amount: form.amount || "0",
-        absence_rule: form.absence_rule,
+        absence_rule: "CHARGE_FULL",
         academic_year: form.academic_year,
         notes: form.notes,
         status: "ACTIVE",
@@ -115,8 +115,9 @@ export default function MealsLunchPage() {
             Meals & lunch program
           </h1>
           <p className="text-sm text-muted-foreground max-w-2xl">
-            Subscribe learners to lunch. Term packages select optional Meals lines at clearance.
-            Kitchen spend and cook pay should use the Meals fee group so the kitty stays visible.
+            Lunch is a full package — same idea as school fees. Subscribe once for the term (or
+            enter the monthly guide); the learner is billed the full amount on{" "}
+            <strong>Lunch / meals</strong>. Parents can pay monthly (term ÷ 3), but the commitment is the full package.
           </p>
         </div>
         <Button
@@ -184,14 +185,16 @@ export default function MealsLunchPage() {
                   value={form.plan_type}
                   onChange={(e) => setForm({ ...form, plan_type: e.target.value })}
                 >
-                  <option value="TERM">Per term</option>
-                  <option value="MONTHLY">Monthly</option>
-                  <option value="WEEKLY">Weekly</option>
-                  <option value="DAILY">Daily rate</option>
+                  <option value="TERM">Per term (full package)</option>
+                  <option value="MONTHLY">Monthly guide (×3 = term)</option>
                 </select>
               </div>
               <div className="space-y-1">
-                <Label>Amount</Label>
+                <Label>
+                  {form.plan_type === "MONTHLY"
+                    ? "Monthly guide (KSh)"
+                    : "Full term package (KSh)"}
+                </Label>
                 <Input
                   type="number"
                   placeholder="0"
@@ -200,18 +203,10 @@ export default function MealsLunchPage() {
                 />
               </div>
             </div>
-            <div className="space-y-1">
-              <Label>If absent / doesn&apos;t eat</Label>
-              <select
-                className="w-full rounded-md border px-2 py-2 text-sm"
-                value={form.absence_rule}
-                onChange={(e) => setForm({ ...form, absence_rule: e.target.value })}
-              >
-                <option value="CHARGE_FULL">Still charge (place reserved)</option>
-                <option value="CREDIT_UNUSED">Credit unused (policy / manual)</option>
-                <option value="CHARGE_USAGE">Only days eaten (needs register later)</option>
-              </select>
-            </div>
+            <p className="text-[11px] text-muted-foreground rounded-md border bg-muted/40 px-2 py-1.5">
+              No day-counting. Term package e.g. KSh 4,000 → monthly guide KSh 1,333.33 (÷ 3).
+              Parents may pay monthly; the billed amount is the full package.
+            </p>
             <div className="space-y-1">
               <Label>Academic year (optional)</Label>
               <Input
@@ -236,8 +231,8 @@ export default function MealsLunchPage() {
               Activate lunch program
             </Button>
             <p className="text-[11px] text-muted-foreground">
-              Term plan: at clearance, Meals optional lines are selected automatically.
-              Also add Lunch as optional on the fee structure with the term amount.
+              Activating bills the full package to the learner&apos;s open invoice as Lunch / meals
+              (if not already billed). Clearance also auto-selects meals for new term billing.
             </p>
           </CardContent>
         </Card>
@@ -285,7 +280,7 @@ export default function MealsLunchPage() {
                         </td>
                         <td className="py-2 pr-2">
                           {r.plan_type}
-                          <div className="text-[11px] text-muted-foreground">{r.absence_rule}</div>
+                          <div className="text-[11px] text-muted-foreground">Full package</div>
                         </td>
                         <td className="py-2 pr-2 text-right tabular-nums">{money(r.amount)}</td>
                         <td className="py-2 pr-2">

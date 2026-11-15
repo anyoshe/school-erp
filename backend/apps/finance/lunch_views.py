@@ -11,6 +11,9 @@ from apps.finance.models import LunchEnrollment
 from apps.finance.lunch import (
     ensure_meals_fee_defaults,
     apply_lunch_enrollment_to_assignment,
+    ensure_lunch_invoice_line,
+    term_commitment_amount,
+    monthly_guide_amount,
     meals_kitty_summary,
     active_lunch_enrollment,
 )
@@ -83,9 +86,7 @@ class LunchEnrollmentListCreateView(APIView):
         plan_type = (request.data.get("plan_type") or LunchEnrollment.PlanType.TERM).upper()
         if plan_type not in [c.value for c in LunchEnrollment.PlanType]:
             plan_type = LunchEnrollment.PlanType.TERM
-        absence = (request.data.get("absence_rule") or LunchEnrollment.AbsenceRule.CHARGE_FULL).upper()
-        if absence not in [c.value for c in LunchEnrollment.AbsenceRule]:
-            absence = LunchEnrollment.AbsenceRule.CHARGE_FULL
+        absence = LunchEnrollment.AbsenceRule.CHARGE_FULL  # full package; no day-counting
         try:
             amount = Decimal(str(request.data.get("amount") or "0"))
         except Exception:
@@ -111,10 +112,13 @@ class LunchEnrollmentListCreateView(APIView):
             notes=(request.data.get("notes") or "")[:255],
             created_by=request.user if getattr(request.user, "is_authenticated", False) else None,
         )
-        # Sync optional meals on existing assignment
-        assignment = StudentFeeAssignment.objects.filter(student=student).first()
-        if assignment and st == LunchEnrollment.Status.ACTIVE:
-            apply_lunch_enrollment_to_assignment(assignment)
+        # Full package: select lunch on assignment + bill open invoice (no day counting)
+        billing = None
+        if st == LunchEnrollment.Status.ACTIVE:
+            assignment = StudentFeeAssignment.objects.filter(student=student).first()
+            if assignment:
+                apply_lunch_enrollment_to_assignment(assignment)
+            billing = ensure_lunch_invoice_line(student, user=request.user)
 
         return Response(
             {
@@ -124,6 +128,9 @@ class LunchEnrollmentListCreateView(APIView):
                 "status": enr.status,
                 "plan_type": enr.plan_type,
                 "amount": str(enr.amount),
+                "commitment": str(term_commitment_amount(enr)),
+                "monthly_guide": str(monthly_guide_amount(enr)),
+                "billing": billing,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -168,13 +175,22 @@ class LunchEnrollmentDetailView(APIView):
         if "notes" in data:
             enr.notes = str(data.get("notes") or "")[:255]
         enr.save()
+        billing = None
         if enr.status == LunchEnrollment.Status.ACTIVE:
             from apps.finance.models import StudentFeeAssignment
 
             assignment = StudentFeeAssignment.objects.filter(student=enr.student).first()
             if assignment:
                 apply_lunch_enrollment_to_assignment(assignment)
-        return Response({"ok": True, "id": str(enr.id), "status": enr.status})
+            billing = ensure_lunch_invoice_line(enr.student, user=request.user)
+        return Response({
+            "ok": True,
+            "id": str(enr.id),
+            "status": enr.status,
+            "commitment": str(term_commitment_amount(enr)),
+            "monthly_guide": str(monthly_guide_amount(enr)),
+            "billing": billing,
+        })
 
 
 class LunchKittyView(APIView):

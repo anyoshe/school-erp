@@ -298,10 +298,40 @@ def meals_items_for_structure(structure):
     return items
 
 
+def term_commitment_amount(enr) -> Decimal:
+    """
+    Full package the parent owes once subscribed.
+    TERM: enrollment.amount is the term total.
+    MONTHLY: enrollment.amount is monthly; term commitment = monthly × 3.
+    (Kenya-style three months per term — presentation only; billing is the full total.)
+    """
+    if enr is None:
+        return Decimal("0")
+    amt = Decimal(str(enr.amount or 0))
+    if amt <= 0:
+        return Decimal("0")
+    plan = (getattr(enr, "plan_type", None) or "TERM").upper()
+    if plan == "MONTHLY":
+        return (amt * Decimal("3")).quantize(Decimal("0.01"))
+    # TERM (and legacy weekly/daily treated as full package amount entered)
+    return amt
+
+
+def monthly_guide_amount(enr) -> Decimal:
+    """What to tell parents per month (term total ÷ 3). Not a separate pro-rata bill."""
+    total = term_commitment_amount(enr)
+    if total <= 0:
+        return Decimal("0")
+    plan = (getattr(enr, "plan_type", None) or "TERM").upper()
+    if plan == "MONTHLY":
+        return Decimal(str(enr.amount or 0))
+    return (total / Decimal("3")).quantize(Decimal("0.01"))
+
+
 def apply_lunch_enrollment_to_assignment(assignment) -> list:
     """
-    If student has ACTIVE lunch enrollment, ensure meals optional items on the
-    assignment's structure are selected. Returns list of item ids added.
+    ACTIVE lunch subscription → select Lunch / meals on the assignment.
+    Full package amount only (no day-counting). Returns item ids added.
     """
     if assignment is None or not assignment.fee_structure_id:
         return []
@@ -314,24 +344,35 @@ def apply_lunch_enrollment_to_assignment(assignment) -> list:
     if enr is None:
         return []
 
-    structure = assignment.fee_structure
-    meals_items = meals_items_for_structure(structure)
-    # If structure has no meals line yet, attach school default lunch item as optional available
-    if not meals_items:
-        from apps.finance.models import FeeItem, FeeStructureItem
+    from apps.finance.models import FeeStructureItem
 
-        defaults = ensure_meals_fee_defaults(school)
-        lunch_item = defaults["item"]
-        # Add to structure optional set so clearance can bill if amount set on structure
+    structure = assignment.fee_structure
+    defaults = ensure_meals_fee_defaults(school)
+    lunch_item = defaults["item"]
+    meals_items = meals_items_for_structure(structure)
+    if not meals_items:
         structure.available_optional_items.add(lunch_item)
-        # If enrollment has an amount and no structure line, create a structure line
-        if enr.amount and Decimal(str(enr.amount)) > 0:
-            FeeStructureItem.objects.get_or_create(
-                fee_structure=structure,
-                item=lunch_item,
-                defaults={"amount": enr.amount},
-            )
         meals_items = [lunch_item]
+
+    commitment = term_commitment_amount(enr)
+    # Ensure structure has a price line for lunch (full package)
+    if commitment > 0:
+        si = FeeStructureItem.objects.filter(structure=structure, item=lunch_item).first()
+        if si is None:
+            # Prefer any existing meals structure line amount
+            for other in FeeStructureItem.objects.filter(
+                structure=structure, item__in=meals_items
+            ):
+                si = other
+                break
+        if si is None:
+            FeeStructureItem.objects.create(
+                structure=structure, item=lunch_item, amount=commitment
+            )
+        elif Decimal(str(si.amount or 0)) <= 0:
+            si.amount = commitment
+            si.save(update_fields=["amount"])
+        structure.available_optional_items.add(lunch_item)
 
     added = []
     current = set(assignment.selected_optional_items.values_list("id", flat=True))
@@ -339,7 +380,85 @@ def apply_lunch_enrollment_to_assignment(assignment) -> list:
         if item.id not in current:
             assignment.selected_optional_items.add(item)
             added.append(item.id)
+    if lunch_item.id not in current and lunch_item.id not in added:
+        assignment.selected_optional_items.add(lunch_item)
+        added.append(lunch_item.id)
     return added
+
+
+def ensure_lunch_invoice_line(student, user=None) -> dict:
+    """
+    After subscribe: put the full lunch package on the learner's open invoice
+    if not already billed. Same idea as school fees — full amount, not per-day.
+    """
+    from apps.finance.models import InvoiceLine, StudentFeeAssignment
+    from apps.finance.clearance import add_extra_fee_line
+
+    school = getattr(student, "school", None)
+    if school is None:
+        return {"ok": False, "detail": "no school"}
+    enr = active_lunch_enrollment(student, school)
+    if enr is None:
+        return {"ok": False, "detail": "no active enrollment"}
+
+    defaults = ensure_meals_fee_defaults(school)
+    lunch_item = defaults["item"]
+    commitment = term_commitment_amount(enr)
+
+    assignment = StudentFeeAssignment.objects.filter(student=student).first()
+    if assignment:
+        apply_lunch_enrollment_to_assignment(assignment)
+
+    # Already has a meals/lunch line on any invoice?
+    existing = InvoiceLine.objects.filter(
+        invoice__student=student, item=lunch_item
+    ).first()
+    if existing:
+        return {
+            "ok": True,
+            "already": True,
+            "line_id": str(existing.id),
+            "amount": float(existing.amount or 0),
+            "commitment": float(commitment),
+            "monthly_guide": float(monthly_guide_amount(enr)),
+        }
+
+    if commitment <= 0:
+        # Try structure amount
+        if assignment and assignment.fee_structure_id:
+            from apps.finance.models import FeeStructureItem
+            si = FeeStructureItem.objects.filter(
+                structure_id=assignment.fee_structure_id, item=lunch_item
+            ).first()
+            if si:
+                commitment = Decimal(str(si.amount or 0))
+    if commitment <= 0:
+        return {
+            "ok": False,
+            "detail": "Set the lunch amount on the subscription (full term total).",
+            "monthly_guide": 0,
+        }
+
+    try:
+        result = add_extra_fee_line(
+            student,
+            description=LUNCH_ITEM_NAME,
+            amount=commitment,
+            user=user,
+            fee_item_id=lunch_item.id,
+        )
+        # add_extra_fee_line returns (line, invoice, billing) or line
+        line = result[0] if isinstance(result, (tuple, list)) else result
+        return {
+            "ok": True,
+            "already": False,
+            "line_id": str(getattr(line, "id", "")),
+            "amount": float(commitment),
+            "commitment": float(commitment),
+            "monthly_guide": float(monthly_guide_amount(enr)),
+        }
+    except Exception as exc:
+        return {"ok": False, "detail": str(exc), "commitment": float(commitment)}
 
 
 def meals_kitty_summary(school):
