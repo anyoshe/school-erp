@@ -1,19 +1,24 @@
 """
-Merge alias optional fee items (e.g. Assessment Book vs Assessment books)
-onto the canonical catalog and re-point invoice lines.
+Safe repair/merge for optional fee items.
 
   python manage.py rehome_optional_fee_lines --dry-run
   python manage.py rehome_optional_fee_lines
+  python manage.py rehome_optional_fee_lines --repair-only
 """
 from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):
-    help = "Merge alias optional fee items and rehome invoice lines onto catalog."
+    help = "Repair misc misclassification and merge true optional fee aliases."
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true")
         parser.add_argument("--school-id", type=str, default="")
+        parser.add_argument(
+            "--repair-only",
+            action="store_true",
+            help="Only undo misc misclassification + assessment merge",
+        )
 
     def handle(self, *args, **options):
         from apps.school.models import School
@@ -23,6 +28,7 @@ class Command(BaseCommand):
             _find_alias_items,
             CANONICAL_OPTIONALS,
             rehome_stray_optional_invoice_lines,
+            repair_misc_misclassified_lines,
         )
         from apps.finance.models import FeeItem, InvoiceLine
 
@@ -31,14 +37,31 @@ class Command(BaseCommand):
         if sid:
             qs = qs.filter(pk=sid)
         dry = options["dry_run"]
+        repair_only = options["repair_only"]
 
         for school in qs:
             catalog = ensure_optional_fee_catalog(school)
             by_code = {c["code"]: c for c in catalog}
+            misc_id = by_code.get("misc", {}).get("fee_item_id")
 
             if dry:
                 self.stdout.write(f"[dry] {school.name}")
+                misc_n = 0
+                if misc_id:
+                    for line in InvoiceLine.objects.filter(
+                        invoice__school=school, item_id=misc_id
+                    ).select_related("item")[:2000]:
+                        entry = match_catalog_entry(line.description or "", allow_misc=False)
+                        if entry:
+                            misc_n += 1
+                            self.stdout.write(
+                                f"  misc line would restore → {entry['code']}: "
+                                f"{(line.description or '')[:60]!r}"
+                            )
+                self.stdout.write(f"  misc lines to restore: {misc_n}")
                 for entry in CANONICAL_OPTIONALS:
+                    if not entry.get("auto_rehome", True):
+                        continue
                     target_id = by_code[entry["code"]]["fee_item_id"]
                     aliases = _find_alias_items(school, entry, target_id)
                     if aliases:
@@ -46,15 +69,10 @@ class Command(BaseCommand):
                         self.stdout.write(
                             f"  would merge → {entry['item']!r}: {names}"
                         )
-                n = 0
-                for line in InvoiceLine.objects.filter(
-                    invoice__school=school
-                ).select_related("item")[:5000]:
-                    text = f"{line.description or ''} {getattr(line.item, 'name', '') or ''}"
-                    if match_catalog_entry(text):
-                        n += 1
-                self.stdout.write(f"  ~{n} invoice lines match catalog keywords")
                 continue
 
-            result = rehome_stray_optional_invoice_lines(school)
+            if repair_only:
+                result = repair_misc_misclassified_lines(school)
+            else:
+                result = rehome_stray_optional_invoice_lines(school)
             self.stdout.write(self.style.SUCCESS(f"{school.name}: {result}"))
