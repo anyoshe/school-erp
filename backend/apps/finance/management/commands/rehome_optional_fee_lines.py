@@ -23,6 +23,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         from apps.school.models import School
         from apps.finance.fee_catalog import (
+            consolidate_assessment_and_payment_labels,
             ensure_optional_fee_catalog,
             match_catalog_entry,
             _find_alias_items,
@@ -75,4 +76,7 @@ class Command(BaseCommand):
                 result = repair_misc_misclassified_lines(school)
             else:
                 result = rehome_stray_optional_invoice_lines(school)
+            # Always unify assessment labels on payments/invoice lines
+            cons = consolidate_assessment_and_payment_labels(school)
+            result = {**(result if isinstance(result, dict) else {'result': result}), 'consolidate': cons}
             self.stdout.write(self.style.SUCCESS(f"{school.name}: {result}"))

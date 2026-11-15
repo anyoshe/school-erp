@@ -489,3 +489,111 @@ def rehome_stray_optional_invoice_lines(school) -> dict:
         "repair": repair,
         "moved_lines": moved,
     }
+
+
+def consolidate_assessment_and_payment_labels(school) -> dict:
+    """
+    Force all assessment-book variants onto canonical FeeItem + unify
+    Payment.line_allocations labels. Also strip mis-labelled misc allocations
+    when description clearly maps to another catalog code.
+    """
+    from apps.finance.models import FeeItem, InvoiceLine, Payment
+
+    catalog = ensure_optional_fee_catalog(school)
+    by_code = {c["code"]: c for c in catalog}
+    target_id = by_code["assessment_books"]["fee_item_id"]
+    target = FeeItem.objects.filter(pk=target_id).first()
+    stats = {
+        "invoice_lines_item": 0,
+        "invoice_lines_desc": 0,
+        "payment_allocs_relabelled": 0,
+        "misc_allocs_relabelled": 0,
+        "aliases_deactivated": 0,
+    }
+    if not target:
+        return stats
+
+    # Any fee item whose name is an assessment-book variant
+    alias_ids = []
+    for fi in FeeItem.objects.filter(category__school=school):
+        if str(fi.id) == str(target_id):
+            continue
+        if match_catalog_entry(fi.name or "", allow_misc=False) and match_catalog_entry(
+            fi.name or "", allow_misc=False
+        ).get("code") == "assessment_books":
+            alias_ids.append(fi.id)
+            n = InvoiceLine.objects.filter(invoice__school=school, item=fi).update(item=target)
+            stats["invoice_lines_item"] += n
+            if fi.is_active:
+                fi.is_active = False
+                fi.save(update_fields=["is_active"])
+                stats["aliases_deactivated"] += 1
+
+    # Lines whose description is assessment* but item is wrong/null
+    for line in InvoiceLine.objects.filter(invoice__school=school).select_related("item"):
+        entry = match_catalog_entry(line.description or "", allow_misc=False)
+        if not entry or entry["code"] != "assessment_books":
+            continue
+        if line.item_id and str(line.item_id) == str(target_id):
+            # normalize description spelling
+            if (line.description or "").strip().lower() not in (
+                "assessment books",
+                target.name.lower(),
+            ):
+                line.description = target.name
+                line.save(update_fields=["description"])
+                stats["invoice_lines_desc"] += 1
+            continue
+        line.item = target
+        line.description = target.name
+        line.save(update_fields=["item", "description"])
+        stats["invoice_lines_desc"] += 1
+
+    misc_id = by_code.get("misc", {}).get("fee_item_id")
+
+    # Payment JSON allocations — unify labels
+    for pay in Payment.objects.filter(invoice__school=school).exclude(line_allocations=[]):
+        allocs = pay.line_allocations or []
+        if not isinstance(allocs, list) or not allocs:
+            continue
+        changed = False
+        new_allocs = []
+        for row in allocs:
+            if not isinstance(row, dict):
+                new_allocs.append(row)
+                continue
+            row = dict(row)
+            desc = str(row.get("description") or "")
+            entry = match_catalog_entry(desc, allow_misc=False)
+            if entry and entry["code"] == "assessment_books":
+                if desc.strip() != target.name:
+                    row["description"] = target.name
+                    changed = True
+                    stats["payment_allocs_relabelled"] += 1
+            elif entry and entry["code"] != "misc":
+                # If labelled miscellaneous but text is meals/uniform/etc
+                if "misc" in desc.lower() or "miscellaneous" in desc.lower():
+                    canon_name = by_code[entry["code"]]["name"]
+                    row["description"] = canon_name
+                    changed = True
+                    stats["misc_allocs_relabelled"] += 1
+            new_allocs.append(row)
+        if changed:
+            pay.line_allocations = new_allocs
+            pay.save(update_fields=["line_allocations"])
+
+    # Invoice lines still on Misc with optional description
+    if misc_id:
+        for line in InvoiceLine.objects.filter(
+            invoice__school=school, item_id=misc_id
+        ):
+            entry = match_catalog_entry(line.description or "", allow_misc=False)
+            if not entry:
+                continue
+            dest = FeeItem.objects.filter(pk=by_code[entry["code"]]["fee_item_id"]).first()
+            if dest:
+                line.item = dest
+                line.save(update_fields=["item"])
+                stats["misc_allocs_relabelled"] += 1
+
+    return stats

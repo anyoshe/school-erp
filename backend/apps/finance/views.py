@@ -101,6 +101,9 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
         s = re.sub(r"\s+", " ", (label or "").strip())
         s = re.sub(r"[\s\-_]*fees?$", "", s, flags=re.IGNORECASE).strip()
         s = re.sub(r"[\s\-_]+", " ", s).strip().lower()
+        # Singularize so "Assessment Book" and "Assessment books" are one group
+        s = re.sub(r"\bbooks\b", "book", s)
+        s = re.sub(r"\bmeals\b", "meal", s)
         return s or "unnamed fee"
 
     def label_score(label: str, has_money: bool) -> int:
