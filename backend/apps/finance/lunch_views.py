@@ -218,7 +218,9 @@ class LunchSuggestAmountView(APIView):
         if not student:
             return Response({"detail": "Student not found"}, status=404)
         ensure_meals_fee_defaults(school)
-        sug = suggested_meals_amount_for_student(student)
+        year = request.query_params.get("academic_year") or request.query_params.get("year")
+        term = request.query_params.get("term") or request.query_params.get("period_name")
+        sug = suggested_meals_amount_for_student(student, academic_year=year, period_name=term)
         amt = Decimal(str(sug.get("amount") or 0))
         return Response(
             {
@@ -230,7 +232,9 @@ class LunchSuggestAmountView(APIView):
                 "source": sug.get("source"),
                 "item_id": sug.get("item_id"),
                 "item_name": sug.get("item_name"),
+                "structure_id": sug.get("structure_id"),
                 "structure_name": sug.get("structure_name"),
+                "structure_line_amounts": sug.get("structure_line_amounts") or {},
                 "monthly_guide": float((amt / Decimal("3")).quantize(Decimal("0.01")) if amt else 0),
             }
         )

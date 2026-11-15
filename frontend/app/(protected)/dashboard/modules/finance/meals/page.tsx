@@ -200,8 +200,14 @@ export default function MealsLunchPage() {
               <Input
                 placeholder="PSS-2026-0001"
                 value={form.admission_number}
-                onChange={(e) => setForm({ ...form, admission_number: e.target.value })}
                 onBlur={() => loadSuggest(form.admission_number)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setForm((f) => ({ ...f, admission_number: v }));
+                  if (v.trim().length >= 6) {
+                    void loadSuggest(v);
+                  }
+                }}
               />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -234,6 +240,16 @@ export default function MealsLunchPage() {
                 {amountSource ? (
                   <p className="text-[11px] text-muted-foreground">{amountSource}</p>
                 ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-1 h-8"
+                  onClick={() => loadSuggest(form.admission_number)}
+                  disabled={!form.admission_number.trim()}
+                >
+                  Load amount from fee structure
+                </Button>
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground rounded-md border bg-muted/40 px-2 py-1.5">

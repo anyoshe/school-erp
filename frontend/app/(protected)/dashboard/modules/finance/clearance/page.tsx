@@ -716,15 +716,22 @@ export default function FinanceClearancePage() {
                     const val = e.target.value;
                     setExtraItemId(val);
                     if (val !== "other") setExtraName("");
-                    // Prefill structure meals amount when Lunch/meals selected
+                    const amounts = (row as any)?.structure_line_amounts || {};
                     const opt = (row as any)?.meals_optional;
-                    const cat = optionalCatalog.find((c) => String(c.fee_item_id) === val);
+                    const cat = optionalCatalog.find(
+                      (c) => String(c.fee_item_id) === String(val)
+                    );
                     const name = `${cat?.name || ""} ${cat?.category || ""}`.toLowerCase();
                     const isMeals =
                       name.includes("lunch") ||
                       name.includes("meal") ||
-                      (opt?.item_id && val === String(opt.item_id));
-                    if (isMeals && opt?.amount) {
+                      name.includes("cater") ||
+                      (opt?.item_id && String(val) === String(opt.item_id));
+                    // Any structure-priced optional (meals, books, etc.)
+                    const fromStruct = amounts[String(val)];
+                    if (fromStruct != null && Number(fromStruct) > 0) {
+                      setExtraAmount(String(fromStruct));
+                    } else if (isMeals && opt?.amount) {
                       setExtraAmount(String(opt.amount));
                     }
                   }}

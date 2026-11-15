@@ -300,28 +300,125 @@ def meals_items_for_structure(structure):
 
 def structure_meals_amount(structure) -> Decimal:
     """
-    Amount for Lunch/meals from the fee structure (first positive meals line).
-    This is the default full package when the structure has the meal option.
+    Amount for Lunch/meals from the fee structure (highest positive meals line).
+    Matches structure_items by item/category name (meal, lunch, catering…).
     """
     if structure is None:
         return Decimal("0")
     best = Decimal("0")
-    for si in structure.structure_items.select_related("item", "item__category").all():
-        if not is_meals_fee_item(si.item):
-            continue
+    try:
+        qs = structure.structure_items.select_related("item", "item__category").all()
+    except Exception:
+        return Decimal("0")
+    for si in qs:
+        item = getattr(si, "item", None)
+        if not is_meals_fee_item(item):
+            # Also match optional lines labelled like "Meals (Optional)"
+            nm = (getattr(item, "name", None) or "") + " " + (getattr(si, "description", None) or "")
+            if not looks_like_meals_text(nm):
+                continue
         amt = Decimal(str(si.amount or 0))
         if amt > best:
             best = amt
     return best
 
 
-def suggested_meals_amount_for_student(student) -> dict:
+def structure_line_amounts(structure) -> dict:
+    """Map fee_item_id (str) -> amount for every priced line on the structure."""
+    out = {}
+    if structure is None:
+        return out
+    try:
+        for si in structure.structure_items.select_related("item").all():
+            iid = getattr(si, "item_id", None)
+            if iid is None:
+                continue
+            out[str(iid)] = float(Decimal(str(si.amount or 0)))
+    except Exception:
+        pass
+    return out
+
+
+def resolve_student_fee_structure(student, academic_year=None, period_name=None):
+    """
+    Best fee structure for pricing optionals (meals etc.).
+    Does not require year/term when the student already has an assignment/link,
+    and falls back to any active structure for the grade that carries a meals price.
+    """
+    from apps.finance.models import FeeStructure, StudentFeeAssignment
+    from apps.finance.clearance import resolve_student_grade, find_fee_structure
+
+    if student is None:
+        return None
+
+    assignment = (
+        StudentFeeAssignment.objects.filter(student=student)
+        .select_related("fee_structure")
+        .first()
+    )
+    if assignment and assignment.fee_structure_id:
+        return assignment.fee_structure
+
+    linked = getattr(student, "fee_structure", None)
+    if linked is not None:
+        return linked
+
+    # Prefer exact year/term when known
+    year = academic_year
+    term = period_name
+    if not year:
+        ay = getattr(student, "academic_year", None)
+        if ay is not None:
+            year = getattr(ay, "name", None) or getattr(ay, "year", None) or str(ay)
+    if not term:
+        term = getattr(student, "current_term", None) or getattr(student, "enrollment_term", None)
+
+    if year and term:
+        try:
+            found = find_fee_structure(student, year, term)
+            if found:
+                return found
+        except Exception:
+            pass
+
+    grade = resolve_student_grade(student)
+    school_id = getattr(student, "school_id", None)
+    if not school_id or grade is None:
+        return None
+
+    qs = (
+        FeeStructure.objects.filter(school_id=school_id, is_active=True)
+        .select_related("grade_level")
+        .prefetch_related("structure_items__item__category")
+    )
+    candidates = []
+    gname = str(getattr(grade, "name", "") or "").strip().lower()
+    for st in qs:
+        if getattr(st, "grade_level_id", None) == getattr(grade, "id", None):
+            candidates.append(st)
+            continue
+        sn = str(getattr(getattr(st, "grade_level", None), "name", "") or "").strip().lower()
+        if gname and sn == gname:
+            candidates.append(st)
+
+    if not candidates:
+        return None
+
+    # Prefer structure with a positive meals amount, then one with any lines
+    def score(st):
+        meals = structure_meals_amount(st)
+        has_lines = 1 if st.structure_items.exists() else 0
+        return (1 if meals > 0 else 0, meals, has_lines)
+
+    candidates.sort(key=score, reverse=True)
+    return candidates[0]
+
+
+def suggested_meals_amount_for_student(student, academic_year=None, period_name=None) -> dict:
     """
     Prefer fee-structure meals amount; enrollment amount is only an override
     when set lower (discount) or when structure has no meals line.
     """
-    from apps.finance.models import StudentFeeAssignment
-
     school = getattr(student, "school", None)
     out = {
         "amount": Decimal("0"),
@@ -332,30 +429,29 @@ def suggested_meals_amount_for_student(student) -> dict:
         "item_name": LUNCH_ITEM_NAME,
         "structure_id": None,
         "structure_name": None,
+        "structure_line_amounts": {},
     }
     if school is None:
         return out
     defaults = ensure_meals_fee_defaults(school)
-    out["item_id"] = str(defaults["item"].id)
-    out["item_name"] = defaults["item"].name
+    lunch_item = defaults["item"]
+    out["item_id"] = str(lunch_item.id)
+    out["item_name"] = lunch_item.name
 
-    structure = None
-    assignment = StudentFeeAssignment.objects.filter(student=student).select_related(
-        "fee_structure"
-    ).first()
-    if assignment and assignment.fee_structure_id:
-        structure = assignment.fee_structure
-    if structure is None:
-        structure = getattr(student, "fee_structure", None)
-    if structure is None:
-        try:
-            from apps.finance.clearance import find_fee_structure
-            structure = find_fee_structure(student)
-        except Exception:
-            structure = None
-
+    structure = resolve_student_fee_structure(student, academic_year, period_name)
     struct_amt = structure_meals_amount(structure) if structure else Decimal("0")
+    # If structure has a line for the canonical lunch item specifically, prefer that
+    if structure and struct_amt <= 0:
+        try:
+            for si in structure.structure_items.select_related("item").all():
+                if si.item_id == lunch_item.id:
+                    struct_amt = Decimal(str(si.amount or 0))
+                    break
+        except Exception:
+            pass
+
     out["structure_amount"] = struct_amt
+    out["structure_line_amounts"] = structure_line_amounts(structure)
     if structure:
         out["structure_id"] = str(structure.id)
         out["structure_name"] = structure.name
@@ -367,8 +463,6 @@ def suggested_meals_amount_for_student(student) -> dict:
         enr_amt = (enr_amt * Decimal("3")).quantize(Decimal("0.01"))
     out["enrollment_amount"] = enr_amt
 
-    # Default = structure. Override only if enrollment has a positive amount
-    # (discounted or custom package for this learner).
     if struct_amt > 0 and (enr_amt <= 0 or enr_amt >= struct_amt):
         out["amount"] = struct_amt
         out["source"] = "structure"

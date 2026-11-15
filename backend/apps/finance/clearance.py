@@ -523,20 +523,47 @@ student, user=None, academic_year=None, period_name=None):
                 waived_total += Decimal(str(base or 0))
 
     meals_optional = None
+    structure_line_amounts = {}
     try:
-        from apps.finance.lunch import suggested_meals_amount_for_student
-        sug = suggested_meals_amount_for_student(student)
-        if sug and Decimal(str(sug.get("amount") or 0)) > 0:
-            meals_optional = {
-                "amount": float(sug["amount"]),
-                "structure_amount": float(sug.get("structure_amount") or 0),
-                "source": sug.get("source"),
-                "item_id": sug.get("item_id"),
-                "item_name": sug.get("item_name"),
-                "monthly_guide": float(
-                    (Decimal(str(sug["amount"])) / Decimal("3")).quantize(Decimal("0.01"))
-                ),
-            }
+        from apps.finance.lunch import (
+            structure_meals_amount,
+            structure_line_amounts as _sla,
+            suggested_meals_amount_for_student,
+            ensure_meals_fee_defaults,
+        )
+        if structure is not None:
+            structure_line_amounts = _sla(structure)
+            amt = structure_meals_amount(structure)
+            defaults = ensure_meals_fee_defaults(student.school)
+            lunch_item = defaults["item"]
+            # Prefer explicit line for canonical lunch item
+            if structure_line_amounts.get(str(lunch_item.id)):
+                amt = Decimal(str(structure_line_amounts[str(lunch_item.id)]))
+            if amt > 0:
+                meals_optional = {
+                    "amount": float(amt),
+                    "structure_amount": float(amt),
+                    "source": "structure",
+                    "item_id": str(lunch_item.id),
+                    "item_name": lunch_item.name,
+                    "monthly_guide": float((amt / Decimal("3")).quantize(Decimal("0.01"))),
+                }
+        if meals_optional is None:
+            sug = suggested_meals_amount_for_student(
+                student, academic_year=year, period_name=term
+            )
+            structure_line_amounts = structure_line_amounts or sug.get("structure_line_amounts") or {}
+            if sug and Decimal(str(sug.get("amount") or 0)) > 0:
+                meals_optional = {
+                    "amount": float(sug["amount"]),
+                    "structure_amount": float(sug.get("structure_amount") or 0),
+                    "source": sug.get("source"),
+                    "item_id": sug.get("item_id"),
+                    "item_name": sug.get("item_name"),
+                    "monthly_guide": float(
+                        (Decimal(str(sug["amount"])) / Decimal("3")).quantize(Decimal("0.01"))
+                    ),
+                }
     except Exception:
         meals_optional = None
 
@@ -549,6 +576,7 @@ student, user=None, academic_year=None, period_name=None):
             "total_amount": float(structure.total_amount or 0),
         } if structure else None,
         "meals_optional": meals_optional,
+        "structure_line_amounts": structure_line_amounts,
         "assignment_id": str(assignment.id) if assignment else None,
         "invoices": [
             {
