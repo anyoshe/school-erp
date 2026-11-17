@@ -29,7 +29,6 @@ export default function StudentsPage() {
     isLoading,
     isError,
     errorMessage,
-    errorMessage,
     isLoadingMore,
     isRefreshing,
     search,
