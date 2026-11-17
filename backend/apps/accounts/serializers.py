@@ -42,35 +42,53 @@ def apply_user_roles_and_modules(user, role_codes=None, extra_module_ids=None, p
     return user
 
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """Email-first login (case-insensitive) with clear 401 messages."""
+
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
-        token['email'] = user.email
-        token['role'] = user.role
+        token["email"] = user.email
+        token["role"] = user.role
         try:
-            token['roles'] = sorted(user.get_role_codes())
+            token["roles"] = sorted(user.get_role_codes())
         except Exception:
-            token['roles'] = [user.role] if user.role else []
+            token["roles"] = [user.role] if user.role else []
         return token
 
     def validate(self, attrs):
-        # Accept either email or username; normalize email case for parent logins
+        from rest_framework.exceptions import AuthenticationFailed
+
         raw = (attrs.get("email") or attrs.get("username") or "").strip()
-        if self.username_field == "email":
-            # Resolve case-insensitive email → canonical username field
-            if raw:
-                match = User.objects.filter(email__iexact=raw).first()
-                attrs["email"] = match.email if match else raw
-                attrs["username"] = attrs["email"]
-            else:
-                attrs["username"] = attrs.get("email") or attrs.get("username")
-        else:
-            attrs[self.username_field] = attrs.get(self.username_field) or attrs.get("username") or raw
-        data = super().validate(attrs)
-        user = self.user
+        password = attrs.get("password") or ""
+        if not raw or not password:
+            raise AuthenticationFailed("Email and password are required.")
+
+        # Case-insensitive email match (parents often mistype case)
+        user = User.objects.filter(email__iexact=raw).first()
+        if user is None:
+            raise AuthenticationFailed("No account found with this email.")
+
         if not getattr(user, "is_active", True):
-            from rest_framework.exceptions import AuthenticationFailed
-            raise AuthenticationFailed("This account is inactive. Contact the school office.")
+            raise AuthenticationFailed(
+                "This account is inactive. Contact the school office."
+            )
+
+        if not user.check_password(password):
+            raise AuthenticationFailed("Incorrect password.")
+
+        if not getattr(user, "is_active", True):
+            raise AuthenticationFailed("This account is inactive.")
+
+        # Build JWT the same way SimpleJWT does
+        refresh = self.get_token(user)
+        self.user = user
+        data = {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+        }
+        # Optional extras for the client
+        data["email"] = user.email
+        data["role"] = user.role
         return data
 
 
