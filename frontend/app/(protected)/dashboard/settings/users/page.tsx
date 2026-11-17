@@ -91,6 +91,31 @@ const FALLBACK_ROLES: Role[] = [
   { id: "16", code: "STUDENT", name: "Student", description: "Student portal access", module_ids: [] },
 ];
 
+
+/** Normalize API role values to string codes for badges / multi-select */
+function asRoleCodes(raw: unknown, fallback?: unknown): string[] {
+  const out: string[] = [];
+  const push = (v: unknown) => {
+    if (v == null || v === "") return;
+    if (typeof v === "string") {
+      out.push(v);
+      return;
+    }
+    if (typeof v === "object" && v !== null) {
+      const o = v as { code?: string; name?: string };
+      const c = o.code || o.name;
+      if (c) out.push(String(c));
+    }
+  };
+  if (Array.isArray(raw) && raw.length) {
+    raw.forEach(push);
+  } else {
+    push(raw);
+    push(fallback);
+  }
+  return Array.from(new Set(out.filter(Boolean)));
+}
+
 export default function UsersSettingsPage() {
   const { currentSchool } = useCurrentSchool();
 
@@ -184,8 +209,16 @@ export default function UsersSettingsPage() {
 
       // Users
       const usersRes = await api.get(`/accounts/schools/${currentSchool.id}/users/`);
-      const loadedUsers = usersRes.data.map((u: any) => {
-        const match = loadedRoles.find((r) => r.code === u.role);
+      const userRows = Array.isArray(usersRes.data)
+        ? usersRes.data
+        : usersRes.data?.results || [];
+      const loadedUsers = userRows.map((u: any) => {
+        const primaryCode =
+          typeof u.role === "string"
+            ? u.role
+            : u.role?.code || u.role_codes?.[0]?.code || u.role_codes?.[0] || "UNKNOWN";
+        const codes = asRoleCodes(u.role_codes?.length ? u.role_codes : u.roles, primaryCode);
+        const match = loadedRoles.find((r) => r.code === primaryCode || codes.includes(r.code));
         return {
           id: u.id,
           first_name: u.first_name || "",
@@ -193,12 +226,14 @@ export default function UsersSettingsPage() {
           email: u.email,
           role: {
             id: match?.id || "0",
-            code: u.role || "UNKNOWN",
-            name: match?.name || u.role || "Unknown",
+            code: String(primaryCode),
+            name: match?.name || String(primaryCode),
             description: match?.description || "",
-            module_ids: [],
+            module_ids: match?.module_ids || [],
           },
-          is_active: u.is_active ?? true, // fallback
+          role_codes: codes,
+          extra_module_ids: (u.extra_module_ids || []).map(Number),
+          is_active: u.is_active ?? true,
         };
       });
       setUsers(loadedUsers);
@@ -304,13 +339,14 @@ export default function UsersSettingsPage() {
   // Open edit user dialog
   const openEditUser = (user: User) => {
     setEditingUser(user);
-    const codes =
-      (user as any).role_codes ||
-      (user.role?.code ? [user.role.code] : []);
+    const codes = asRoleCodes(
+      (user as any).role_codes,
+      user.role?.code || user.role?.name
+    );
     setEditForm({
       first_name: user.first_name,
       last_name: user.last_name,
-      role_code: user.role?.code || codes[0] || "",
+      role_code: codes[0] || user.role?.code || "",
       role_codes: codes,
       extra_module_ids: (user as any).extra_module_ids || [],
       is_active: user.is_active ?? true,
@@ -638,11 +674,13 @@ export default function UsersSettingsPage() {
                           <TableCell>{user.email}</TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
-                              {((user as any).role_codes?.length
-                                ? (user as any).role_codes
-                                : [user.role?.code || user.role?.name]
-                              ).map((c: string) => (
-                                <Badge key={c} variant="secondary">{c}</Badge>
+                              {asRoleCodes(
+                                (user as any).role_codes,
+                                user.role?.code || user.role?.name
+                              ).map((c) => (
+                                <Badge key={c} variant="secondary">
+                                  {c}
+                                </Badge>
                               ))}
                             </div>
                           </TableCell>
