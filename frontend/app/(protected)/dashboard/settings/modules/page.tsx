@@ -25,6 +25,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
 /* ---------------------------------- */
+/* Placeholder modules (not product-ready) */
+/* ---------------------------------- */
+const SHELL_MODULE_CODES = new Set([
+  "events",
+  "health",
+  "alumni",
+  "elearning",
+  "inventory",
+  "procurement",
+]);
+
+/* ---------------------------------- */
 /* Types                               */
 /* ---------------------------------- */
 interface Module {
@@ -100,6 +112,14 @@ export default function ModulesSettingsPage() {
   }, [currentSchool]);
 
   const toggleModule = (moduleId: number) => {
+    const mod = allModules.find((m) => m.id === moduleId);
+    const enabling = !enabledModuleIds.includes(moduleId);
+    if (enabling && mod && SHELL_MODULE_CODES.has(mod.code)) {
+      toast.message("Not available yet", {
+        description: `${mod.name} is still under construction and cannot be enabled.`,
+      });
+      return;
+    }
     setEnabledModuleIds((prev) =>
       prev.includes(moduleId)
         ? prev.filter((id) => id !== moduleId)
@@ -186,7 +206,7 @@ export default function ModulesSettingsPage() {
                         </Badge>
                       </div>
                       <CardTitle className="mt-5 text-xl font-semibold text-gray-900">
-                        {module.name}
+                        {module.name}{SHELL_MODULE_CODES.has(module.code) ? " (Coming soon)" : ""}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-2">
@@ -233,6 +253,9 @@ export default function ModulesSettingsPage() {
                       </div>
                       <CardTitle className="mt-5 text-xl font-semibold text-gray-900">
                         {module.name}
+                        {SHELL_MODULE_CODES.has(module.code) ? (
+                          <span className="ml-2 text-xs font-normal text-amber-700">(Coming soon)</span>
+                        ) : null}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-2">

@@ -83,8 +83,9 @@ class SchoolSessionSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         try:
-            from apps.school.module_seed import ensure_school_core_modules
+            from apps.school.module_seed import ensure_school_core_modules, prune_school_shell_modules
             ensure_school_core_modules(instance)
+            prune_school_shell_modules(instance)
         except Exception:
             pass
         return super().to_representation(instance)
@@ -123,8 +124,9 @@ class SchoolSessionSerializer(serializers.ModelSerializer):
 class SchoolSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         try:
-            from apps.school.module_seed import ensure_school_core_modules
+            from apps.school.module_seed import ensure_school_core_modules, prune_school_shell_modules
             ensure_school_core_modules(instance)
+            prune_school_shell_modules(instance)
         except Exception:
             pass
         return super().to_representation(instance)

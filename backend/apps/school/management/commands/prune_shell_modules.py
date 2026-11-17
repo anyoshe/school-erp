@@ -10,7 +10,7 @@ from apps.school.module_seed import (
 
 class Command(BaseCommand):
     help = (
-        "Remove placeholder modules (library, transport, …) from schools and "
+        "Remove placeholder modules (health, inventory, elearning, …) from schools and "
         "ensure core modules remain attached."
     )
 

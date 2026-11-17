@@ -96,7 +96,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
 
   const enabledModules = currentSchool?.modules || [];
 
-  // Product core — used only when school has no module list yet
+  // Product core — shown when school has no module list, and always ensured
   const CORE_MODULE_CODES = [
     "admissions",
     "students",
@@ -105,16 +105,16 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
     "attendance",
     "staff",
     "parent_portal",
+    "library",
+    "transport",
     "reports",
   ];
 
-  // Placeholder modules: never inject unless the school explicitly enabled them
+  // Placeholder modules — never show in sidebar (Phase A product honesty)
   const SHELL_MODULE_CODES = new Set([
-    "library",
     "events",
     "health",
     "alumni",
-    "transport",
     "elearning",
     "inventory",
     "procurement",
@@ -132,12 +132,10 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
     }
   } else {
     for (const code of schoolCodes) {
-      if (SHELL_MODULE_CODES.has(code) && !schoolCodes.includes(code)) continue;
+      if (SHELL_MODULE_CODES.has(code)) continue; // hard gate stubs
       const item = MODULE_CONFIG[code];
       if (item) uniqueModuleItems.set(code, item);
     }
-    // Always keep core operational modules visible even if an older school
-    // lost them from the M2M — still prefer not to force shells.
     for (const code of CORE_MODULE_CODES) {
       if (!uniqueModuleItems.has(code) && MODULE_CONFIG[code]) {
         uniqueModuleItems.set(code, MODULE_CONFIG[code]);

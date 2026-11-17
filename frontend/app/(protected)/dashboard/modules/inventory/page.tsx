@@ -1,47 +1,37 @@
-// app/(protected)/dashboard/modules/inventory/page.tsx
 "use client";
 
-import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Package, AlertCircle } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
-export default function InventoryPage() {
-  const { currentSchool } = useCurrentSchool();
-
+/** Phase A: module is not product-ready — kept out of default nav. */
+export default function InventoryPagePlaceholderPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50/50 via-slate-50 to-primary-50/30 p-6 md:p-10">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-10">
-          <h1 className="text-4xl font-bold text-slate-900">Inventory & Assets</h1>
-          <p className="text-lg text-slate-600 mt-3">
-            Track textbooks, equipment, furniture, and school assets
+    <div className="min-h-[60vh] flex items-center justify-center p-6">
+      <Card className="max-w-lg w-full rounded-2xl shadow-sm">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <AlertCircle className="h-5 w-5 text-amber-500" />
+            Inventory
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm text-slate-600">
+          <p>
+            This module is not enabled in the product yet. It is intentionally hidden from the
+            main menu so staff are not sent to an unfinished screen.
           </p>
-        </div>
-
-        {/* Coming Soon / Placeholder */}
-        <Card className="bg-white/70 backdrop-blur-xl border border-white/30 rounded-3xl shadow-2xl overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-primary-600 to-primary-900 text-white">
-            <div className="flex items-center gap-4">
-              <Package className="h-8 w-8" />
-              <CardTitle className="text-2xl">Inventory Management</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="p-8 text-center space-y-6">
-            <AlertCircle className="h-16 w-16 mx-auto text-amber-500" />
-            <h2 className="text-2xl font-semibold text-slate-800">
-              Module Under Construction
-            </h2>
-            <p className="text-slate-600 max-w-2xl mx-auto">
-              This powerful feature for tracking and managing school assets is coming soon. 
-              You'll be able to monitor stock levels, log issuances, run audits, and generate reports.
-            </p>
-            <div className="text-sm text-slate-500">
-              Expected: Q1 2026
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          <p className="text-xs text-muted-foreground">
+            Use Admissions, Students, Finance, Academics, Attendance, Library, Transport, HR, and
+            Reports for day-to-day operations.
+          </p>
+          <Link
+            href="/dashboard"
+            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+          >
+            Back to dashboard
+          </Link>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -32,6 +32,9 @@ CORE_MODULE_CODES = (
     "attendance",
     "staff",
     "parent_portal",
+    "library",
+    "transport",
+    "reports",
 )
 
 # Present in catalogue but not auto-enabled (Coming soon / optional)

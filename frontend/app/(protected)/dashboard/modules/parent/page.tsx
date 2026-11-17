@@ -387,6 +387,21 @@ export default function ParentPortalPage() {
                 </div>
               ) : feesQ.data ? (
                 <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
+                    <p className="text-xs text-muted-foreground">
+                      Fee statement for {activeChild?.full_name || "learner"}
+                      {activeChild?.admission_number ? ` · ${activeChild.admission_number}` : ""}
+                    </p>
+                    <Button variant="outline" size="sm" onClick={() => window.print()}>
+                      Print fee statement
+                    </Button>
+                  </div>
+                  <div className="hidden print:block text-sm mb-3">
+                    <p className="font-semibold text-base">Fee statement</p>
+                    <p>
+                      {activeChild?.full_name} · {activeChild?.admission_number || "—"}
+                    </p>
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     <Card>
                       <CardContent className="p-3 text-sm">
