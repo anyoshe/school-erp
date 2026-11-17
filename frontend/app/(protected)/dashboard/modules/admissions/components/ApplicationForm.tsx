@@ -364,7 +364,7 @@ export default function ApplicationForm({
               </div>
 
               <div>
-                <Label>Passport-size Photo</Label>
+                <Label>Passport-size Photo (optional)</Label>
                 <Controller
                   name="photo"
                   control={control}
@@ -372,7 +372,7 @@ export default function ApplicationForm({
                     <div className="space-y-2">
                       <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded border flex items-center gap-2 w-fit">
                         <Upload className="h-4 w-4" />
-                        Upload Photo
+                        Upload photo (optional)
                         <input
                           type="file"
                           accept="image/*"
@@ -593,14 +593,12 @@ export default function ApplicationForm({
                     <h3 className="text-lg font-medium mb-4">Entry Requirements (Primary Level)</h3>
                   </div>
                   <div>
-                    <Label>Birth Certificate Number {isElementary ? "*" : ""}</Label>
+                    <Label>Birth Certificate Number (optional)</Label>
                     <Controller
                       name="birth_certificate_number"
                       control={control}
-                      rules={{ required: isElementary ? "Required for primary admission" : false }}
-                      render={({ field }) => <Input {...field} placeholder="Birth certificate / registration number" />}
+                      render={({ field }) => <Input {...field} placeholder="If available — birth certificate / registration number" />}
                     />
-                    {errors.birth_certificate_number && <p className="text-red-500 text-sm mt-1">{errors.birth_certificate_number.message}</p>}
                   </div>
 
                   <div className="md:col-span-2">
@@ -668,7 +666,8 @@ export default function ApplicationForm({
                 <div>
                   <h3 className="text-lg font-medium mb-3">Upload Supporting Documents</h3>
                   <p className="text-sm text-gray-500 mb-4">
-                    Birth certificate, passport photo, previous reports, immunization card, ID, etc.
+                    Optional supporting documents if available: birth certificate, photo, previous reports,
+                    immunization card, ID. Enrollment is not blocked when these are missing.
                   </p>
                   <DocumentUpload files={documents} onFilesChange={setDocuments} initialFiles={((initialData as { documents?: { name: string; url: string }[] }).documents || []).map((doc) => ({
                     id: doc.url,

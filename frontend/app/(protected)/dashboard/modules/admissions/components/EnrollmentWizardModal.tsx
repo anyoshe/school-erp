@@ -968,18 +968,13 @@ export default function EnrollmentWizardModal({
   const validateStep = (step: number) => {
     switch (step) {
       case 1: {
-        // identity step
-
-        const hasPhoto = !!formData.profile_photo || !!applicationData.photo;
-        return (
-          formData.first_name &&
-          formData.last_name &&
+        // Identity: core bio required; photo & birth certificate are optional
+        return Boolean(
+          String(formData.first_name || "").trim() &&
+          String(formData.last_name || "").trim() &&
           formData.date_of_birth &&
           formData.gender &&
-          formData.nationality &&
-          (formData.birth_certificate_number || formData.passport_number) &&
-          hasPhoto &&
-          formData.birth_certificate_file
+          String(formData.nationality || "").trim()
         );
       }
       case 2:
@@ -1020,7 +1015,36 @@ export default function EnrollmentWizardModal({
       snapshotBaseline(formData);
       setCurrentStep((prev) => Math.min(prev + 1, totalSteps));
     } else {
-      if (currentStep === 6) {
+      if (currentStep === 1) {
+        const missing: string[] = [];
+        if (!String(formData.first_name || "").trim()) missing.push("First name");
+        if (!String(formData.last_name || "").trim()) missing.push("Last name");
+        if (!formData.date_of_birth) missing.push("Date of birth");
+        if (!formData.gender) missing.push("Gender");
+        if (!String(formData.nationality || "").trim()) missing.push("Nationality");
+        toast.error(
+          missing.length
+            ? `Required: ${missing.join(", ")}. Photo and birth certificate are optional.`
+            : "Please complete required identity fields."
+        );
+      } else if (currentStep === 3) {
+        const missing: string[] = [];
+        if (!formData.current_class) missing.push("Class / grade");
+        if (!String(formData.section || "").trim()) missing.push("Section");
+        if (formData.boarding_status === "BOARDING") {
+          if (!String(formData.house || "").trim()) missing.push("House");
+          if (!String(formData.dorm_room || "").trim()) missing.push("Dorm / room");
+        }
+        toast.error(missing.length ? `Required: ${missing.join(", ")}` : "Complete placement fields.");
+      } else if (currentStep === 4) {
+        toast.error("Select vaccination status (required). Immunization card upload is optional.");
+      } else if (currentStep === 5) {
+        const missing: string[] = [];
+        if (!String(formData.guardian_name || "").trim()) missing.push("Guardian name");
+        if (!String(formData.guardian_phone || "").trim()) missing.push("Guardian phone");
+        if (!String(formData.guardian_national_id || "").trim()) missing.push("Guardian national ID");
+        toast.error(missing.length ? `Required: ${missing.join(", ")}` : "Complete guardian fields.");
+      } else if (currentStep === 6) {
         if (!String(formData.enrollment_term || "").trim()) {
           toast.error("Select the term the student is enrolling into.");
         } else if (!String(formData.enrollment_academic_year || "").trim()) {
@@ -1031,7 +1055,7 @@ export default function EnrollmentWizardModal({
           toast.error("Complete the enrollment checklist.");
         }
       } else {
-        toast.error("Please complete all required fields.");
+        toast.error("Please complete all required fields marked with *.");
       }
     }
   };
@@ -1153,7 +1177,7 @@ export default function EnrollmentWizardModal({
                 { label: "Date of Birth *", key: "date_of_birth", type: "date" },
                 { label: "Nationality *", key: "nationality" },
                 { label: "Learner ID / UPI", key: "learner_id" },
-                { label: "Birth Certificate Number *", key: "birth_certificate_number" },
+                { label: "Birth Certificate Number (optional)", key: "birth_certificate_number" },
                 { label: "Passport Number (non-Citizen)", key: "passport_number" },
               ].map(({ label, key, type = "text" }) => (
                 <div key={key}>
@@ -1249,7 +1273,10 @@ export default function EnrollmentWizardModal({
             </div>
 
             <div>
-              <Label>Student Photo * (for ID card & records)</Label>
+              <Label>Student Photo (optional — for ID card & records)</Label>
+              <p className="text-xs text-muted-foreground mb-1">
+                Not required to enroll. Attach later if the learner does not have one today.
+              </p>
 
               {/* Show existing photo if available */}
               {applicationData.photo && (
@@ -1303,7 +1330,7 @@ export default function EnrollmentWizardModal({
                     </svg>
                   </div>
                   <span className="text-sm font-medium text-primary-700">
-                    {applicationData.photo ? "Replace Photo" : "Upload New Photo"}
+                    {applicationData.photo ? "Replace photo (optional)" : "Upload photo (optional)"}
                   </span>
                   <span className="text-xs text-slate-500">
                     JPG, PNG • Max 5MB
@@ -1320,7 +1347,10 @@ export default function EnrollmentWizardModal({
             </div>
 
             <div>
-              <Label>Birth Certificate Upload * (PDF/Image – required for NEMIS)</Label>
+              <Label>Birth Certificate Upload (optional — PDF/Image if available)</Label>
+              <p className="text-xs text-muted-foreground mb-1">
+                Optional. Upload only when the document is available (e.g. for NEMIS later).
+              </p>
               <Input
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"

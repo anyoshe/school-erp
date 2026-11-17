@@ -743,7 +743,11 @@ class Application(models.Model):
             date_of_birth=dob,
             nationality=_w("nationality", self.nationality),
             religion=_w("religion", self.religion),
-            photo=self.photo,
+            photo=(
+                wd.get("profile_photo")
+                or wd.get("photo")
+                or self.photo
+            ),
             address=_w("address", self.address),
             region=_w("region", self.region),
             district=_w("district", self.district),
