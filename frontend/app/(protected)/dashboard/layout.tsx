@@ -1,12 +1,43 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { getToken } from "@/utils/auth";
 import { CurrentSchoolProvider } from "@/contexts/CurrentSchoolContext";
 import Sidebar from "./components/layout/Sidebar";
 import Navbar from "./components/layout/Navbar";
+
+const PARENT_HOME = "/dashboard/modules/parent";
+
+function isParentUser(user: { role?: string; role_codes?: string[] } | null | undefined) {
+  if (!user) return false;
+  const primary = (user.role || "").toUpperCase();
+  const codes = new Set((user.role_codes || []).map((c) => String(c).toUpperCase()));
+  if (primary) codes.add(primary);
+  if (!codes.has("PARENT")) return false;
+  const staff = [
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+    "PRINCIPAL",
+    "DEPUTY_PRINCIPAL",
+    "MANAGER",
+    "TEACHER",
+    "LIBRARIAN",
+    "ACCOUNTANT",
+    "BURSAR",
+    "SECRETARY",
+  ];
+  return !staff.some((s) => codes.has(s));
+}
+
+function parentAllowedPath(path: string) {
+  if (path === PARENT_HOME || path.startsWith(PARENT_HOME + "/")) return true;
+  // allow password change / minimal account paths
+  if (path.startsWith("/dashboard/settings/account")) return true;
+  if (path.startsWith("/login")) return true;
+  return false;
+}
 
 /**
  * Always render the same shell on server and client.
@@ -14,6 +45,7 @@ import Navbar from "./components/layout/Navbar";
  */
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, loading } = useCurrentUser();
   const [mounted, setMounted] = useState(false);
 
@@ -25,8 +57,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     if (!mounted || loading) return;
     if (!getToken() && !user) {
       router.replace("/login");
+      return;
     }
-  }, [mounted, loading, user, router]);
+    if (user && isParentUser(user) && pathname && !parentAllowedPath(pathname)) {
+      router.replace(PARENT_HOME);
+    }
+  }, [mounted, loading, user, router, pathname]);
 
   return (
     <CurrentSchoolProvider>

@@ -139,6 +139,29 @@ class User(AbstractBaseUser, PermissionsMixin):
             mod_codes.update(self.extra_modules.values_list("code", flat=True))
         except Exception:
             pass
+
+        # Pure parent accounts: parent portal only (no staff modules)
+        primary = (self.role or "").strip().upper()
+        staffish = {
+            "SUPER_ADMIN",
+            "SCHOOL_ADMIN",
+            "PRINCIPAL",
+            "DEPUTY_PRINCIPAL",
+            "MANAGER",
+            "TEACHER",
+            "LIBRARIAN",
+            "ACCOUNTANT",
+            "BURSAR",
+            "SECRETARY",
+            "ADMISSIONS_OFFICER",
+            "ACADEMIC_COORDINATOR",
+            "HR_MANAGER",
+        }
+        if primary == "PARENT" and not (codes & staffish):
+            return {"parent_portal"}
+        if codes == {"PARENT"} or codes <= {"PARENT"}:
+            return {"parent_portal"}
+
         return mod_codes
 
     USERNAME_FIELD = 'email'

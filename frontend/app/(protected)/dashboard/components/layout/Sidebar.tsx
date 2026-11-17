@@ -146,20 +146,48 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
   }
 
   // Role-based module filter (intersection with school modules)
-  const userModuleCodes = user?.module_codes;
+  const roleUpper = (user?.role || "").toUpperCase();
+  const roleCodeSet = new Set(
+    (user?.role_codes || []).map((c) => String(c).toUpperCase())
+  );
+  if (roleUpper) roleCodeSet.add(roleUpper);
+
+  const isParentOnly =
+    roleUpper === "PARENT" ||
+    (roleCodeSet.has("PARENT") &&
+      !["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "DEPUTY_PRINCIPAL", "MANAGER", "TEACHER"].some(
+        (r) => roleCodeSet.has(r)
+      ));
+
+  const userModuleCodes = isParentOnly
+    ? ["parent_portal"]
+    : user?.module_codes;
+
   const allowAllModules =
-    user?.is_superuser ||
-    !userModuleCodes ||
-    userModuleCodes.includes("*") ||
-    ["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL"].includes(
-      (user?.role || "").toUpperCase()
-    );
-  if (!allowAllModules && userModuleCodes?.length) {
-    const allow = new Set(userModuleCodes.map((c) => c.toLowerCase()));
+    !isParentOnly &&
+    (user?.is_superuser ||
+      userModuleCodes?.includes("*") ||
+      ["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "DEPUTY_PRINCIPAL", "MANAGER"].includes(
+        roleUpper
+      ));
+
+  if (isParentOnly) {
+    uniqueModuleItems.clear();
+    uniqueModuleItems.set("parent_portal", {
+      label: "My children",
+      icon: Users,
+      href: "/dashboard/modules/parent",
+    });
+  } else if (!allowAllModules && userModuleCodes?.length) {
+    const allow = new Set(userModuleCodes.map((c) => String(c).toLowerCase()));
     for (const code of Array.from(uniqueModuleItems.keys())) {
       if (!allow.has(code.toLowerCase())) {
         uniqueModuleItems.delete(code);
       }
+    }
+    // Parent portal for staff remains admin link; parents handled above
+    if (uniqueModuleItems.has("parent_portal")) {
+      // keep staff parent-portal management URL from MODULE_CONFIG
     }
   }
 
@@ -232,7 +260,13 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
           {/* Dashboard */}
           <li>
             <Link
-              href={isPlatformAdmin && !currentSchool ? "/platform-admin" : "/dashboard"}
+              href={
+                isParentOnly
+                  ? "/dashboard/modules/parent"
+                  : isPlatformAdmin && !currentSchool
+                    ? "/platform-admin"
+                    : "/dashboard"
+              }
               onClick={handleNavigate}
                   className={clsx(
                 "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
@@ -268,7 +302,8 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
             );
           })}
 
-          {/* Early warning */}
+          {/* Early warning — staff only */}
+          {!isParentOnly && (
           <li>
             <Link
               href="/dashboard/modules/risks"
@@ -284,9 +319,10 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
               {!isCollapsed && <span>Risk center</span>}
             </Link>
           </li>
+          )}
 
-          {/* Settings */}
-          {(!isPlatformAdmin || Boolean(currentSchool)) && (
+          {/* Settings — staff only */}
+          {!isParentOnly && (!isPlatformAdmin || Boolean(currentSchool)) && (
           <li>
             <button
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
@@ -344,8 +380,8 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
           </li>
           )}
 
-          {/* Add School */}
-          {!isPlatformAdmin && (
+          {/* Add School — staff only */}
+          {!isParentOnly && !isPlatformAdmin && (
           <li>
             <button
               onClick={() => { handleNavigate(); window.location.href = "/onboarding/setup?mode=new"; }}
