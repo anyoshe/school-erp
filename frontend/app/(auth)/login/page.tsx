@@ -98,12 +98,23 @@ export default function Welcome() {
     } catch (err: any) {
       console.error("Authentication error:", err);
 
-      const errorMessage =
+      let errorMessage =
         err?.response?.data?.detail ||
         err?.response?.data?.email?.[0] ||
         err?.response?.data?.password?.[0] ||
         err?.message ||
         "Authentication failed. Please try again.";
+
+      if (
+        typeof errorMessage === "string" &&
+        /incorrect password|invalid email or password|no account found/i.test(
+          errorMessage
+        )
+      ) {
+        errorMessage =
+          errorMessage +
+          " If you were invited by the school, use the temporary password from the invite SMS/email, or ask the school office to reset it.";
+      }
 
       setError(errorMessage);
     } finally {

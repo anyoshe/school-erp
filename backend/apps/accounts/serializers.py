@@ -59,7 +59,8 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         from rest_framework.exceptions import AuthenticationFailed
 
         raw = (attrs.get("email") or attrs.get("username") or "").strip()
-        password = attrs.get("password") or ""
+        # Outer whitespace only — avoids copy/paste failures from SMS/email
+        password = (attrs.get("password") or "").strip()
         if not raw or not password:
             raise AuthenticationFailed("Email and password are required.")
 
