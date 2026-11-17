@@ -19,6 +19,7 @@ from .serializers import (
     UserSerializer,
     UserCreateSerializer,
     UserUpdateSerializer,
+    UserUpdateSerializer,
     PermissionSerializer,
     UserPermissionSerializer,
     CurrentUserSerializer,
@@ -44,7 +45,7 @@ class CurrentUserView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        user = User.objects.prefetch_related('schools__modules').get(pk=request.user.pk)
+        user = User.objects.prefetch_related('schools__modules', 'roles__modules', 'extra_modules').get(pk=request.user.pk)
         # Parents invited before membership fix: attach school from guardian links
         if (getattr(user, "role", "") or "").upper() == "PARENT":
             try:
@@ -66,7 +67,7 @@ class CurrentUserView(APIView):
                 user = User.objects.prefetch_related("schools__modules").get(pk=user.pk)
             except Exception:
                 pass
-        serializer = CurrentUserSerializer(user)
+        serializer = CurrentUserSerializer(user, context={"request": request})
         return Response(serializer.data)
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all().order_by('-created_at')
@@ -188,6 +189,8 @@ class SchoolUserViewSet(viewsets.ModelViewSet):
     def get_serializer_class(self):
         if self.action == 'create':
             return UserCreateSerializer
+        if self.action in ('update', 'partial_update'):
+            return UserUpdateSerializer
         return UserSerializer
 
     def create(self, request, *args, **kwargs):
@@ -202,6 +205,14 @@ class SchoolUserViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
 
         user = serializer.save()
+        # Multi-role from request (create serializer also handles; belt-and-braces)
+        from apps.accounts.serializers import apply_user_roles_and_modules
+        apply_user_roles_and_modules(
+            user,
+            role_codes=request.data.get("role_codes") or request.data.get("roles"),
+            extra_module_ids=request.data.get("extra_module_ids"),
+            primary_role=request.data.get("role"),
+        )
 
         # Link user to this school
         # If ManyToMany:

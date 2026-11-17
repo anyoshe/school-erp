@@ -22,17 +22,21 @@ class UserManager(BaseUserManager):
 
 class User(AbstractBaseUser, PermissionsMixin):
     class Role(models.TextChoices):
-        SUPER_ADMIN        = "SUPER_ADMIN",        "Super Admin / Owner"
-        SCHOOL_ADMIN       = "SCHOOL_ADMIN",       "School Administrator"
-        PRINCIPAL          = "PRINCIPAL",          "Principal / Head Teacher"
-        DEPUTY_PRINCIPAL   = "DEPUTY_PRINCIPAL",   "Deputy Principal / Vice Principal"
-        ADMISSIONS_OFFICER = "ADMISSIONS_OFFICER", "Admissions Officer / Registrar"
-        ACCOUNTANT         = "ACCOUNTANT",         "Accountant / Bursar"
+        SUPER_ADMIN          = "SUPER_ADMIN",          "Super Admin / Owner"
+        SCHOOL_ADMIN         = "SCHOOL_ADMIN",         "School Administrator"
+        PRINCIPAL            = "PRINCIPAL",            "Principal / Head Teacher"
+        DEPUTY_PRINCIPAL     = "DEPUTY_PRINCIPAL",     "Deputy Principal / Vice Principal"
+        MANAGER              = "MANAGER",              "School Manager"
+        ADMISSIONS_OFFICER   = "ADMISSIONS_OFFICER",   "Admissions Officer / Registrar"
+        ACCOUNTANT           = "ACCOUNTANT",           "Accountant / Bursar"
+        BURSAR               = "BURSAR",               "Bursar"
         ACADEMIC_COORDINATOR = "ACADEMIC_COORDINATOR", "Academic Coordinator / Head of Section"
-        TEACHER            = "TEACHER",            "Teacher"
-        LIBRARIAN          = "LIBRARIAN",          "Librarian"
-        PARENT             = "PARENT",             "Parent"
-        STUDENT            = "STUDENT",            "Student"
+        TEACHER              = "TEACHER",              "Teacher"
+        LIBRARIAN            = "LIBRARIAN",            "Librarian"
+        SECRETARY            = "SECRETARY",            "Secretary / Admin Assistant"
+        HR_MANAGER           = "HR_MANAGER",           "HR Manager"
+        PARENT               = "PARENT",               "Parent"
+        STUDENT              = "STUDENT",              "Student"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     first_name = models.CharField(max_length=150, blank=True)
@@ -42,6 +46,21 @@ class User(AbstractBaseUser, PermissionsMixin):
         max_length=30,
         choices=Role.choices,
         default=Role.SUPER_ADMIN,
+        help_text="Primary role (legacy / login default). Prefer assigned roles M2M for multi-role.",
+    )
+    # Multi-role: teacher can also be librarian, manager, etc.
+    roles = models.ManyToManyField(
+        "Role",
+        blank=True,
+        related_name="assigned_users",
+        help_text="All roles granted to this user (union of module access).",
+    )
+    # Extra modules beyond role defaults (grant more access)
+    extra_modules = models.ManyToManyField(
+        "school.Module",
+        blank=True,
+        related_name="users_with_extra_access",
+        help_text="Additional modules granted on top of role defaults.",
     )
     password_changed_at = models.DateTimeField(null=True, blank=True)
     force_change_password = models.BooleanField(default=False, help_text="User must change password on next login")
@@ -65,6 +84,62 @@ class User(AbstractBaseUser, PermissionsMixin):
         help_text="Specific permissions for this user.",
         verbose_name="user permissions"
     )
+
+    def get_role_codes(self):
+        """Primary role + all assigned Role codes."""
+        codes = set()
+        primary = (self.role or "").strip().upper()
+        if primary:
+            codes.add(primary)
+        try:
+            codes.update(
+                c.upper() for c in self.roles.values_list("code", flat=True) if c
+            )
+        except Exception:
+            pass
+        return codes
+
+    def get_effective_module_codes(self, school=None):
+        """
+        Union of modules from all roles + extra_modules.
+        Super/school admin/principal: all modules on the school (or unrestricted).
+        """
+        codes = self.get_role_codes()
+        elevated = {
+            "SUPER_ADMIN",
+            "SCHOOL_ADMIN",
+            "PRINCIPAL",
+            "DEPUTY_PRINCIPAL",
+            "MANAGER",
+        }
+        if self.is_superuser or (codes & elevated):
+            if school is not None:
+                try:
+                    return set(school.modules.values_list("code", flat=True))
+                except Exception:
+                    return set()
+            return None  # unrestricted
+
+        mod_codes = set()
+        try:
+            for role in self.roles.prefetch_related("modules").all():
+                mod_codes.update(role.modules.values_list("code", flat=True))
+        except Exception:
+            pass
+        # Primary role code → Role row modules
+        if primary := (self.role or "").strip().upper():
+            try:
+                from apps.accounts.models import Role as RoleModel
+                r = RoleModel.objects.filter(code__iexact=primary).prefetch_related("modules").first()
+                if r:
+                    mod_codes.update(r.modules.values_list("code", flat=True))
+            except Exception:
+                pass
+        try:
+            mod_codes.update(self.extra_modules.values_list("code", flat=True))
+        except Exception:
+            pass
+        return mod_codes
 
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = []

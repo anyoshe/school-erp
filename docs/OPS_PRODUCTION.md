@@ -81,3 +81,16 @@ Confirm one absence SMS and one fee reminder in LOG or live before calling notif
 - **Transport day sheet:** Transport → Load day sheet → Print.
 - **Offer SMS:** Admissions offer letter → Finalize + SMS (needs Africa’s Talking env).
 - Migrate: `python manage.py migrate academics` (0007 timetable).
+
+
+## Roles & module access
+
+```bash
+python manage.py migrate accounts
+python manage.py seed_roles --sync-modules
+```
+
+- Users may hold **multiple roles** (e.g. TEACHER + LIBRARIAN).
+- Effective modules = **union** of all role module maps + optional **extra modules**.
+- Sidebar shows school modules ∩ user modules (admins/principal see all school modules).
+- Manage in **Settings → Users & Roles**.

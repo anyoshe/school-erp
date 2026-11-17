@@ -6,12 +6,51 @@ from django.contrib.auth import get_user_model
 from apps.school.models import School, Module  # adjust import path if needed
 
 User = get_user_model()
+
+
+def apply_user_roles_and_modules(user, role_codes=None, extra_module_ids=None, primary_role=None):
+    """Assign multi-roles and optional extra modules; sync primary role field."""
+    from apps.accounts.models import Role
+    from apps.school.models import Module
+
+    codes = []
+    if role_codes is not None:
+        if isinstance(role_codes, str):
+            codes = [c.strip().upper() for c in role_codes.split(",") if c.strip()]
+        else:
+            codes = [str(c).strip().upper() for c in role_codes if str(c).strip()]
+    if primary_role and str(primary_role).strip().upper() not in codes:
+        codes.insert(0, str(primary_role).strip().upper())
+    if not codes and user.role:
+        codes = [user.role]
+
+    role_objs = list(Role.objects.filter(code__in=codes))
+    if role_codes is not None or primary_role:
+        user.roles.set(role_objs)
+        if codes:
+            user.role = codes[0]
+            user.save(update_fields=["role"])
+
+    if extra_module_ids is not None:
+        ids = []
+        for x in extra_module_ids:
+            try:
+                ids.append(int(x))
+            except (TypeError, ValueError):
+                continue
+        user.extra_modules.set(Module.objects.filter(pk__in=ids))
+    return user
+
 class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
         token['email'] = user.email
         token['role'] = user.role
+        try:
+            token['roles'] = sorted(user.get_role_codes())
+        except Exception:
+            token['roles'] = [user.role] if user.role else []
         return token
 
     def validate(self, attrs):
@@ -49,33 +88,113 @@ class UserSerializer(serializers.ModelSerializer):
     - now includes first_name & last_name
     """
     full_name = serializers.SerializerMethodField()
+    role_codes = serializers.SerializerMethodField()
+    roles = serializers.SerializerMethodField()
+    module_codes = serializers.SerializerMethodField()
+    extra_module_ids = serializers.SerializerMethodField()
+    # Nested shape for legacy frontend: { code, name }
+    role_obj = serializers.SerializerMethodField(method_name="get_role_obj")
 
     class Meta:
         model = User
         fields = [
             'id',
-            'first_name',          
+            'first_name',
             'last_name',
             'email',
             'role',
+            'role_obj',
+            'role_codes',
+            'roles',
+            'module_codes',
+            'extra_module_ids',
             'full_name',
             'is_active',
             'is_staff',
             'created_at',
             'updated_at',
         ]
+        extra_kwargs = {
+            'role': {'required': False},
+        }
+
+    def get_role_obj(self, obj):
+        code = obj.role or ""
+        try:
+            from apps.accounts.models import Role
+            r = Role.objects.filter(code__iexact=code).first()
+            if r:
+                return {"code": r.code, "name": r.name}
+        except Exception:
+            pass
+        return {"code": code, "name": code}
+
+    def get_role_codes(self, obj):
+        try:
+            return sorted(obj.get_role_codes())
+        except Exception:
+            return [obj.role] if obj.role else []
+
+    def get_roles(self, obj):
+        try:
+            rows = list(obj.roles.all())
+            if not rows and obj.role:
+                from apps.accounts.models import Role
+                r = Role.objects.filter(code__iexact=obj.role).first()
+                if r:
+                    rows = [r]
+            return [{"id": str(r.id), "code": r.code, "name": r.name} for r in rows]
+        except Exception:
+            return []
+
+    def get_module_codes(self, obj):
+        request = self.context.get("request")
+        school = None
+        if request is not None:
+            try:
+                from apps.school.support import selected_school
+                school = selected_school(request)
+            except Exception:
+                school = None
+        try:
+            codes = obj.get_effective_module_codes(school=school)
+            if codes is None:
+                return ["*"]
+            return sorted(codes)
+        except Exception:
+            return []
+
+    def get_extra_module_ids(self, obj):
+        try:
+            return list(obj.extra_modules.values_list("id", flat=True))
+        except Exception:
+            return []
 
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}".strip() or obj.email
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Frontend expects role as object {code, name}
+        data["role"] = self.get_role_obj(instance)
+        data.pop("role_obj", None)
+        return data
+
 class UserCreateSerializer(serializers.ModelSerializer):
+    role_codes = serializers.ListField(
+        child=serializers.CharField(), required=False, write_only=True, allow_empty=True
+    )
+    extra_module_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, write_only=True, allow_empty=True
+    )
+
     password = serializers.CharField(write_only=True, required=False)
     temporary_password = serializers.CharField(read_only=True, allow_null=True)  # ← add this
 
     class Meta:
         model = User
         fields = [
-            'id', 'email', 'password', 'role', 'first_name', 'last_name',
+            'id', 'email', 'password', 'role', 'role_codes', 'extra_module_ids', 'first_name', 'last_name',
             'is_active', 'is_staff', 'temporary_password'
         ]
 
@@ -91,6 +210,11 @@ class UserCreateSerializer(serializers.ModelSerializer):
         else:
             print("DEBUG: Password was provided, not generating temp one")
 
+        role_codes = validated_data.pop('role_codes', None)
+        extra_module_ids = validated_data.pop('extra_module_ids', None)
+        # role may be primary
+        primary = validated_data.get('role')
+
         user = User.objects.create_user(
             email=validated_data.pop('email'),
             password=password,
@@ -98,8 +222,15 @@ class UserCreateSerializer(serializers.ModelSerializer):
             **validated_data
         )
 
+        apply_user_roles_and_modules(
+            user,
+            role_codes=role_codes,
+            extra_module_ids=extra_module_ids,
+            primary_role=primary,
+        )
+
         user._temporary_password = password  # temporary attribute
-        print("DEBUG: Set _temporary_password on user instance:", hasattr(user, '_temporary_password'))  # ← add
+        print("DEBUG: Set _temporary_password on user instance:", hasattr(user, '_temporary_password'))
         return user
 
     def to_representation(self, instance):
@@ -112,17 +243,53 @@ class UserCreateSerializer(serializers.ModelSerializer):
 class UserUpdateSerializer(serializers.ModelSerializer):
     """
     Used for:
-    - Updating user role
+    - Updating user role(s)
     - Activating / deactivating users
+    - Extra module grants
     """
+    role_codes = serializers.ListField(
+        child=serializers.CharField(), required=False, write_only=True, allow_empty=True
+    )
+    extra_module_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, write_only=True, allow_empty=True
+    )
+    first_name = serializers.CharField(required=False, allow_blank=True)
+    last_name = serializers.CharField(required=False, allow_blank=True)
+
     class Meta:
         model = User
         fields = [
             'email',
             'role',
+            'role_codes',
+            'extra_module_ids',
+            'first_name',
+            'last_name',
             'is_active',
             'is_staff',
         ]
+
+    def update(self, instance, validated_data):
+        role_codes = validated_data.pop('role_codes', None)
+        extra_module_ids = validated_data.pop('extra_module_ids', None)
+        primary = validated_data.get('role', instance.role)
+        for attr, val in validated_data.items():
+            setattr(instance, attr, val)
+        instance.save()
+        apply_user_roles_and_modules(
+            instance,
+            role_codes=role_codes,
+            extra_module_ids=extra_module_ids,
+            primary_role=primary if role_codes is not None else None,
+        )
+        if role_codes is None and 'role' in validated_data:
+            # single primary role change — ensure M2M includes it
+            apply_user_roles_and_modules(
+                instance,
+                role_codes=[validated_data['role']],
+                primary_role=validated_data['role'],
+            )
+        return instance
 
 
 # =========================
@@ -161,6 +328,10 @@ class CurrentUserSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     schools   = serializers.SerializerMethodField()
     role_display = serializers.CharField(source='get_role_display', read_only=True)
+    role_codes = serializers.SerializerMethodField()
+    roles = serializers.SerializerMethodField()
+    module_codes = serializers.SerializerMethodField()
+    extra_module_ids = serializers.SerializerMethodField()
     is_temporary_password = serializers.BooleanField(read_only=True)
     force_change_password = serializers.BooleanField(read_only=True)
 
@@ -173,13 +344,70 @@ class CurrentUserSerializer(serializers.ModelSerializer):
             "full_name",
             "schools",
             "is_superuser",
-            "role",           # the code, e.g. "ADMISSIONS_OFFICER"
-            "role_display",   # the nice name, e.g. "Admissions Officer / Registrar"
+            "role",
+            "role_display",
+            "role_codes",
+            "roles",
+            "module_codes",
+            "extra_module_ids",
             "is_temporary_password",
-            "force_change_password",  # ← Add this
+            "force_change_password",
         ]
 
+    def get_role_obj(self, obj):
+        code = obj.role or ""
+        try:
+            from apps.accounts.models import Role
+            r = Role.objects.filter(code__iexact=code).first()
+            if r:
+                return {"code": r.code, "name": r.name}
+        except Exception:
+            pass
+        return {"code": code, "name": code}
+
+    def get_role_codes(self, obj):
+        try:
+            return sorted(obj.get_role_codes())
+        except Exception:
+            return [obj.role] if obj.role else []
+
+    def get_roles(self, obj):
+        try:
+            rows = list(obj.roles.all())
+            if not rows and obj.role:
+                from apps.accounts.models import Role
+                r = Role.objects.filter(code__iexact=obj.role).first()
+                if r:
+                    rows = [r]
+            return [{"id": str(r.id), "code": r.code, "name": r.name} for r in rows]
+        except Exception:
+            return []
+
+    def get_module_codes(self, obj):
+        request = self.context.get("request")
+        school = None
+        if request is not None:
+            try:
+                from apps.school.support import selected_school
+                school = selected_school(request)
+            except Exception:
+                school = None
+        try:
+            codes = obj.get_effective_module_codes(school=school)
+            if codes is None:
+                return ["*"]
+            return sorted(codes)
+        except Exception:
+            return []
+
+    def get_extra_module_ids(self, obj):
+        try:
+            return list(obj.extra_modules.values_list("id", flat=True))
+        except Exception:
+            return []
+
     def get_full_name(self, obj):
+
         if hasattr(obj, 'full_name') and obj.full_name:
             return obj.full_name
         return f"{obj.first_name or ''} {obj.last_name or ''}".strip() or obj.email.split('@')[0]
@@ -216,6 +444,7 @@ class CurrentUserSerializer(serializers.ModelSerializer):
     
 
 class RoleSerializer(serializers.ModelSerializer):
+    module_codes = serializers.SerializerMethodField()
     module_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=Module.objects.all(),

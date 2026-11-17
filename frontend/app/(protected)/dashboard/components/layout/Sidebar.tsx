@@ -11,6 +11,7 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { useEffect, useState } from "react";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -139,6 +140,24 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
     for (const code of CORE_MODULE_CODES) {
       if (!uniqueModuleItems.has(code) && MODULE_CONFIG[code]) {
         uniqueModuleItems.set(code, MODULE_CONFIG[code]);
+      }
+    }
+  }
+
+  // Role-based module filter (intersection with school modules)
+  const userModuleCodes = user?.module_codes;
+  const allowAllModules =
+    user?.is_superuser ||
+    !userModuleCodes ||
+    userModuleCodes.includes("*") ||
+    ["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL"].includes(
+      (user?.role || "").toUpperCase()
+    );
+  if (!allowAllModules && userModuleCodes?.length) {
+    const allow = new Set(userModuleCodes.map((c) => c.toLowerCase()));
+    for (const code of Array.from(uniqueModuleItems.keys())) {
+      if (!allow.has(code.toLowerCase())) {
+        uniqueModuleItems.delete(code);
       }
     }
   }

@@ -10,6 +10,11 @@ export interface CurrentUser {
   email: string;
   role: string;
   role_display?: string;
+  role_codes?: string[];
+  roles?: Array<{ id: string; code: string; name: string }>;
+  /** Effective module codes for nav; ["*"] means all school modules */
+  module_codes?: string[];
+  extra_module_ids?: number[];
   full_name?: string;
   first_name?: string;
   last_name?: string;

@@ -107,6 +107,8 @@ export default function UsersSettingsPage() {
     last_name: "",
     email: "",
     role_code: "",
+    role_codes: [] as string[],
+    extra_module_ids: [] as number[],
   });
 
   // Edit role form
@@ -123,6 +125,8 @@ export default function UsersSettingsPage() {
     first_name: "",
     last_name: "",
     role_code: "",
+    role_codes: [] as string[],
+    extra_module_ids: [] as number[],
     is_active: true,
   });
 
@@ -199,7 +203,7 @@ export default function UsersSettingsPage() {
 
   // Create user
   const handleAddUser = async () => {
-    if (!currentSchool?.id || !newUser.role_code) {
+    if (!currentSchool?.id || !(newUser.role_codes?.length || newUser.role_code)) {
       toast.error("Please fill all required fields");
       return;
     }
@@ -211,7 +215,9 @@ export default function UsersSettingsPage() {
         first_name: newUser.first_name.trim(),
         last_name: newUser.last_name.trim(),
         email: newUser.email.trim(),
-        role: newUser.role_code,
+        role: (newUser.role_codes[0] || newUser.role_code),
+        role_codes: newUser.role_codes.length ? newUser.role_codes : [newUser.role_code].filter(Boolean),
+        extra_module_ids: newUser.extra_module_ids,
       };
 
       const res = await api.post(`/accounts/schools/${currentSchool.id}/users/`, payload);
@@ -273,7 +279,7 @@ export default function UsersSettingsPage() {
       );
 
       loadData();
-      setNewUser({ first_name: "", last_name: "", email: "", role_code: "" });
+      setNewUser({ first_name: "", last_name: "", email: "", role_code: "", role_codes: [], extra_module_ids: [] });
     } catch (err: any) {
       toast.error(err.response?.data?.detail || "Failed to create user");
       console.error("Create user error:", err);
@@ -285,10 +291,15 @@ export default function UsersSettingsPage() {
   // Open edit user dialog
   const openEditUser = (user: User) => {
     setEditingUser(user);
+    const codes =
+      (user as any).role_codes ||
+      (user.role?.code ? [user.role.code] : []);
     setEditForm({
       first_name: user.first_name,
       last_name: user.last_name,
-      role_code: user.role.code,
+      role_code: user.role?.code || codes[0] || "",
+      role_codes: codes,
+      extra_module_ids: (user as any).extra_module_ids || [],
       is_active: user.is_active ?? true,
     });
   };
@@ -303,7 +314,9 @@ export default function UsersSettingsPage() {
       const payload = {
         first_name: editForm.first_name.trim(),
         last_name: editForm.last_name.trim(),
-        role: editForm.role_code,
+        role: editForm.role_codes[0] || editForm.role_code,
+        role_codes: editForm.role_codes.length ? editForm.role_codes : [editForm.role_code].filter(Boolean),
+        extra_module_ids: editForm.extra_module_ids,
         is_active: editForm.is_active,
       };
 
@@ -533,7 +546,14 @@ export default function UsersSettingsPage() {
                           </TableCell>
                           <TableCell>{user.email}</TableCell>
                           <TableCell>
-                            <Badge variant="secondary">{user.role.name}</Badge>
+                            <div className="flex flex-wrap gap-1">
+                              {((user as any).role_codes?.length
+                                ? (user as any).role_codes
+                                : [user.role?.code || user.role?.name]
+                              ).map((c: string) => (
+                                <Badge key={c} variant="secondary">{c}</Badge>
+                              ))}
+                            </div>
                           </TableCell>
                          <TableCell className="text-right space-x-1">
   <Button
@@ -640,6 +660,57 @@ export default function UsersSettingsPage() {
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="is_active"
+
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">All roles for this user</p>
+                    <div className="max-h-36 overflow-y-auto rounded-md border p-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                      {roles.map((role) => {
+                        const checked = editForm.role_codes.includes(role.code);
+                        return (
+                          <label key={role.code} className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                const set = new Set(editForm.role_codes);
+                                if (set.has(role.code)) set.delete(role.code);
+                                else set.add(role.code);
+                                const arr = Array.from(set);
+                                setEditForm({
+                                  ...editForm,
+                                  role_codes: arr,
+                                  role_code: arr[0] || editForm.role_code,
+                                });
+                              }}
+                            />
+                            <span>{role.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground pt-1">Extra modules</p>
+                    <div className="max-h-28 overflow-y-auto rounded-md border p-2 grid grid-cols-2 gap-1">
+                      {allModules.map((m) => {
+                        const checked = editForm.extra_module_ids.includes(m.id);
+                        return (
+                          <label key={m.id} className="flex items-center gap-2 text-xs cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                const set = new Set(editForm.extra_module_ids);
+                                if (set.has(m.id)) set.delete(m.id);
+                                else set.add(m.id);
+                                setEditForm({ ...editForm, extra_module_ids: Array.from(set) });
+                              }}
+                            />
+                            <span>{m.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                     checked={editForm.is_active}
                     onCheckedChange={(checked) =>
                       setEditForm({ ...editForm, is_active: !!checked })
