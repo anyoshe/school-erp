@@ -45,3 +45,21 @@ def seed_default_categories_for_new_school(sender, instance, created, **kwargs):
 def seed_default_modules_after_migrate(sender, **kwargs):
     if sender.name == "apps.school":
         seed_default_modules()
+
+
+@receiver(post_save, sender=School)
+def seed_library_starter_for_new_school(sender, instance, created, **kwargs):
+    """Copy free primary/secondary digital links into the new school's library."""
+    if not created:
+        return
+    try:
+        from apps.library.seed_starter import seed_library_starter_pack
+        result = seed_library_starter_pack(instance)
+        print(
+            f"Library starter pack for {instance.name}: "
+            f"created={result.get('created')} skipped={result.get('skipped')}"
+        )
+    except Exception as exc:
+        # Never block school creation if library seed fails
+        print(f"Library starter seed skipped for {instance.name}: {exc}")
+

@@ -1024,3 +1024,18 @@ def stock_audit_summary(request):
         ),
     })
 
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def seed_starter_pack(request):
+    """Librarian/admin: restore missing free starter digital links for this school."""
+    school = _school(request)
+    if not (is_librarian(request.user) or is_admin(request.user)):
+        raise PermissionDenied("Only librarians or school admins can restore the starter pack.")
+    levels = request.data.get("levels")  # optional list
+    if isinstance(levels, str):
+        levels = [x.strip() for x in levels.split(",") if x.strip()]
+    from .seed_starter import seed_library_starter_pack
+    result = seed_library_starter_pack(school, levels=levels or None)
+    return Response(result)
+

@@ -671,7 +671,24 @@ export default function LibraryPage() {
     }
   };
 
+  const restoreStarter = async () => {
+    try {
+      const { data } = await api.post("/library/seed-starter/", {}, { headers });
+      const n = data?.created ?? 0;
+      const sk = data?.skipped ?? 0;
+      toast.success(
+        n
+          ? `Added ${n} free starter link${n === 1 ? "" : "s"} (${sk} already present)`
+          : `Starter pack already complete (${sk} links present)`
+      );
+      loadDigitalManage();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Could not restore starter pack");
+    }
+  };
+
   const approveDigital = async (id: string) => {
+
     try {
       await api.post(`/library/digital/${id}/approve/`, {}, { headers });
       toast.success("Approved — now on Read online shelf");
@@ -1738,7 +1755,15 @@ export default function LibraryPage() {
           <Card className="rounded-xl lg:col-span-2">
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
               <CardTitle className="text-base">Digital inventory</CardTitle>
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1 items-center">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={restoreStarter}
+                  title="Add any missing free KEC / storybook / Khan links for this school"
+                >
+                  Restore free starter links
+                </Button>
                 {["", "PENDING", "APPROVED", "REJECTED"].map((f) => (
                   <button
                     key={f || "all"}

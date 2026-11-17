@@ -24,6 +24,7 @@ urlpatterns = [
     path("assignment-monitor/", views.assignment_monitor, name="library-assignment-monitor"),
     path("my-learning/", views.my_learning, name="library-my-learning"),
     path("stock-audit-summary/", views.stock_audit_summary, name="library-stock-audit-summary"),
+    path("seed-starter/", views.seed_starter_pack, name="library-seed-starter"),
     path("delegates/", views.library_delegates, name="library-delegates"),
     path("", include(router.urls)),
 ]
