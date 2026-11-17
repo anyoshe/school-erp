@@ -657,60 +657,59 @@ export default function UsersSettingsPage() {
                   </Select>
                 </div>
 
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">All roles for this user</p>
+                  <div className="max-h-36 overflow-y-auto rounded-md border p-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                    {roles.map((role) => {
+                      const checked = editForm.role_codes.includes(role.code);
+                      return (
+                        <label key={role.code} className="flex items-center gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const set = new Set(editForm.role_codes);
+                              if (set.has(role.code)) set.delete(role.code);
+                              else set.add(role.code);
+                              const arr = Array.from(set);
+                              setEditForm({
+                                ...editForm,
+                                role_codes: arr,
+                                role_code: arr[0] || editForm.role_code,
+                              });
+                            }}
+                          />
+                          <span>{role.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground pt-1">Extra modules</p>
+                  <div className="max-h-28 overflow-y-auto rounded-md border p-2 grid grid-cols-2 gap-1">
+                    {allModules.map((m) => {
+                      const checked = editForm.extra_module_ids.includes(m.id);
+                      return (
+                        <label key={m.id} className="flex items-center gap-2 text-xs cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              const set = new Set(editForm.extra_module_ids);
+                              if (set.has(m.id)) set.delete(m.id);
+                              else set.add(m.id);
+                              setEditForm({ ...editForm, extra_module_ids: Array.from(set) });
+                            }}
+                          />
+                          <span>{m.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="is_active"
-
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">All roles for this user</p>
-                    <div className="max-h-36 overflow-y-auto rounded-md border p-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
-                      {roles.map((role) => {
-                        const checked = editForm.role_codes.includes(role.code);
-                        return (
-                          <label key={role.code} className="flex items-center gap-2 text-sm cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => {
-                                const set = new Set(editForm.role_codes);
-                                if (set.has(role.code)) set.delete(role.code);
-                                else set.add(role.code);
-                                const arr = Array.from(set);
-                                setEditForm({
-                                  ...editForm,
-                                  role_codes: arr,
-                                  role_code: arr[0] || editForm.role_code,
-                                });
-                              }}
-                            />
-                            <span>{role.name}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                    <p className="text-xs text-muted-foreground pt-1">Extra modules</p>
-                    <div className="max-h-28 overflow-y-auto rounded-md border p-2 grid grid-cols-2 gap-1">
-                      {allModules.map((m) => {
-                        const checked = editForm.extra_module_ids.includes(m.id);
-                        return (
-                          <label key={m.id} className="flex items-center gap-2 text-xs cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => {
-                                const set = new Set(editForm.extra_module_ids);
-                                if (set.has(m.id)) set.delete(m.id);
-                                else set.add(m.id);
-                                setEditForm({ ...editForm, extra_module_ids: Array.from(set) });
-                              }}
-                            />
-                            <span>{m.name}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-
                     checked={editForm.is_active}
                     onCheckedChange={(checked) =>
                       setEditForm({ ...editForm, is_active: !!checked })
