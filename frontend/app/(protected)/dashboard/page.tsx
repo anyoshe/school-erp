@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import {
@@ -17,6 +18,23 @@ export default function DashboardHome() {
   const { currentSchool, loading: schoolLoading } = useCurrentSchool();
   const { user } = useCurrentUser();
   const router = useRouter();
+
+  // Teachers / parents must not stay on the general school pulse dashboard
+  useEffect(() => {
+    if (!user) return;
+    const role = (user.role || "").toUpperCase();
+    const codes = new Set((user.role_codes || []).map((c) => String(c).toUpperCase()));
+    if (role) codes.add(role);
+    const elevated = ["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "DEPUTY_PRINCIPAL", "MANAGER"];
+    if (elevated.some((e) => codes.has(e))) return;
+    if (role === "PARENT" || codes.has("PARENT")) {
+      router.replace("/dashboard/modules/parent");
+      return;
+    }
+    if (role === "TEACHER" || codes.has("TEACHER")) {
+      router.replace("/dashboard/modules/academics");
+    }
+  }, [user, router]);
 
   const pulseQ = useQuery({
     queryKey: ["school-pulse", currentSchool?.id],
