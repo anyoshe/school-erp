@@ -1,19 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Save, Loader2 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Form,
@@ -36,7 +32,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import api from "@/utils/api";
 import { useCurrentSchool } from "@/contexts/CurrentSchoolContext";
-
 import { studentService } from "../services/studentService";
 import { Student } from "../types/student";
 
@@ -45,8 +40,8 @@ const studentSchema = z.object({
   middle_name: z.string().optional(),
   last_name: z.string().min(1, "Last name is required"),
   preferred_name: z.string().optional(),
-  gender: z.string().optional(),
-  date_of_birth: z.string().optional(),
+  gender: z.string().min(1, "Gender is required"),
+  date_of_birth: z.string().min(1, "Date of birth is required"),
   nationality: z.string().optional(),
   religion: z.string().optional(),
   address: z.string().optional(),
@@ -55,8 +50,8 @@ const studentSchema = z.object({
   learner_id: z.string().optional(),
   birth_certificate_number: z.string().optional(),
   passport_number: z.string().optional(),
-  current_class: z.string().optional(),
-  boarding_status: z.string().optional(),
+  current_class: z.string().min(1, "Class / grade is required"),
+  boarding_status: z.string().min(1, "Boarding status is required"),
   house: z.string().optional(),
   dorm_room: z.string().optional(),
   blood_group: z.string().optional(),
@@ -69,11 +64,14 @@ const studentSchema = z.object({
   emergency_relation: z.string().optional(),
   notes: z.string().optional(),
   status: z.string().optional(),
-  primary_guardian_name: z.string().optional(),
-  primary_guardian_phone: z.string().optional(),
+  primary_guardian_name: z.string().min(1, "Guardian name is required"),
+  primary_guardian_phone: z.string().min(1, "Guardian phone is required"),
   primary_guardian_email: z.string().optional(),
-  primary_guardian_relationship: z.string().optional(),
+  primary_guardian_relationship: z.string().min(1, "Relationship is required"),
   primary_guardian_id_number: z.string().optional(),
+  // Continuating / mid-term finance (create only)
+  fee_structure_id: z.string().optional(),
+  amount_paid: z.string().optional(),
 });
 
 type StudentFormValues = z.infer<typeof studentSchema>;
@@ -129,8 +127,10 @@ function mapStudentToForm(s: any): StudentFormValues {
     primary_guardian_name: primary?.full_name || "",
     primary_guardian_phone: primary?.phone || "",
     primary_guardian_email: primary?.email || "",
-    primary_guardian_relationship: primary?.relationship || "",
+    primary_guardian_relationship: primary?.relationship || "GUARDIAN",
     primary_guardian_id_number: primary?.id_number || "",
+    fee_structure_id: "",
+    amount_paid: "",
   };
 }
 
@@ -153,80 +153,108 @@ export default function StudentFormDialog({
   const [admissionNumber, setAdmissionNumber] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [detail, setDetail] = useState<any>(null);
+  const [grades, setGrades] = useState<any[]>([]);
+  const [structures, setStructures] = useState<any[]>([]);
+  const [saving, setSaving] = useState(false);
 
   const form = useForm<StudentFormValues>({
     resolver: zodResolver(studentSchema),
     defaultValues: mapStudentToForm({}),
   });
 
-  const gradesQ = useQuery({
-    queryKey: ["grade-levels-student-form", currentSchool?.id],
-    enabled: open && !!currentSchool?.id,
-    staleTime: 5 * 60_000,
-    queryFn: async () => {
-      const res = await api.get("/academics/grade-levels/", {
-        headers: currentSchool?.id
-          ? { "X-School-ID": String(currentSchool.id) }
-          : undefined,
-      });
-      return asList(res.data);
-    },
-  });
+  const selectedClass = form.watch("current_class");
+  const feeStructureId = form.watch("fee_structure_id");
+  const amountPaidStr = form.watch("amount_paid");
+
+  const selectedStructure = useMemo(
+    () => structures.find((s) => String(s.id) === String(feeStructureId)),
+    [structures, feeStructureId]
+  );
+
+  const structureTotal = useMemo(() => {
+    if (!selectedStructure) return 0;
+    if (selectedStructure.total_amount != null) return Number(selectedStructure.total_amount) || 0;
+    if (selectedStructure.mandatory_total != null) return Number(selectedStructure.mandatory_total) || 0;
+    const items = selectedStructure.items || selectedStructure.lines || [];
+    return items.reduce((sum: number, it: any) => sum + (Number(it.amount) || 0), 0);
+  }, [selectedStructure]);
+
+  const amountPaidNum = Number(String(amountPaidStr || "0").replace(/,/g, "")) || 0;
+  const estimatedBalance = Math.max(0, structureTotal - amountPaidNum);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
+    (async () => {
+      try {
+        const [gRes, sRes] = await Promise.all([
+          api.get("/academics/grade-levels/"),
+          api.get("/finance/structures/", { params: { is_active: true } }).catch(() => ({ data: [] })),
+        ]);
+        if (cancelled) return;
+        setGrades(asList(gRes.data));
+        setStructures(asList(sRes.data));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
+  // Auto-pick fee structure for selected grade when creating
+  useEffect(() => {
+    if (isEdit || !selectedClass || !structures.length) return;
+    const grade = grades.find((g) => String(g.id) === String(selectedClass));
+    const gname = (grade?.name || "").toLowerCase();
+    const match =
+      structures.find((s) => String(s.grade_level || s.grade_level_id) === String(selectedClass)) ||
+      structures.find((s) => (s.grade_name || s.name || "").toLowerCase().includes(gname));
+    if (match && !form.getValues("fee_structure_id")) {
+      form.setValue("fee_structure_id", String(match.id));
+    }
+  }, [selectedClass, structures, grades, isEdit, form]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
     (async () => {
       if (isEdit && student?.id) {
-        // 1) Open immediately with list-row data (no blank spinner wait)
-        setDetail(student);
-        setAdmissionNumber((student as any)?.admission_number || "");
-        form.reset(mapStudentToForm(student));
-        setPhotoPreview(null);
-        setPhotoFile(null);
         setLoadingDetail(true);
-
-        // 2) Hydrate with lightweight edit payload in background
         try {
           const full = await studentService.getById(String(student.id), {
-            mode: "edit",
-          });
-          if (cancelled || !full) return;
-          setDetail(full);
-          setAdmissionNumber((full as any)?.admission_number || "");
+            expand: "guardians,current_class",
+          } as any);
+          if (cancelled) return;
           form.reset(mapStudentToForm(full));
+          setAdmissionNumber((full as any)?.admission_number || "");
           const url =
             (full as any)?.photo_url ||
-            (typeof (full as any)?.photo === "string"
-              ? (full as any).photo
-              : null);
+            (typeof (full as any)?.photo === "string" ? (full as any).photo : null);
           setPhotoPreview(url);
         } catch {
-          /* keep list-row values */
+          form.reset(mapStudentToForm(student));
+          setAdmissionNumber((student as any)?.admission_number || "");
         } finally {
           if (!cancelled) setLoadingDetail(false);
         }
       } else {
-        setDetail(null);
-        setAdmissionNumber("");
         form.reset(mapStudentToForm({}));
+        setAdmissionNumber("");
         setPhotoPreview(null);
         setPhotoFile(null);
         setLoadingDetail(false);
       }
     })();
-
     return () => {
       cancelled = true;
     };
   }, [open, isEdit, student?.id]);
 
   const onSubmit = async (values: StudentFormValues) => {
+    setSaving(true);
     try {
-      // Always send the full editable snapshot so fields like guardian ID always persist.
-      // (dirtyFields alone can miss Select/controlled edge cases after async reset.)
       const payload: Record<string, unknown> = {};
       const keys: (keyof StudentFormValues)[] = [
         "first_name",
@@ -267,371 +295,425 @@ export default function StudentFormDialog({
         if (value === undefined || value === null) continue;
         payload[key as string] = typeof value === "string" ? value.trim() : value;
       }
-      if (values.current_class && String(values.current_class).trim()) {
-        payload.current_class = String(values.current_class).trim();
+      if (values.current_class?.trim()) {
+        payload.current_class = values.current_class.trim();
       } else if (isEdit) {
         payload.current_class = null;
       }
 
+      if (!isEdit) {
+        if (values.fee_structure_id) payload.fee_structure_id = values.fee_structure_id;
+        payload.amount_paid = String(values.amount_paid || "0").replace(/,/g, "") || "0";
+        if (selectedStructure?.academic_year) payload.academic_year = selectedStructure.academic_year;
+        if (selectedStructure?.period_name) payload.term = selectedStructure.period_name;
+      }
+
       if (photoFile) {
-        // Multipart path for photo + fields
         const fd = new FormData();
         Object.entries(payload).forEach(([k, v]) => {
           if (v !== undefined && v !== null) fd.append(k, String(v));
         });
         fd.append("photo", photoFile);
-        if (isEdit && student?.id) {
-          await api.patch(`/students/${student.id}/`, fd, {
-            headers: { "Content-Type": "multipart/form-data" },
-          });
+        if (isEdit) {
+          await studentService.update(String(student!.id), fd as any);
           toast.success("Student updated");
         } else {
-          await api.post(`/students/`, fd, {
-            headers: { "Content-Type": "multipart/form-data" },
-          });
-          toast.success("Student created");
+          await studentService.create(fd as any);
+          toast.success("Student registered — finance updated");
         }
       } else {
-        if (isEdit && student?.id) {
-          if (Object.keys(payload).length === 0) {
-            toast.message("No changes to save");
-            return;
-          }
-          await studentService.update(String(student.id), payload);
+        if (isEdit) {
+          await studentService.update(String(student!.id), payload);
           toast.success("Student updated");
         } else {
           await studentService.create(payload);
-          toast.success("Student created");
+          const paid = Number(payload.amount_paid) || 0;
+          if (paid > 0) {
+            toast.success("Student registered as ACTIVE with opening payment");
+          } else if (values.fee_structure_id) {
+            toast.success("Student registered — pending finance clearance");
+          } else {
+            toast.success("Student registered");
+          }
         }
       }
-      onSuccess();
       onOpenChange(false);
-    } catch (error: any) {
-      const data = error?.response?.data;
-      let msg = "Failed to save student";
-      if (typeof data?.detail === "string") msg = data.detail;
-      else if (data && typeof data === "object") {
-        const parts = Object.entries(data).map(
-          ([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`
-        );
-        if (parts.length) msg = parts.slice(0, 5).join(" · ");
-      }
-      toast.error(msg);
+      onSuccess();
+    } catch (err: any) {
+      const d = err?.response?.data;
+      const msg =
+        d?.detail ||
+        (d && typeof d === "object"
+          ? Object.entries(d)
+              .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`)
+              .join(" · ")
+          : null) ||
+        "Could not save student";
+      toast.error(String(msg));
+    } finally {
+      setSaving(false);
     }
   };
 
-  const grades = gradesQ.data || [];
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100%-1.25rem)] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit Student" : "Add New Student"}</DialogTitle>
+      <DialogContent className="w-[calc(100%-1rem)] sm:max-w-2xl max-h-[92vh] flex flex-col gap-0 p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-3 shrink-0 border-b">
+          <DialogTitle>{isEdit ? "Edit student" : "Add continuing student"}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? "Details load from the full student record (admission + enrollment). Admission number cannot be changed."
-              : "Enter details for the new student."}
+              ? "Update learner and guardian details."
+              : "Register a learner already in school (mid-term / transfer). Admission number is assigned automatically. Attach fee structure and amount already paid so Finance balances stay correct."}
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              {loadingDetail && (
-                <div className="flex items-center gap-2 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-                  Loading remaining details (guardians, health)…
-                </div>
-              )}
-              {isEdit && (
-                <div>
-                  <label className="text-sm font-medium leading-none">Admission Number</label>
-                  <Input value={admissionNumber} disabled className="bg-slate-50 font-mono mt-2" />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Locked — school admission number cannot be edited here.
-                  </p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {(
-                  [
-                    ["first_name", "First Name *"],
-                    ["middle_name", "Middle Name"],
-                    ["last_name", "Last Name *"],
-                    ["preferred_name", "Preferred Name"],
-                    ["learner_id", "Learner ID / UPI"],
-                    ["birth_certificate_number", "Birth Certificate No."],
-                    ["passport_number", "Passport No."],
-                    ["nationality", "Nationality"],
-                    ["religion", "Religion"],
-                    ["date_of_birth", "Date of Birth", "date"],
-                  ] as [keyof StudentFormValues, string, string?][]
-                ).map(([name, label, type]) => (
-                  <FormField
-                    key={name}
-                    control={form.control}
-                    name={name}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{label}</FormLabel>
-                        <FormControl>
-                          <Input type={type || "text"} {...field} value={field.value || ""} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ))}
-
-                <FormField
-                  control={form.control}
-                  name="gender"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Gender</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select gender" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="MALE">Male</SelectItem>
-                          <SelectItem value="FEMALE">Female</SelectItem>
-                          <SelectItem value="OTHER">Other</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="current_class"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Current Class / Grade</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || ""}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={gradesQ.isLoading ? "Loading…" : "Select class"} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {grades.map((g: any) => (
-                            <SelectItem key={String(g.id)} value={String(g.id)}>
-                              {g.name}
-                              {g.short_name ? ` (${g.short_name})` : ""}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="boarding_status"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Boarding Status</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || "DAY"}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="DAY">Day</SelectItem>
-                          <SelectItem value="BOARDING">Boarding</SelectItem>
-                          <SelectItem value="MIXED">Mixed</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="status"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Status</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value || "ACTIVE"}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="ACTIVE">Active</SelectItem>
-                          <SelectItem value="SUSPENDED">Suspended</SelectItem>
-                          <SelectItem value="TRANSFERRED">Transferred</SelectItem>
-                          <SelectItem value="GRADUATED">Graduated</SelectItem>
-                          <SelectItem value="EXPELLED">Expelled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                {(
-                  [
-                    ["house", "House"],
-                    ["dorm_room", "Dorm / Room"],
-                    ["blood_group", "Blood Group"],
-                  ] as [keyof StudentFormValues, string][]
-                ).map(([name, label]) => (
-                  <FormField
-                    key={name}
-                    control={form.control}
-                    name={name}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{label}</FormLabel>
-                        <FormControl>
-                          <Input {...field} value={field.value || ""} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ))}
-              </div>
-
-              <div className="space-y-3">
-                <h4 className="font-semibold text-sm">Photo</h4>
-                {photoPreview && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={photoPreview}
-                    alt="Student"
-                    className="h-20 w-20 rounded-lg object-cover border"
-                  />
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
+          {loadingDetail ? (
+            <p className="text-sm text-muted-foreground py-8">Loading…</p>
+          ) : (
+            <Form {...form}>
+              <form id="student-intake-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                {isEdit && admissionNumber && (
+                  <div>
+                    <label className="text-sm font-medium">Admission number</label>
+                    <Input value={admissionNumber} disabled className="bg-slate-50 font-mono mt-1" />
+                  </div>
                 )}
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0] || null;
-                    setPhotoFile(f);
-                    if (f) setPhotoPreview(URL.createObjectURL(f));
-                  }}
-                />
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="address"
-                  render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                      <FormLabel>Address</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} value={field.value || ""} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                {(
-                  [
-                    ["region", "Region / County"],
-                    ["district", "District / Sub-county"],
-                    ["allergies", "Allergies"],
-                    ["chronic_conditions", "Chronic Conditions"],
-                    ["disability", "Disability"],
-                    ["special_needs", "Special Needs"],
-                    ["emergency_name", "Emergency Contact Name"],
-                    ["emergency_phone", "Emergency Phone"],
-                    ["emergency_relation", "Emergency Relationship"],
-                  ] as [keyof StudentFormValues, string][]
-                ).map(([name, label]) => (
-                  <FormField
-                    key={name}
-                    control={form.control}
-                    name={name}
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>{label}</FormLabel>
-                        <FormControl>
-                          <Input {...field} value={field.value || ""} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                ))}
-                <FormField
-                  control={form.control}
-                  name="notes"
-                  render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                      <FormLabel>Notes</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} value={field.value || ""} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <div className="border-t pt-4 space-y-3">
-                <h4 className="font-semibold text-sm">Primary Guardian</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {(
-                    [
-                      ["primary_guardian_name", "Name"],
-                      ["primary_guardian_phone", "Phone"],
-                      ["primary_guardian_email", "Email"],
-                      ["primary_guardian_relationship", "Relationship"],
-                      ["primary_guardian_id_number", "ID / Passport"],
-                    ] as [keyof StudentFormValues, string][]
-                  ).map(([name, label]) => (
+                <section className="space-y-3">
+                  <h3 className="text-sm font-semibold text-teal-900">Learner identity</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(
+                      [
+                        ["first_name", "First name *"],
+                        ["middle_name", "Middle name"],
+                        ["last_name", "Last name *"],
+                        ["preferred_name", "Preferred name"],
+                        ["date_of_birth", "Date of birth *", "date"],
+                        ["learner_id", "Learner ID / UPI"],
+                        ["birth_certificate_number", "Birth certificate no."],
+                        ["nationality", "Nationality"],
+                      ] as [keyof StudentFormValues, string, string?][]
+                    ).map(([name, label, type]) => (
+                      <FormField
+                        key={name}
+                        control={form.control}
+                        name={name}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{label}</FormLabel>
+                            <FormControl>
+                              <Input type={type || "text"} {...field} value={field.value || ""} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    ))}
                     <FormField
-                      key={name}
                       control={form.control}
-                      name={name}
+                      name="gender"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>{label}</FormLabel>
+                          <FormLabel>Gender *</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="MALE">Male</SelectItem>
+                              <SelectItem value="FEMALE">Female</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="boarding_status"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Boarding *</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "DAY"}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="DAY">Day</SelectItem>
+                              <SelectItem value="BOARDING">Boarding</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </section>
+
+                <section className="space-y-3">
+                  <h3 className="text-sm font-semibold text-teal-900">Placement</h3>
+                  <FormField
+                    control={form.control}
+                    name="current_class"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Class / grade *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select grade" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {grades.map((g) => (
+                              <SelectItem key={String(g.id)} value={String(g.id)}>
+                                {g.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="address"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Address</FormLabel>
                           <FormControl>
                             <Input {...field} value={field.value || ""} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="region"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>County / region</FormLabel>
+                          <FormControl>
+                            <Input {...field} value={field.value || ""} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </section>
+
+                <section className="space-y-3">
+                  <h3 className="text-sm font-semibold text-teal-900">Primary guardian *</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(
+                      [
+                        ["primary_guardian_name", "Full name *"],
+                        ["primary_guardian_phone", "Phone *"],
+                        ["primary_guardian_email", "Email"],
+                        ["primary_guardian_id_number", "ID number"],
+                      ] as [keyof StudentFormValues, string][]
+                    ).map(([name, label]) => (
+                      <FormField
+                        key={name}
+                        control={form.control}
+                        name={name}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{label}</FormLabel>
+                            <FormControl>
+                              <Input {...field} value={field.value || ""} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    ))}
+                    <FormField
+                      control={form.control}
+                      name="primary_guardian_relationship"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Relationship *</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || "GUARDIAN"}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="FATHER">Father</SelectItem>
+                              <SelectItem value="MOTHER">Mother</SelectItem>
+                              <SelectItem value="GUARDIAN">Guardian</SelectItem>
+                              <SelectItem value="OTHER">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </section>
+
+                {!isEdit && (
+                  <section className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+                    <h3 className="text-sm font-semibold text-amber-900">Fees (continuing / mid-term)</h3>
+                    <p className="text-xs text-amber-800">
+                      Select this term&apos;s fee structure and enter amount already paid. If paid &gt; 0 the
+                      student is <strong>ACTIVE</strong>. If paid is 0 and there is a balance, they go to the{" "}
+                      <strong>clearance list</strong>.
+                    </p>
+                    <FormField
+                      control={form.control}
+                      name="fee_structure_id"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Fee structure</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select structure (recommended)" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {structures.map((s) => (
+                                <SelectItem key={String(s.id)} value={String(s.id)}>
+                                  {s.name || s.title || `Structure #${s.id}`}
+                                  {s.period_name ? ` · ${s.period_name}` : ""}
+                                  {s.academic_year ? ` · ${s.academic_year}` : ""}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="amount_paid"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Amount already paid</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min={0}
+                              step="0.01"
+                              placeholder="0"
+                              {...field}
+                              value={field.value || ""}
+                            />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                  ))}
-                </div>
-              </div>
+                    {selectedStructure && (
+                      <div className="text-xs space-y-1 text-stone-700">
+                        <p>
+                          Structure total (est.):{" "}
+                          <strong>
+                            {currentSchool?.currency_symbol || "KSh"} {structureTotal.toLocaleString()}
+                          </strong>
+                        </p>
+                        <p>
+                          Estimated balance:{" "}
+                          <strong>
+                            {currentSchool?.currency_symbol || "KSh"} {estimatedBalance.toLocaleString()}
+                          </strong>
+                        </p>
+                        <p className="text-muted-foreground">
+                          Status after save:{" "}
+                          {amountPaidNum > 0 || estimatedBalance <= 0
+                            ? "ACTIVE"
+                            : "PENDING_CLEARANCE (clearance list)"}
+                        </p>
+                      </div>
+                    )}
+                  </section>
+                )}
 
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={form.formState.isSubmitting} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                  {form.formState.isSubmitting ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving…
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Save changes
-                    </>
-                  )}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+                <section className="space-y-3">
+                  <h3 className="text-sm font-semibold text-teal-900">Medical / notes (optional)</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(
+                      [
+                        ["blood_group", "Blood group"],
+                        ["allergies", "Allergies"],
+                        ["chronic_conditions", "Chronic conditions"],
+                        ["special_needs", "Special needs"],
+                      ] as [keyof StudentFormValues, string][]
+                    ).map(([name, label]) => (
+                      <FormField
+                        key={name}
+                        control={form.control}
+                        name={name}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{label}</FormLabel>
+                            <FormControl>
+                              <Input {...field} value={field.value || ""} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="notes"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Notes</FormLabel>
+                        <FormControl>
+                          <Textarea {...field} value={field.value || ""} rows={2} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <div>
+                    <label className="text-sm font-medium">Photo (optional)</label>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      className="mt-1"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] || null;
+                        setPhotoFile(f);
+                        if (f) setPhotoPreview(URL.createObjectURL(f));
+                      }}
+                    />
+                    {photoPreview && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={photoPreview} alt="" className="mt-2 h-20 w-20 object-cover rounded-md border" />
+                    )}
+                  </div>
+                </section>
+              </form>
+            </Form>
+          )}
+        </div>
+
+        <div className="shrink-0 border-t bg-background px-6 py-4 flex gap-3">
+          <Button type="button" variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="student-intake-form"
+            className="flex-1"
+            disabled={saving || loadingDetail}
+          >
+            {saving ? "Saving…" : isEdit ? "Save changes" : "Register student"}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

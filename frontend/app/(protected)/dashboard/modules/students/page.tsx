@@ -217,7 +217,7 @@ export default function StudentsPage() {
             </Button>
             <Button onClick={handleAddNew} className="bg-white text-teal-900 hover:bg-teal-50 gap-2">
               <Plus className="h-4 w-4" />
-              Add student
+              Add continuing student
             </Button>
           </div>
         </div>

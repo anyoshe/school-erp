@@ -401,17 +401,187 @@ class StudentCreateUpdateSerializer(serializers.ModelSerializer):
         return validated_data
 
     def create(self, validated_data):
-        validated_data = self._clean_fk_blanks(validated_data)
-        school = validated_data.get("school") or selected_school(self.context["request"])
-        validated_data['created_by'] = self.context['request'].user
-        if not validated_data.get('admission_number'):
-            school = validated_data.get('school')
-            if school:
-                from apps.school.models import generate_unique_admission_number
-                validated_data['admission_number'] = generate_unique_admission_number(school)
+        from decimal import Decimal
+        from django.db import transaction
         from apps.core.upload_context import upload_owner
-        with upload_owner(school):
-            return super().create(validated_data)
+
+        validated_data = self._clean_fk_blanks(validated_data)
+        request = self.context["request"]
+        school = validated_data.get("school") or selected_school(request)
+        validated_data["school"] = school
+        validated_data["created_by"] = request.user
+
+        # Extra intake fields (not always model fields on write)
+        raw = getattr(self, "initial_data", {}) or {}
+        if not isinstance(raw, dict):
+            try:
+                raw = dict(raw)
+            except Exception:
+                raw = {}
+
+        amount_paid_raw = raw.get("amount_paid") or raw.get("opening_amount_paid") or "0"
+        try:
+            amount_paid = Decimal(str(amount_paid_raw).replace(",", "").strip() or "0")
+        except Exception:
+            amount_paid = Decimal("0")
+        if amount_paid < 0:
+            amount_paid = Decimal("0")
+
+        fee_structure_id = raw.get("fee_structure_id") or raw.get("fee_structure") or None
+        academic_year = (raw.get("academic_year") or raw.get("enrollment_academic_year") or "").strip() or None
+        term = (raw.get("term") or raw.get("enrollment_term") or "").strip() or None
+
+        # Status will be finalized after billing
+        if "status" not in validated_data or not validated_data.get("status"):
+            validated_data["status"] = "ACTIVE"
+
+        if not validated_data.get("admission_number") and school:
+            from apps.school.models import generate_unique_admission_number
+            validated_data["admission_number"] = generate_unique_admission_number(school)
+
+        # Strip non-model extras if present
+        for k in (
+            "amount_paid",
+            "opening_amount_paid",
+            "fee_structure_id",
+            "academic_year",
+            "term",
+            "enrollment_academic_year",
+            "enrollment_term",
+            "primary_guardian_name",
+            "primary_guardian_phone",
+            "primary_guardian_email",
+            "primary_guardian_relationship",
+            "primary_guardian_id_number",
+        ):
+            validated_data.pop(k, None)
+
+        # Attach fee structure before save when provided
+        if fee_structure_id:
+            try:
+                from apps.finance.models import FeeStructure
+                fs = FeeStructure.objects.filter(pk=fee_structure_id, school=school).first()
+                if fs:
+                    validated_data["fee_structure"] = fs
+                    if not academic_year:
+                        academic_year = getattr(fs, "academic_year", None) or academic_year
+                    if not term:
+                        term = getattr(fs, "period_name", None) or term
+            except Exception:
+                pass
+
+        with transaction.atomic():
+            with upload_owner(school):
+                student = super().create(validated_data)
+
+            # Primary guardian (required for robust intake)
+            self._apply_primary_guardian(student, raw)
+
+            # Optional medical snapshot from flat form fields
+            self._apply_medical_snapshot(student, raw)
+
+            # Billing + opening payment for continuing / mid-term intake
+            balance = Decimal("0")
+            try:
+                from apps.finance.clearance import ensure_student_billing
+                from apps.finance.models import Invoice, Payment
+
+                billing = ensure_student_billing(
+                    student,
+                    user=request.user,
+                    academic_year=academic_year,
+                    period_name=term,
+                )
+                # ensure_student_billing returns invoice dicts; load model rows
+                inv_ids = []
+                for row in billing.get("invoices") or []:
+                    if isinstance(row, dict) and row.get("id"):
+                        inv_ids.append(row["id"])
+                    elif getattr(row, "id", None):
+                        inv_ids.append(row.id)
+                invoices = list(
+                    Invoice.objects.filter(student=student, school=school).order_by("-generated_at")
+                )
+                if inv_ids:
+                    ordered = list(Invoice.objects.filter(id__in=inv_ids))
+                    if ordered:
+                        invoices = ordered
+
+                if invoices and amount_paid > 0:
+                    inv = invoices[0]
+                    pay_amt = amount_paid
+                    # Cap at total due if overpay not desired — allow full amount_paid
+                    Payment.objects.create(
+                        school=school,
+                        invoice=inv,
+                        amount=pay_amt,
+                        payment_method="CASH",
+                        reference_number="OPENING",
+                        notes="Opening balance / amount already paid at student registration",
+                        academic_year=getattr(inv, "academic_year", "") or (academic_year or ""),
+                        term=getattr(inv, "term", "") or (term or ""),
+                    )
+                    inv.refresh_from_db()
+                    inv.save()  # refresh balance / is_paid from amount_paid
+
+                # Compute remaining balance across term invoices
+                for inv in Invoice.objects.filter(student=student, school=school):
+                    try:
+                        bal = Decimal(str(getattr(inv, "balance", 0) or 0))
+                    except Exception:
+                        bal = Decimal("0")
+                    balance += bal
+            except Exception as exc:
+                print(f"[students] intake billing: {exc}")
+
+            # Status rules (continuing students):
+            # - amount_paid > 0 → ACTIVE (has payment history on the books)
+            # - amount_paid == 0 and balance > 0 → PENDING_CLEARANCE (clearance list)
+            # - balance <= 0 → ACTIVE (fully settled)
+            if amount_paid > 0 or balance <= 0:
+                student.status = "ACTIVE"
+            else:
+                student.status = "PENDING_CLEARANCE"
+            student.save(update_fields=["status"])
+
+        return student
+
+    def _apply_primary_guardian(self, student, raw):
+        g_name = raw.get("primary_guardian_name")
+        g_phone = raw.get("primary_guardian_phone")
+        g_email = raw.get("primary_guardian_email")
+        g_rel = raw.get("primary_guardian_relationship")
+        g_id = raw.get("primary_guardian_id_number")
+        if not g_name and not g_phone:
+            return
+        from .models import Guardian, StudentGuardian
+
+        email_val = None
+        if g_email and str(g_email).strip():
+            email_val = str(g_email).strip()
+        rel = self._normalize_relationship(g_rel) or "GUARDIAN"
+        g = Guardian.objects.create(
+            school=student.school,
+            full_name=(str(g_name).strip() if g_name else "") or "Guardian",
+            phone=(str(g_phone).strip() if g_phone else "") or "unknown",
+            email=email_val,
+            relationship=rel,
+            id_number=(str(g_id).strip() if g_id else ""),
+        )
+        StudentGuardian.objects.create(student=student, guardian=g, is_primary=True)
+
+    def _apply_medical_snapshot(self, student, raw):
+        keys = ("blood_group", "allergies", "chronic_conditions", "disability", "special_needs")
+        if not any(raw.get(k) for k in keys):
+            return
+        from .models import MedicalRecord
+
+        mr, _ = MedicalRecord.objects.get_or_create(student=student)
+        for k in keys:
+            if raw.get(k) is not None and str(raw.get(k)).strip():
+                if hasattr(mr, k):
+                    setattr(mr, k, str(raw.get(k)).strip())
+        mr.save()
 
     def _normalize_relationship(self, value):
         if value is None:
