@@ -152,24 +152,38 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
   );
   if (roleUpper) roleCodeSet.add(roleUpper);
 
+  const elevatedRoles = [
+    "SUPER_ADMIN",
+    "SCHOOL_ADMIN",
+    "PRINCIPAL",
+    "DEPUTY_PRINCIPAL",
+    "MANAGER",
+  ];
+  const hasElevated = elevatedRoles.some((r) => roleCodeSet.has(r));
+
   const isParentOnly =
     roleUpper === "PARENT" ||
-    (roleCodeSet.has("PARENT") &&
-      !["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "DEPUTY_PRINCIPAL", "MANAGER", "TEACHER"].some(
-        (r) => roleCodeSet.has(r)
-      ));
+    (roleCodeSet.has("PARENT") && !hasElevated && !roleCodeSet.has("TEACHER"));
+
+  const isTeacherOnly =
+    !isParentOnly &&
+    !hasElevated &&
+    (roleUpper === "TEACHER" || roleCodeSet.has("TEACHER"));
+
+  const TEACHER_MODULES = ["academics", "students", "attendance", "library"];
 
   const userModuleCodes = isParentOnly
     ? ["parent_portal"]
-    : user?.module_codes;
+    : isTeacherOnly
+      ? TEACHER_MODULES
+      : user?.module_codes;
 
   const allowAllModules =
     !isParentOnly &&
+    !isTeacherOnly &&
     (user?.is_superuser ||
       userModuleCodes?.includes("*") ||
-      ["SUPER_ADMIN", "SCHOOL_ADMIN", "PRINCIPAL", "DEPUTY_PRINCIPAL", "MANAGER"].includes(
-        roleUpper
-      ));
+      elevatedRoles.includes(roleUpper));
 
   if (isParentOnly) {
     uniqueModuleItems.clear();
@@ -178,16 +192,19 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
       icon: Users,
       href: "/dashboard/modules/parent",
     });
+  } else if (isTeacherOnly) {
+    const allow = new Set(TEACHER_MODULES);
+    for (const code of Array.from(uniqueModuleItems.keys())) {
+      if (!allow.has(code.toLowerCase())) {
+        uniqueModuleItems.delete(code);
+      }
+    }
   } else if (!allowAllModules && userModuleCodes?.length) {
     const allow = new Set(userModuleCodes.map((c) => String(c).toLowerCase()));
     for (const code of Array.from(uniqueModuleItems.keys())) {
       if (!allow.has(code.toLowerCase())) {
         uniqueModuleItems.delete(code);
       }
-    }
-    // Parent portal for staff remains admin link; parents handled above
-    if (uniqueModuleItems.has("parent_portal")) {
-      // keep staff parent-portal management URL from MODULE_CONFIG
     }
   }
 
@@ -302,8 +319,8 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
             );
           })}
 
-          {/* Early warning — staff only */}
-          {!isParentOnly && (
+          {/* Early warning — leadership only */}
+          {!isParentOnly && !isTeacherOnly && (
           <li>
             <Link
               href="/dashboard/modules/risks"
@@ -321,8 +338,8 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
           </li>
           )}
 
-          {/* Settings — staff only */}
-          {!isParentOnly && (!isPlatformAdmin || Boolean(currentSchool)) && (
+          {/* Settings — leadership only */}
+          {!isParentOnly && !isTeacherOnly && (!isPlatformAdmin || Boolean(currentSchool)) && (
           <li>
             <button
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
@@ -380,8 +397,8 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
           </li>
           )}
 
-          {/* Add School — staff only */}
-          {!isParentOnly && !isPlatformAdmin && (
+          {/* Add School — leadership only */}
+          {!isParentOnly && !isTeacherOnly && !isPlatformAdmin && (
           <li>
             <button
               onClick={() => { handleNavigate(); window.location.href = "/onboarding/setup?mode=new"; }}

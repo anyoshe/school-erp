@@ -10,33 +10,57 @@ import Navbar from "./components/layout/Navbar";
 
 const PARENT_HOME = "/dashboard/modules/parent";
 
+function roleSet(user: { role?: string; role_codes?: string[] }) {
+  const codes = new Set((user.role_codes || []).map((c) => String(c).toUpperCase()));
+  const primary = (user.role || "").toUpperCase();
+  if (primary) codes.add(primary);
+  return codes;
+}
+
+const ELEVATED = new Set([
+  "SUPER_ADMIN",
+  "SCHOOL_ADMIN",
+  "PRINCIPAL",
+  "DEPUTY_PRINCIPAL",
+  "MANAGER",
+]);
+
 function isParentUser(user: { role?: string; role_codes?: string[] } | null | undefined) {
   if (!user) return false;
-  const primary = (user.role || "").toUpperCase();
-  const codes = new Set((user.role_codes || []).map((c) => String(c).toUpperCase()));
-  if (primary) codes.add(primary);
+  const codes = roleSet(user);
   if (!codes.has("PARENT")) return false;
-  const staff = [
-    "SUPER_ADMIN",
-    "SCHOOL_ADMIN",
-    "PRINCIPAL",
-    "DEPUTY_PRINCIPAL",
-    "MANAGER",
-    "TEACHER",
-    "LIBRARIAN",
-    "ACCOUNTANT",
-    "BURSAR",
-    "SECRETARY",
-  ];
-  return !staff.some((s) => codes.has(s));
+  for (const e of ELEVATED) if (codes.has(e)) return false;
+  if (codes.has("TEACHER")) return false;
+  return true;
+}
+
+function isTeacherUser(user: { role?: string; role_codes?: string[] } | null | undefined) {
+  if (!user) return false;
+  const codes = roleSet(user);
+  if (!codes.has("TEACHER") && (user.role || "").toUpperCase() !== "TEACHER") return false;
+  for (const e of ELEVATED) if (codes.has(e)) return false;
+  if (codes.has("PARENT") && !codes.has("TEACHER")) return false;
+  return codes.has("TEACHER") || (user.role || "").toUpperCase() === "TEACHER";
 }
 
 function parentAllowedPath(path: string) {
   if (path === PARENT_HOME || path.startsWith(PARENT_HOME + "/")) return true;
-  // allow password change / minimal account paths
   if (path.startsWith("/dashboard/settings/account")) return true;
   if (path.startsWith("/login")) return true;
   return false;
+}
+
+const TEACHER_PREFIXES = [
+  "/dashboard/modules/students",
+  "/dashboard/modules/attendance",
+  "/dashboard/modules/library",
+  "/dashboard/modules/academics",
+];
+
+function teacherAllowedPath(path: string) {
+  if (path === "/dashboard" || path === "/dashboard/") return true;
+  if (path.startsWith("/dashboard/settings/account")) return true;
+  return TEACHER_PREFIXES.some((p) => path === p || path.startsWith(p + "/"));
 }
 
 /**
@@ -61,6 +85,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     }
     if (user && isParentUser(user) && pathname && !parentAllowedPath(pathname)) {
       router.replace(PARENT_HOME);
+      return;
+    }
+    if (user && isTeacherUser(user) && pathname && !teacherAllowedPath(pathname)) {
+      router.replace("/dashboard/modules/academics");
     }
   }, [mounted, loading, user, router, pathname]);
 

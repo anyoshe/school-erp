@@ -140,14 +140,16 @@ class User(AbstractBaseUser, PermissionsMixin):
         except Exception:
             pass
 
-        # Pure parent accounts: parent portal only (no staff modules)
+        # Role hard limits (primary role, unless also elevated admin)
         primary = (self.role or "").strip().upper()
-        staffish = {
+        elevated_set = {
             "SUPER_ADMIN",
             "SCHOOL_ADMIN",
             "PRINCIPAL",
             "DEPUTY_PRINCIPAL",
             "MANAGER",
+        }
+        staffish_for_parent = elevated_set | {
             "TEACHER",
             "LIBRARIAN",
             "ACCOUNTANT",
@@ -157,10 +159,14 @@ class User(AbstractBaseUser, PermissionsMixin):
             "ACADEMIC_COORDINATOR",
             "HR_MANAGER",
         }
-        if primary == "PARENT" and not (codes & staffish):
+        if primary == "PARENT" and not (codes & staffish_for_parent):
             return {"parent_portal"}
         if codes == {"PARENT"} or codes <= {"PARENT"}:
             return {"parent_portal"}
+
+        # Pure teachers: academics, students, attendance, library only
+        if primary == "TEACHER" and not (codes & elevated_set):
+            return {"academics", "students", "attendance", "library"}
 
         return mod_codes
 
