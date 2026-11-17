@@ -274,7 +274,8 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
             </li>
           )}
 
-          {/* Dashboard */}
+          {/* Dashboard / home — hidden for pure teachers (modules only) */}
+          {!isTeacherOnly && (
           <li>
             <Link
               href={
@@ -287,15 +288,26 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
               onClick={handleNavigate}
                   className={clsx(
                 "flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-all",
-                pathname === "/dashboard" && (!isPlatformAdmin || Boolean(currentSchool))
+                (isParentOnly
+                  ? pathname.startsWith("/dashboard/modules/parent")
+                  : pathname === "/dashboard" && (!isPlatformAdmin || Boolean(currentSchool)))
                   ? "bg-primary-50 text-primary-800 font-medium"
                   : "text-gray-700 hover:bg-gray-100"
               )}
             >
               <Home className="w-5 h-5" />
-              {!isCollapsed && <span>{isPlatformAdmin && !currentSchool ? "School directory" : "Dashboard"}</span>}
+              {!isCollapsed && (
+                <span>
+                  {isParentOnly
+                    ? "Home"
+                    : isPlatformAdmin && !currentSchool
+                      ? "School directory"
+                      : "Dashboard"}
+                </span>
+              )}
             </Link>
           </li>
+          )}
 
           {/* Dynamic Modules */}
           {dynamicItems.map((item) => {

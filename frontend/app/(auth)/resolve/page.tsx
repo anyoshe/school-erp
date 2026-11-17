@@ -59,6 +59,25 @@ export default function AuthResolvePage() {
           return;
         }
 
+        // Teachers skip general dashboard — land on academics
+        if (role === "TEACHER") {
+          const schools = user.schools || [];
+          const savedId = getActiveSchoolId();
+          const activeSchool =
+            schools.find((s: { id: string }) => s.id === savedId) ||
+            user.active_school ||
+            schools[0];
+          if (activeSchool?.id) {
+            setActiveSchool(activeSchool.id);
+            cacheActiveSchool(activeSchool);
+          }
+          if (Array.isArray(schools) && schools.length) {
+            cacheSchoolsList(schools);
+          }
+          router.replace("/dashboard/modules/academics");
+          return;
+        }
+
         if (!user.schools || user.schools.length === 0) {
           router.replace("/onboarding/setup");
           return;
