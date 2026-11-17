@@ -86,6 +86,7 @@ export default function Sidebar({ isCollapsed, onToggleCollapse, onNavigate }: S
 
   const pathname = usePathname();
   const { currentSchool, isPlatformAdmin } = useCurrentSchool();
+  const { user } = useCurrentUser();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Open Settings submenu after mount when already on a settings route (avoid SSR mismatch)
