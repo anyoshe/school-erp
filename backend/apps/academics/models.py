@@ -768,3 +768,88 @@ class GradeRequirement(models.Model):
 
     def __str__(self):
         return f"{self.grade_level}: {self.item_text[:40]}"
+
+
+# =========================================================
+# TIMETABLE (MVP)
+# =========================================================
+
+
+class Period(models.Model):
+    """School-defined period slots (e.g. P1 08:00–08:40)."""
+
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, related_name="timetable_periods"
+    )
+    name = models.CharField(max_length=40)  # P1, Break, P2
+    order = models.PositiveIntegerField(default=1)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    is_break = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["order", "id"]
+        unique_together = ("school", "name")
+
+    def __str__(self):
+        return f"{self.name}"
+
+
+class TimetableEntry(models.Model):
+    """One cell: section × weekday × period → subject (+ optional teacher)."""
+
+    class Weekday(models.IntegerChoices):
+        MON = 1, "Monday"
+        TUE = 2, "Tuesday"
+        WED = 3, "Wednesday"
+        THU = 4, "Thursday"
+        FRI = 5, "Friday"
+        SAT = 6, "Saturday"
+
+    school = models.ForeignKey(
+        School, on_delete=models.CASCADE, related_name="timetable_entries"
+    )
+    section = models.ForeignKey(
+        Section, on_delete=models.CASCADE, related_name="timetable_entries"
+    )
+    weekday = models.PositiveSmallIntegerField(choices=Weekday.choices)
+    period = models.ForeignKey(
+        Period, on_delete=models.CASCADE, related_name="entries"
+    )
+    subject = models.ForeignKey(
+        Subject, on_delete=models.CASCADE, related_name="timetable_entries"
+    )
+    teacher = models.ForeignKey(
+        "staff.Staff",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="timetable_entries",
+    )
+    room = models.CharField(max_length=60, blank=True, default="")
+    academic_year = models.ForeignKey(
+        AcademicYear,
+        on_delete=models.CASCADE,
+        related_name="timetable_entries",
+        null=True,
+        blank=True,
+    )
+    term = models.ForeignKey(
+        Term,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="timetable_entries",
+    )
+    notes = models.CharField(max_length=200, blank=True, default="")
+
+    class Meta:
+        ordering = ["weekday", "period__order"]
+        unique_together = ("section", "weekday", "period", "academic_year")
+        indexes = [
+            models.Index(fields=["school", "section"]),
+            models.Index(fields=["school", "weekday"]),
+        ]
+
+    def __str__(self):
+        return f"{self.section_id} D{self.weekday} {self.period_id}"

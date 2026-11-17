@@ -178,3 +178,48 @@ class StudentTransportDeactivateView(APIView):
         asg.is_active = False
         asg.save(update_fields=["is_active", "updated_at"])
         return Response(StudentAssignmentSerializer(asg).data)
+
+
+class TransportDaySheetView(APIView):
+    """Active learner assignments grouped by route — printable day list."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        school = _school(request)
+        route_id = request.query_params.get("route_id")
+        from .models import StudentAssignment
+        qs = (
+            StudentAssignment.objects.filter(school=school, is_active=True)
+            .select_related("student", "route", "student__current_class")
+            .order_by("route__name", "student__last_name", "student__first_name")
+        )
+        if route_id:
+            qs = qs.filter(route_id=route_id)
+        routes = {}
+        for a in qs:
+            rid = a.route_id
+            if rid not in routes:
+                routes[rid] = {
+                    "route_id": rid,
+                    "route_name": a.route.name if a.route_id else "",
+                    "fee_amount": str(getattr(a.route, "term_amount", "") or ""),
+                    "learners": [],
+                }
+            st = a.student
+            routes[rid]["learners"].append(
+                {
+                    "assignment_id": a.id,
+                    "student_id": st.id if st else None,
+                    "admission_number": getattr(st, "admission_number", "") if st else "",
+                    "name": f"{getattr(st, 'first_name', '')} {getattr(st, 'last_name', '')}".strip() if st else "",
+                    "class_name": (
+                        st.current_class.name
+                        if st and getattr(st, "current_class_id", None)
+                        else ""
+                    ),
+                    "guardian_phone": getattr(st, "emergency_phone", "") or "",
+                }
+            )
+        data = list(routes.values())
+        return Response({"routes": data, "total_learners": sum(len(r["learners"]) for r in data)})

@@ -72,3 +72,12 @@ python manage.py process_library_notifications
 ```
 Confirm one absence SMS and one fee reminder in LOG or live before calling notify "live".
 
+
+
+## Phase B (term excellence)
+
+- **Timetable:** Academics → Timetable. Seed periods, pick section, place subjects on the grid.
+- **Reports CSV:** Reports → Enrollment funnel / Fee arrears / Attendance summary.
+- **Transport day sheet:** Transport → Load day sheet → Print.
+- **Offer SMS:** Admissions offer letter → Finalize + SMS (needs Africa’s Talking env).
+- Migrate: `python manage.py migrate academics` (0007 timetable).

@@ -31,6 +31,7 @@ import { ReportCardsPanel } from "./components/ReportCardsPanel";
 import { LearnerProgressPanel } from "./components/LearnerProgressPanel";
 import { PromotionPanel } from "./components/PromotionPanel";
 import { AdoptCurriculumPanel } from "./components/AdoptCurriculumPanel";
+import { TimetablePanel } from "./components/TimetablePanel";
 
 export default function AcademicsPage() {
   const { currentSchool } = useCurrentSchool();
@@ -251,6 +252,9 @@ export default function AcademicsPage() {
 
       {tab === "report-cards" && (
         <ReportCardsPanel grades={grades} years={years} loading={gradesQ.isLoading || yearsQ.isLoading} />
+      )}
+      {tab === "timetable" && (
+        <TimetablePanel grades={grades} subjects={subjects} />
       )}
       {tab === "progress" && (
         <LearnerProgressPanel />

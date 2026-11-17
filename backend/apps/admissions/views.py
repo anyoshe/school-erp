@@ -261,6 +261,22 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             if new_status == Application.Status.OFFERED and not application.offer_issued_at:
                 application.offer_issued_at = timezone.now()
                 update_fields.append("offer_issued_at")
+            if new_status == Application.Status.OFFERED:
+                try:
+                    phone = application.primary_guardian_phone or ""
+                    school_name = getattr(application.school, "name", "the school")
+                    child = f"{application.first_name} {application.last_name}".strip()
+                    msg = (
+                        f"{school_name}: Admission offer for {child}. "
+                        f"Please log in or contact the school to accept and enroll."
+                    )
+                    from apps.core.notify import send_sms
+                    send_sms(phone, msg, school=application.school)
+                    if not application.offer_method:
+                        application.offer_method = "SMS"
+                        update_fields.append("offer_method")
+                except Exception as exc:
+                    print(f"[offer-sms] {exc}")
             if new_status == Application.Status.ACCEPTED and not application.accepted_at:
                 application.accepted_at = timezone.now()
                 update_fields.append("accepted_at")
@@ -269,7 +285,51 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
         
     
+    @action(detail=True, methods=["post"], url_path="send-offer")
+    def send_offer(self, request, pk=None):
+        """Mark OFFERED (if allowed), set offer timestamp, SMS guardian when possible."""
+        application = self.get_object()
+        target = Application.Status.OFFERED
+        if application.status != target:
+            if not application.can_transition_to(target):
+                return Response(
+                    {"detail": f"Cannot offer from status {application.status}."},
+                    status=400,
+                )
+            application.status = target
+        if not application.offer_issued_at:
+            application.offer_issued_at = timezone.now()
+        channel = (request.data.get("channel") or "SMS").upper()
+        application.offer_method = channel[:20]
+        application.save()
+        sms_result = None
+        if channel in ("SMS", "BOTH", "ALL"):
+            phone = application.primary_guardian_phone or request.data.get("phone") or ""
+            school_name = getattr(application.school, "name", "the school")
+            child = f"{application.first_name} {application.last_name}".strip()
+            grade = ""
+            if application.class_applied_id:
+                grade = getattr(application.class_applied, "name", "") or ""
+            msg = (
+                request.data.get("message")
+                or (
+                    f"{school_name}: Admission offer for {child}"
+                    + (f" ({grade})" if grade else "")
+                    + ". Contact the school to accept and complete enrollment."
+                )
+            )
+            from apps.core.notify import send_sms
+            sms_result = send_sms(phone, msg, school=application.school)
+        from .serializers import ApplicationSerializer
+        return Response(
+            {
+                "application": ApplicationSerializer(application, context={"request": request}).data,
+                "sms": sms_result,
+            }
+        )
+
     @action(detail=True, methods=["post"], url_path="ensure-charges")
+
     def ensure_charges(self, request, pk=None):
         """
         Create/sync INTERVIEW + ADMISSION charges from school defaults.

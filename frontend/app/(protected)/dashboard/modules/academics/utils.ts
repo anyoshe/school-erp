@@ -7,7 +7,8 @@ export type Tab =
   | "marks"
   | "report-cards"
   | "promotion"
-  | "progress";
+  | "progress"
+  | "timetable";
 
 
 export function getApiErrorDetail(error: unknown): string | undefined {
@@ -64,5 +65,6 @@ export const ACADEMICS_TABS: { id: Tab; label: string }[] = [
   { id: "report-cards", label: "Report cards" },
   { id: "progress", label: "Learner progress" },
   { id: "promotion", label: "Promotion" },
+  { id: "timetable", label: "Timetable" },
 ];
 

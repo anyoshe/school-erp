@@ -219,6 +219,46 @@ export default function ReportsPage() {
           ))}
         </CardContent>
       </Card>
-    </div>
+    
+      <Card className="rounded-xl">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">CSV exports</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Download operational lists for spreadsheets or board packs.
+          </p>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          {(
+            [
+              ["Enrollment funnel", "/reports/operational/enrollment-funnel.csv", "enrollment_funnel.csv"],
+              ["Fee arrears", "/reports/operational/arrears.csv", "fee_arrears.csv"],
+              ["Attendance summary", "/reports/operational/attendance-summary.csv", "attendance_summary.csv"],
+            ] as const
+          ).map(([label, path, filename]) => (
+            <Button
+              key={path}
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const res = await api.get(path, { responseType: "blob" });
+                  const url = URL.createObjectURL(res.data);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = filename;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                } catch {
+                  alert("Export failed — check you are logged in and the school is selected.");
+                }
+              }}
+            >
+              {label}
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
+
+</div>
   );
 }

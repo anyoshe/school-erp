@@ -152,6 +152,35 @@ export default function TransportPage() {
     }
   };
 
+
+  const [daySheet, setDaySheet] = useState<{
+    routes: {
+      route_id: number;
+      route_name: string;
+      fee_amount: string;
+      learners: {
+        admission_number: string;
+        name: string;
+        class_name: string;
+        guardian_phone: string;
+      }[];
+    }[];
+    total_learners: number;
+  } | null>(null);
+  const [daySheetLoading, setDaySheetLoading] = useState(false);
+
+  const loadDaySheet = async () => {
+    setDaySheetLoading(true);
+    try {
+      const { data } = await api.get("/transport/day-sheet/", { headers });
+      setDaySheet(data);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || "Could not load day sheet");
+    } finally {
+      setDaySheetLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary-50/50 via-slate-50 to-primary-50/30 p-4 sm:p-6 md:p-10">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -373,6 +402,64 @@ export default function TransportPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    
+      <Card className="rounded-xl print:shadow-none">
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
+          <div>
+            <CardTitle className="text-base">Day sheet (active learners by route)</CardTitle>
+            <p className="text-sm text-muted-foreground">For drivers and gate — print after loading.</p>
+          </div>
+          <div className="flex gap-2 print:hidden">
+            <Button size="sm" variant="outline" onClick={loadDaySheet} disabled={daySheetLoading}>
+              {daySheetLoading ? "Loading…" : "Load day sheet"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => window.print()} disabled={!daySheet}>
+              Print
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!daySheet ? (
+            <p className="text-sm text-muted-foreground">Load to see who is on each route today.</p>
+          ) : (
+            <>
+              <p className="text-sm font-medium">Total active: {daySheet.total_learners}</p>
+              {daySheet.routes.map((r) => (
+                <div key={r.route_id || r.route_name} className="border rounded-lg p-3">
+                  <p className="font-semibold text-sm mb-2">
+                    {r.route_name}{" "}
+                    <span className="text-muted-foreground font-normal">
+                      ({r.learners.length} learners)
+                      {r.fee_amount ? ` · term ${r.fee_amount}` : ""}
+                    </span>
+                  </p>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-left border-b">
+                        <th className="py-1 pr-2">Adm #</th>
+                        <th className="py-1 pr-2">Name</th>
+                        <th className="py-1 pr-2">Class</th>
+                        <th className="py-1">Phone</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.learners.map((l, i) => (
+                        <tr key={i} className="border-b last:border-0">
+                          <td className="py-1 pr-2">{l.admission_number}</td>
+                          <td className="py-1 pr-2">{l.name}</td>
+                          <td className="py-1 pr-2">{l.class_name}</td>
+                          <td className="py-1">{l.guardian_phone}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+</div>
   );
 }

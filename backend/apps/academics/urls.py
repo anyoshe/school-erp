@@ -1,6 +1,7 @@
 # apps/academics/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from . import timetable_views
 from .views import (
     SubjectTeacherViewSet,
     CurriculumViewSet,
@@ -37,6 +38,9 @@ router.register(r'grade-requirements', GradeRequirementViewSet, basename='grade-
 
 urlpatterns = [
     path('class-register/', ClassRegisterView.as_view(), name='class-register'),
+    path('timetable/periods/', timetable_views.PeriodListCreateView.as_view(), name='timetable-periods'),
+    path('timetable/periods/seed-defaults/', timetable_views.PeriodSeedDefaultsView.as_view(), name='timetable-periods-seed'),
+    path('timetable/grid/', timetable_views.TimetableGridView.as_view(), name='timetable-grid'),
     path('current-calendar/', CurrentCalendarView.as_view(), name='current-calendar'),
     path('copy-template/', CopyCurriculumTemplateAPIView.as_view(), name='copy-curriculum-template'),
     path('public/schools/<str:school_id>/grade-levels/', PublicGradeLevelsView.as_view(), name='public-grade-levels'),

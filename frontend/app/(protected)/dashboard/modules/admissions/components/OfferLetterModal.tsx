@@ -874,17 +874,26 @@ export default function OfferLetterModal({
     }
   };
 
-  const handleFinalize = async () => {
+  const handleFinalize = async (alsoSms = false) => {
     setIsUpdating(true);
     try {
-      const res = await api.patch(`/admissions/applications/${applicationId}/`, {
-        status: "OFFERED",
-      });
-      toast.success("Application marked as Offered.");
-      onIssued?.(res.data);
+      if (alsoSms) {
+        const res = await api.post(`/admissions/applications/${applicationId}/send-offer/`, {
+          channel: "SMS",
+          message: customMessage || undefined,
+        });
+        toast.success("Offer finalized and SMS queued/sent to guardian.");
+        onIssued?.(res.data?.application || res.data);
+      } else {
+        const res = await api.patch(`/admissions/applications/${applicationId}/`, {
+          status: "OFFERED",
+        });
+        toast.success("Application marked as Offered.");
+        onIssued?.(res.data);
+      }
       onOpenChange(false);
-    } catch (err) {
-      toast.error("Failed to update status");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || "Failed to update status");
     } finally {
       setIsUpdating(false);
     }
@@ -1004,14 +1013,24 @@ export default function OfferLetterModal({
              </Button>
           </div>
 
-          <Button 
-            onClick={handleFinalize} 
-            disabled={!hasGenerated || isUpdating}
-            className={`px-8 ${hasGenerated ? 'bg-primary hover:bg-primary-700' : 'bg-slate-300'}`}
-          >
-            {isUpdating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
-            Finalize Offer
-          </Button>
+          <div className="flex flex-wrap gap-2 justify-end">
+            <Button
+              variant="outline"
+              onClick={() => handleFinalize(true)}
+              disabled={!hasGenerated || isUpdating}
+              title="Mark offered and SMS primary guardian"
+            >
+              Finalize + SMS
+            </Button>
+            <Button 
+              onClick={() => handleFinalize(false)} 
+              disabled={!hasGenerated || isUpdating}
+              className={`px-8 ${hasGenerated ? 'bg-primary hover:bg-primary-700' : 'bg-slate-300'}`}
+            >
+              {isUpdating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+              Finalize Offer
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

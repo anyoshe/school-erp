@@ -7,7 +7,7 @@ urlpatterns = [
     path(
         "routes/for-billing/",
         views.TransportRoutesForBillingView.as_view(),
-        name="transport-routes-billing",
+        name="transport-routes-for-billing",
     ),
     path(
         "assignments/",
@@ -24,4 +24,5 @@ urlpatterns = [
         views.StudentTransportDeactivateView.as_view(),
         name="transport-deactivate",
     ),
+    path("day-sheet/", views.TransportDaySheetView.as_view(), name="transport-day-sheet"),
 ]
