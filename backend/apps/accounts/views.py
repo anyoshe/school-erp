@@ -29,14 +29,14 @@ from .permissions import IsSchoolAdminOrHigher, IsSuperAdmin  # ← add this if 
 User = get_user_model()
 
 class RoleViewSet(viewsets.ModelViewSet):
-    queryset = Role.objects.all()
+    queryset = Role.objects.all().prefetch_related("modules").order_by("name")
     serializer_class = RoleSerializer
-    permission_classes = [IsAuthenticated, IsSchoolAdminOrHigher]  # or stricter
+    permission_classes = [IsAuthenticated, IsSchoolAdminOrHigher]
+    lookup_field = "pk"
+    pagination_class = None  # always return a plain list for the settings UI
 
-    # Optional: only allow owners/admins to modify roles
-    def perform_update(self, serializer):
-        # You can add extra checks here if needed
-        super().perform_update(serializer)
+    def get_queryset(self):
+        return Role.objects.all().prefetch_related("modules").order_by("name")
 
 class CurrentUserView(APIView):
     """

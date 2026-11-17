@@ -444,15 +444,57 @@ class CurrentUserSerializer(serializers.ModelSerializer):
     
 
 class RoleSerializer(serializers.ModelSerializer):
-    module_codes = serializers.SerializerMethodField()
     module_ids = serializers.PrimaryKeyRelatedField(
         many=True,
         queryset=Module.objects.all(),
-        source='modules',          # maps to the model field
-        required=False
+        source="modules",
+        required=False,
     )
+    module_codes = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Role
-        fields = ['id', 'code', 'name', 'description', 'module_ids']
-        read_only_fields = ['id']  # optional
+        fields = [
+            "id",
+            "code",
+            "name",
+            "description",
+            "module_ids",
+            "module_codes",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at", "module_codes"]
+
+    def get_module_codes(self, obj):
+        try:
+            return list(obj.modules.values_list("code", flat=True))
+        except Exception:
+            return []
+
+    def create(self, validated_data):
+        modules = validated_data.pop("modules", [])
+        code = (validated_data.get("code") or "").strip().upper()
+        if not code:
+            # derive from name
+            name = validated_data.get("name") or "ROLE"
+            code = "".join(ch if ch.isalnum() else "_" for ch in name.upper())[:50]
+            validated_data["code"] = code
+        else:
+            validated_data["code"] = code
+        role = Role.objects.create(**validated_data)
+        if modules:
+            role.modules.set(modules)
+        return role
+
+    def update(self, instance, validated_data):
+        modules = validated_data.pop("modules", None)
+        if "code" in validated_data and validated_data["code"]:
+            validated_data["code"] = str(validated_data["code"]).strip().upper()
+        for attr, val in validated_data.items():
+            setattr(instance, attr, val)
+        instance.save()
+        if modules is not None:
+            instance.modules.set(modules)
+        return instance
+

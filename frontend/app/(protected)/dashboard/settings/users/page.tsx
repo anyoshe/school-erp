@@ -113,6 +113,7 @@ export default function UsersSettingsPage() {
 
   // Edit role form
   const [roleForm, setRoleForm] = useState({
+    code: "",
     name: "",
     description: "",
     module_ids: [] as number[],
@@ -156,15 +157,27 @@ export default function UsersSettingsPage() {
       let loadedRoles: Role[] = [];
       try {
         const res = await api.get("/accounts/roles/");
-        loadedRoles = res.data.map((r: any) => ({
+        const raw = Array.isArray(res.data)
+          ? res.data
+          : res.data?.results || res.data?.roles || [];
+        loadedRoles = raw.map((r: any) => ({
           id: r.id,
           code: r.code || r.name,
           name: r.name,
-          description: r.description,
-          module_ids: (r.module_ids || []).map(Number),
+          description: r.description || "",
+          module_ids: (r.module_ids || [])
+            .map((x: any) => Number(x))
+            .filter((n: number) => !Number.isNaN(n)),
         }));
+        if (!loadedRoles.length) {
+          toast.message("No roles yet — run: python manage.py seed_roles --sync-modules");
+        }
       } catch (err: any) {
         console.warn("Roles endpoint failed → using fallback", err);
+        toast.error(
+          err?.response?.data?.detail ||
+            "Could not load roles. Showing offline list (not editable until API works)."
+        );
         loadedRoles = FALLBACK_ROLES;
       }
       setRoles(loadedRoles);
@@ -361,37 +374,115 @@ export default function UsersSettingsPage() {
       return;
     }
 
+    // Offline fallback roles (id "1","2",…) cannot be patched on the server
+    if (editingRole && String(editingRole.id).length < 10) {
+      toast.error(
+        "This role is from the offline list. Run seed_roles on the server, refresh, then edit."
+      );
+      return;
+    }
+
     setActionLoading(true);
+
+    const derivedCode = roleForm.name
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, "_")
+      .slice(0, 50);
+    const payload: Record<string, unknown> = {
+      name: roleForm.name.trim(),
+      description: roleForm.description.trim(),
+      module_ids: roleForm.module_ids,
+    };
+    if (roleForm.code.trim()) {
+      payload.code = roleForm.code.trim().toUpperCase().replace(/\s+/g, "_");
+    } else if (!editingRole) {
+      payload.code = derivedCode;
+    }
 
     try {
       let res: import("axios").AxiosResponse;
       if (editingRole) {
-        res = await api.patch(`/accounts/roles/${editingRole.id}/`, roleForm);
-        setRoles((prev) =>
-          prev.map((r) => (r.id === editingRole.id ? { ...r, ...res.data } : r))
-        );
-        setEditingRole(null);
+        res = await api.patch(`/accounts/roles/${editingRole.id}/`, payload);
         toast.success("Role updated");
+        setEditingRole(null);
       } else {
-        res = await api.post("/accounts/roles/", roleForm);
-        setRoles((prev) => [...prev, res.data]);
+        res = await api.post("/accounts/roles/", payload);
         toast.success("Role created");
       }
 
-      setRoleForm({ name: "", description: "", module_ids: [] });
+      setRoleForm({ code: "", name: "", description: "", module_ids: [] });
+      try {
+        const list = await api.get("/accounts/roles/");
+        const raw = Array.isArray(list.data) ? list.data : list.data?.results || [];
+        setRoles(
+          raw.map((r: any) => ({
+            id: r.id,
+            code: r.code || r.name,
+            name: r.name,
+            description: r.description || "",
+            module_ids: (r.module_ids || []).map(Number),
+          }))
+        );
+      } catch {
+        const r = res.data;
+        if (editingRole) {
+          setRoles((prev) =>
+            prev.map((row) =>
+              row.id === editingRole.id
+                ? {
+                    id: r.id,
+                    code: r.code,
+                    name: r.name,
+                    description: r.description || "",
+                    module_ids: (r.module_ids || []).map(Number),
+                  }
+                : row
+            )
+          );
+        } else {
+          setRoles((prev) => [
+            ...prev,
+            {
+              id: r.id,
+              code: r.code,
+              name: r.name,
+              description: r.description || "",
+              module_ids: (r.module_ids || []).map(Number),
+            },
+          ]);
+        }
+      }
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || "Failed to save role");
+      const d = err?.response?.data;
+      const msg =
+        (typeof d === "string" && d) ||
+        d?.detail ||
+        (d && typeof d === "object"
+          ? Object.entries(d)
+              .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : v}`)
+              .join(" · ")
+          : null) ||
+        "Failed to save role";
+      toast.error(String(msg));
     } finally {
       setActionLoading(false);
     }
   };
 
   const startEditRole = (role: Role) => {
+    if (String(role.id).length < 10) {
+      toast.error(
+        "Offline role list — run: python manage.py seed_roles --sync-modules, then refresh."
+      );
+      return;
+    }
     setEditingRole(role);
     setRoleForm({
+      code: role.code || "",
       name: role.name,
       description: role.description || "",
-      module_ids: [...role.module_ids],
+      module_ids: [...(role.module_ids || [])],
     });
   };
 
@@ -762,6 +853,19 @@ export default function UsersSettingsPage() {
 
                     <div className="grid gap-6 py-4">
                       <div>
+                        <Label>Role code</Label>
+                        <Input
+                          value={roleForm.code}
+                          onChange={(e) =>
+                            setRoleForm({
+                              ...roleForm,
+                              code: e.target.value.toUpperCase(),
+                            })
+                          }
+                          placeholder="e.g. TEACHER (auto from name if empty)"
+                          disabled={!!editingRole}
+                          className="mb-3"
+                        />
                         <Label>Role Name *</Label>
                         <Input
                           value={roleForm.name}
@@ -816,7 +920,7 @@ export default function UsersSettingsPage() {
                           className="flex-1"
                           onClick={() => {
                             setEditingRole(null);
-                            setRoleForm({ name: "", description: "", module_ids: [] });
+                            setRoleForm({ code: "", name: "", description: "", module_ids: [] });
                           }}
                         >
                           Cancel
