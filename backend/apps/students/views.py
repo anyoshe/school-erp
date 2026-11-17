@@ -51,8 +51,12 @@ class StudentViewSet(viewsets.ModelViewSet):
 
         qs = Student.objects.filter(school_id__in=accessible_school_ids(self.request))
 
-        # Prefer active school header when present (smaller result set)
-        school = selected_school(self.request)
+        # Prefer active school header when present (smaller result set).
+        # Never fail the whole list if school context is missing / invalid.
+        try:
+            school = selected_school(self.request)
+        except Exception:
+            school = None
         if school is not None:
             qs = qs.filter(school_id=school.id)
 

@@ -28,6 +28,8 @@ export default function StudentsPage() {
     students,
     isLoading,
     isError,
+    errorMessage,
+    errorMessage,
     isLoadingMore,
     isRefreshing,
     search,
@@ -147,9 +149,14 @@ export default function StudentsPage() {
 
   if (isError) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
-        <h2 className="text-2xl font-bold text-destructive mb-4">Failed to load students</h2>
-        <Button onClick={refetch}>Try Again</Button>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 max-w-lg mx-auto">
+        <AlertCircle className="h-10 w-10 text-destructive mb-3" />
+        <h2 className="text-xl font-bold text-destructive mb-2">Could not load students</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          {errorMessage ||
+            "Request failed. Check your connection and that the API server is running."}
+        </p>
+        <Button onClick={refetch}>Try again</Button>
       </div>
     );
   }

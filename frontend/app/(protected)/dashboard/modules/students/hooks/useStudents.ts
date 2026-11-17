@@ -10,6 +10,7 @@ export function useStudents(initialSearch = "") {
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [search, setSearch] = useState(initialSearch);
@@ -39,6 +40,8 @@ export function useStudents(initialSearch = "") {
           search: q,
         });
         if (!mounted.current) return;
+        setIsError(false);
+        setErrorMessage("");
         setTotalCount(data.count);
         setHasMore(Boolean(data.next) || data.results.length >= PAGE_SIZE && (p * PAGE_SIZE) < data.count);
         setPage(p);
@@ -51,9 +54,27 @@ export function useStudents(initialSearch = "") {
           }
           return merged;
         });
-      } catch (err) {
+      } catch (err: any) {
         console.error("[useStudents] Failed to fetch students:", err);
-        if (mounted.current) setIsError(true);
+        if (mounted.current) {
+          setIsError(true);
+          const status = err?.response?.status;
+          if (!err?.response) {
+            setErrorMessage(
+              "Cannot reach the API (network error). Check that the backend is running and NEXT_PUBLIC_API_URL points to it."
+            );
+          } else if (status === 401) {
+            setErrorMessage("Session expired — please log in again.");
+          } else if (status === 403) {
+            setErrorMessage("You do not have permission to view students for this school.");
+          } else {
+            setErrorMessage(
+              err?.response?.data?.detail ||
+                err?.message ||
+                "Failed to load students."
+            );
+          }
+        }
       } finally {
         if (mounted.current) {
           setIsLoading(false);
@@ -118,6 +139,7 @@ export function useStudents(initialSearch = "") {
     isRefreshing,
     isLoadingMore,
     isError,
+    errorMessage,
     search,
     setSearch: setSearchDebounced,
     totalCount,
