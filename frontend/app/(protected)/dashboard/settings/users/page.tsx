@@ -877,8 +877,8 @@ export default function UsersSettingsPage() {
                       New Role
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="w-[calc(100%-1.25rem)] sm:max-w-lg">
-                    <DialogHeader>
+                  <DialogContent className="w-[calc(100%-1.25rem)] sm:max-w-lg max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
+                    <DialogHeader className="px-6 pt-6 pb-3 shrink-0 border-b">
                       <DialogTitle>
                         {editingRole ? "Edit Role" : "Create New Role"}
                       </DialogTitle>
@@ -889,7 +889,7 @@ export default function UsersSettingsPage() {
                       </DialogDescription>
                     </DialogHeader>
 
-                    <div className="grid gap-6 py-4">
+                    <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4">
                       <div>
                         <Label>Role code</Label>
                         <Input
@@ -902,8 +902,10 @@ export default function UsersSettingsPage() {
                           }
                           placeholder="e.g. TEACHER (auto from name if empty)"
                           disabled={!!editingRole}
-                          className="mb-3"
+                          className="mt-1"
                         />
+                      </div>
+                      <div>
                         <Label>Role Name *</Label>
                         <Input
                           value={roleForm.name}
@@ -911,6 +913,7 @@ export default function UsersSettingsPage() {
                             setRoleForm({ ...roleForm, name: e.target.value })
                           }
                           placeholder="e.g. Head of Department"
+                          className="mt-1"
                         />
                       </div>
 
@@ -922,12 +925,18 @@ export default function UsersSettingsPage() {
                             setRoleForm({ ...roleForm, description: e.target.value })
                           }
                           placeholder="Brief description of responsibilities"
+                          className="mt-1"
                         />
                       </div>
 
                       <div>
-                        <Label>Assigned Modules</Label>
-                        <div className="mt-3 max-h-60 overflow-y-auto pr-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <Label>Assigned Modules</Label>
+                          <span className="text-xs text-muted-foreground">
+                            {roleForm.module_ids.length} selected
+                          </span>
+                        </div>
+                        <div className="mt-2 max-h-48 overflow-y-auto rounded-md border p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {allModules.length === 0 ? (
                             <p className="text-sm text-muted-foreground col-span-2">
                               No modules loaded yet
@@ -942,7 +951,7 @@ export default function UsersSettingsPage() {
                                 />
                                 <label
                                   htmlFor={`mod-${mod.id}`}
-                                  className="text-sm cursor-pointer font-medium"
+                                  className="text-sm cursor-pointer font-medium leading-tight"
                                 >
                                   {mod.name}
                                 </label>
@@ -951,30 +960,32 @@ export default function UsersSettingsPage() {
                           )}
                         </div>
                       </div>
+                    </div>
 
-                      <div className="flex gap-4 pt-4">
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() => {
-                            setEditingRole(null);
-                            setRoleForm({ code: "", name: "", description: "", module_ids: [] });
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          onClick={handleSaveRole}
-                          disabled={actionLoading || !roleForm.name.trim()}
-                          className="flex-1"
-                        >
-                          {actionLoading
-                            ? "Saving..."
-                            : editingRole
-                              ? "Update Role"
-                              : "Create Role"}
-                        </Button>
-                      </div>
+                    <div className="shrink-0 border-t bg-background px-6 py-4 flex gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          setEditingRole(null);
+                          setRoleForm({ code: "", name: "", description: "", module_ids: [] });
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleSaveRole}
+                        disabled={actionLoading || !roleForm.name.trim()}
+                        className="flex-1"
+                      >
+                        {actionLoading
+                          ? "Saving..."
+                          : editingRole
+                            ? "Update Role"
+                            : "Create Role"}
+                      </Button>
                     </div>
                   </DialogContent>
                 </Dialog>
