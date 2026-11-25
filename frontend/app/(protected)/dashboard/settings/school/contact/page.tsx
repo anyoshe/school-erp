@@ -49,7 +49,6 @@ export default function SchoolContactPage() {
 
   useEffect(() => {
     if (currentSchool) {
-      console.log("CURRENT SCHOOL RAW (after refresh):", currentSchool);
       setFormData({
         phone: currentSchool.phone ?? "",
         alternativePhone: currentSchool.alternative_phone ?? "",

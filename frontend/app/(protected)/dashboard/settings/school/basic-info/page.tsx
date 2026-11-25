@@ -115,44 +115,7 @@ export default function EditSchoolBasicInfoPage() {
 
   useEffect(() => {
     if (currentSchool) {
-      console.log("Raw currentSchool from API:", currentSchool); // ← you already have this
-
-      setFormData({
-        schoolName: currentSchool.name || "",
-        shortName: currentSchool.short_name || "",                    // ← fix: snake_case
-        email: currentSchool.email || "",
-        phone: currentSchool.phone || "",
-        address: currentSchool.address || "",
-        city: currentSchool.city || "",
-        country: currentSchool.country || "Kenya",
-        website: currentSchool.website || "",
-        currency: currentSchool.currency || "KES",
-
-        // Month fields – these are almost certainly snake_case too
-        academicYearStart: getMonthName(currentSchool.academic_year_start_month),
-        academicYearEnd: getMonthName(currentSchool.academic_year_end_month),
-
-        termSystem: currentSchool.term_system || "terms",
-        numberOfTerms: currentSchool.number_of_terms || 3,
-        gradingSystem: currentSchool.grading_system || "percentage",
-        passingMark: currentSchool.passing_mark || 50,
-
-        officialRegistrationNumber: currentSchool.official_registration_number || "",
-        registrationAuthority: currentSchool.registration_authority || "",
-        registrationDate: currentSchool.registration_date || "",
-        bankName: currentSchool.bank_name || "",
-        branchName: currentSchool.branch_name || "",
-        bankAccountName: currentSchool.bank_account_name || "",
-        bankAccountNumber: currentSchool.bank_account_number || "",
-        paybillNumber: currentSchool.paybill_number || "",
-        paymentInstructions: currentSchool.payment_instructions || "",
-
-        logo: null, // file input stays null until user selects new one
-      });
-
       // Optional: extra debug to confirm values
-      console.log("Prefill values → short_name:", currentSchool.short_name);
-      console.log("Prefill values → website:", currentSchool.website);
     }
   }, [currentSchool]);
 

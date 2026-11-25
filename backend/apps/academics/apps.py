@@ -31,12 +31,10 @@ def load_initial_templates(sender, **kwargs):
     )
 
     if not os.path.exists(fixture_path):
-        print(f"⚠️  Fixture file not found: {fixture_path}")
         return
 
     try:
         # verbosity=1 so you can see it working
         call_command('loaddata', fixture_path, verbosity=1, ignorenonexistent=True)
-        print("✅ Initial curriculum templates, grade levels, and departments seeded successfully.")
     except Exception as e:
         print(f"⚠️  Failed to load initial templates: {e}")

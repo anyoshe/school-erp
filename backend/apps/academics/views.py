@@ -84,11 +84,6 @@ class CopyCurriculumTemplateAPIView(APIView):
         
         template = get_object_or_404(Curriculum, pk=template_id, is_template=True)
 
-        print(f"[COPY TEMPLATE] School: {school.name} (ID: {school_id})")
-        print(f"[COPY TEMPLATE] Template: {template.name} (ID: {template_id})")
-        print(f"[COPY TEMPLATE] Selected grades: {grade_level_ids}")
-        print(f"[COPY TEMPLATE] Selected departments: {department_ids}")
-
         # 1. Clone or get existing curriculum for this school
         curriculum, created = Curriculum.objects.get_or_create(
             school=school,
@@ -106,7 +101,6 @@ class CopyCurriculumTemplateAPIView(APIView):
         )
 
         action = "Created" if created else "Found existing"
-        print(f"[COPY TEMPLATE] {action} curriculum: {curriculum.name} (ID: {curriculum.id})")
 
         # 2. Clone Grade Levels with explicit school + curriculum linkage
         grade_qs = GradeLevel.objects.filter(curriculum=template)
@@ -114,7 +108,6 @@ class CopyCurriculumTemplateAPIView(APIView):
         # If specific grades selected, filter to those
         if grade_level_ids:
             grade_qs = grade_qs.filter(pk__in=grade_level_ids)
-            print(f"[COPY TEMPLATE] Filtering to {len(grade_level_ids)} selected grades")
         
         grades_created = 0
         grades_existing = 0
@@ -133,10 +126,8 @@ class CopyCurriculumTemplateAPIView(APIView):
             )
             if grade_created:
                 grades_created += 1
-                print(f"  ✓ Created: {grade.name}")
             else:
                 grades_existing += 1
-                print(f"  ○ Existing: {grade.name}")
 
         # 3. Clone Departments (with department_ids filter)
         dept_qs = Department.objects.filter(
@@ -146,7 +137,6 @@ class CopyCurriculumTemplateAPIView(APIView):
         # If specific departments selected, filter to those
         if department_ids:
             dept_qs = dept_qs.filter(pk__in=department_ids)
-            print(f"[COPY TEMPLATE] Filtering to {len(department_ids)} selected departments")
         
         depts_created = 0
         depts_existing = 0
@@ -163,18 +153,12 @@ class CopyCurriculumTemplateAPIView(APIView):
             )
             if dept_created:
                 depts_created += 1
-                print(f"  ✓ Created dept: {dept.name}")
             else:
                 depts_existing += 1
-                print(f"  ○ Existing dept: {dept.name}")
 
         # 4. Verify what was created
         final_grade_count = GradeLevel.objects.filter(school=school).count()
         final_dept_count = Department.objects.filter(school=school).count()
-        
-        print(f"[COPY TEMPLATE] ✅ Complete!")
-        print(f"  - Grades: {grades_created} created, {grades_existing} existing, {final_grade_count} total")
-        print(f"  - Departments: {depts_created} created, {depts_existing} existing, {final_dept_count} total")
 
         return Response({
             "success": True,
@@ -325,25 +309,17 @@ class PublicGradeLevelsView(APIView):
             # Handle lookup by UUID or Slug
             school = School.objects.filter(Q(id=school_id) | Q(slug=school_id)).first()
             if not school:
-                print(f"[PUBLIC GRADES] ❌ School not found: {school_id}")
                 return Response({"detail": "School not found"}, status=404)
-
-            print(f"[PUBLIC GRADES] 🏫 School: {school.name} (ID: {school.id})")
 
             # Fetch grade levels owned by this school
             grades = GradeLevel.objects.filter(
                 Q(school=school) | Q(curriculum__school=school)
             ).distinct().order_by('order', 'name')
-
-            print(f"[PUBLIC GRADES] Found {grades.count()} grade levels")
             
             if grades.count() == 0:
                 # Debug: Check what's in the database
                 all_school_grades = GradeLevel.objects.filter(school=school)
                 curricula = Curriculum.objects.filter(school=school)
-                print(f"[PUBLIC GRADES] DEBUG:")
-                print(f"  - Direct school grades: {all_school_grades.count()}")
-                print(f"  - School curricula: {curricula.count()}")
                 for c in curricula:
                     c_grades = GradeLevel.objects.filter(curriculum=c)
                     print(f"    - {c.name}: {c_grades.count()} grades")
@@ -352,7 +328,6 @@ class PublicGradeLevelsView(APIView):
             return Response(serializer.data)
             
         except Exception as e:
-            print(f"[PUBLIC GRADES] ❌ Error: {str(e)}")
             import traceback
             traceback.print_exc()
             return Response({"detail": str(e)}, status=400)

@@ -180,11 +180,7 @@ class SchoolUserViewSet(viewsets.ModelViewSet):
             id=school_id,
             pk__in=accessible_school_ids(self.request),
         )
-        # Adjust this based on your actual relationship
-        # If User has ManyToManyField to School named 'schools':
         return User.objects.filter(schools=school)
-        # If using through model (SchoolUserRole):
-        # return User.objects.filter(school_roles__school=school)
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -214,28 +210,14 @@ class SchoolUserViewSet(viewsets.ModelViewSet):
             primary_role=request.data.get("role"),
         )
 
-        # Link user to this school
-        # If ManyToMany:
         school.users.add(user)
-        # If through model (SchoolUserRole):
-        # SchoolUserRole.objects.create(
-        #     user=user,
-        #     school=school,
-        #     role=request.data.get('role')
-        # )
-        print("DEBUG: After save, does user have _temporary_password?", hasattr(user, '_temporary_password'))
-        # Re-serialize with same context to preserve temporary_password
-        # response_serializer = self.get_serializer(user, context=serializer.context)
-        # return Response(response_serializer.data, status=status.HTTP_201_CREATED)
-    
+
         response_serializer = self.get_serializer(user, context=serializer.context)
         response_data = response_serializer.data
 
         temp_pass = getattr(user, '_temporary_password', None)
-        print("DEBUG: Temp pass before adding to response:", temp_pass)
 
         if temp_pass:
            response_data['temporary_password'] = temp_pass
-        print("DEBUG: Added temporary_password to response_data")
 
         return Response(response_data, status=201)

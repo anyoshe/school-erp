@@ -161,9 +161,6 @@ export const guardianService = {
     if (payload.hasPickupPermission !== undefined) updateData.has_pickup_permission = payload.hasPickupPermission;
     if (payload.hasLegalCustody !== undefined) updateData.has_legal_custody = payload.hasLegalCustody;
     if (payload.preferredContactMethod !== undefined) updateData.preferred_contact_method = payload.preferredContactMethod;
-    
-    console.log('Update data:', updateData);
-    
     const { data } = await api.patch(`/students/student-guardians/${linkId}/`, updateData);
     return data;
   } catch (error: unknown) {

@@ -377,7 +377,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             from apps.finance.pre_enrollment import post_charge_to_finance
             post_charge_to_finance(charge, student=getattr(application, "student", None))
         except Exception as exc:
-            print(f"[finance] post_charge_to_finance: {exc}")
+            pass
         from .serializers import ApplicationChargeSerializer
         return Response(ApplicationChargeSerializer(charge).data)
 
@@ -570,7 +570,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                 for ch in application.charges.all():
                     post_charge_to_finance(ch, student=student)
             except Exception as exc:
-                print(f"[finance] enroll post charges: {exc}")
+                pass
 
             return Response({
                 "detail": "Student enrolled successfully",

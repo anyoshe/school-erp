@@ -72,12 +72,9 @@ export default function SelectModulesPage() {
     const fetchData = async () => {
       try {
         const schoolRes = await api.get("/schools/active/");
-        console.log("Active school:", schoolRes.data);
         setSchoolId(schoolRes.data.id);
 
         const modulesRes = await api.get("/modules/");
-        console.log("Raw modules from API:", modulesRes.data);
-
         const formattedModules: Module[] = modulesRes.data.map((m: any) => ({
           id: m.id.toString(),
           title: m.name,
@@ -110,7 +107,6 @@ export default function SelectModulesPage() {
     setIsLoading(true);
 
     try {
-      console.log("Sending PATCH with module_ids:", selectedModuleIds);
       await api.patch(`/schools/${schoolId}/`, {
         module_ids: selectedModuleIds,
       });

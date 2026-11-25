@@ -532,7 +532,7 @@ class StudentCreateUpdateSerializer(serializers.ModelSerializer):
                         bal = Decimal("0")
                     balance += bal
             except Exception as exc:
-                print(f"[students] intake billing: {exc}")
+                pass
 
             # Status rules (continuing students):
             # - amount_paid > 0 → ACTIVE (has payment history on the books)

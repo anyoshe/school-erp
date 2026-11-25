@@ -24,7 +24,7 @@ def _detect_year_term(school):
         if cal.get("academic_year") is not None:
             return cal["year_label"], cal["term_label"]
     except Exception as exc:
-        print(f"[finance] academics calendar: {exc}")
+        pass
 
     year = str(timezone.now().year)
     term = "Term 1"
@@ -76,7 +76,7 @@ def _detect_year_term(school):
             (year, term), _ = c.most_common(1)[0]
             return year, term
     except Exception as exc:
-        print(f"[finance] detect from invoices/payments: {exc}")
+        pass
 
     try:
         from apps.admissions.models import Application

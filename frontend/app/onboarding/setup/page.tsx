@@ -173,7 +173,6 @@ function SetupWizardContent() {
       const loadExisting = async () => {
         try {
           const res = await api.get("/schools/active/");
-          console.log("[INIT] Loaded existing school:", res.data.id, res.data.name);
           setSchoolId(res.data.id);
           setFormData((prev) => ({
             ...prev,
@@ -187,7 +186,6 @@ function SetupWizardContent() {
             currency: res.data.currency || prev.currency,
           }));
         } catch (err) {
-          console.log("[INIT] No existing school - proceeding as new");
         }
       };
       loadExisting();
@@ -225,10 +223,6 @@ function SetupWizardContent() {
           ...prev,
           selectedDepartmentIds: fetchedDepts.map((d: any) => d.id),
         }));
-
-        console.log("ACTUAL Fetched Grades:", fetchedGrades);
-        console.log("ACTUAL Fetched Departments:", fetchedDepts);
-        console.log("Departments count:", fetchedDepts?.length || 0);
       } catch (err) {
         toast.error("Failed to load grade levels or departments");
         console.error(err);
@@ -236,9 +230,6 @@ function SetupWizardContent() {
         setIsLoading(false);
       }
     };
-    console.log("Selected Curriculum ID:", formData.selectedCurriculumId);
-    console.log("Fetched Grades:", gradeLevels);
-    console.log("Fetched Departments:", departments);
     fetchStructure();
   }, [formData.selectedCurriculumId]);
 
@@ -287,15 +278,12 @@ function SetupWizardContent() {
     payload: Record<string, any>
   ): Promise<string> => {
     console.group(`[RESOURCE ${endpoint}]`);
-    console.log("Search params:", searchParams);
-
     // Step 1: Try to find existing
     try {
       const searchRes = await api.get(endpoint, { params: searchParams });
       const count = searchRes.data.results?.length || searchRes.data.length || 0;
       if (count > 0) {
         const foundId = searchRes.data.results?.[0]?.id || searchRes.data[0]?.id;
-        console.log(`→ Reusing existing ID: ${foundId}`);
         console.groupEnd();
         return foundId;
       }
@@ -305,10 +293,8 @@ function SetupWizardContent() {
 
     // Step 2: Create new
     try {
-      console.log("Creating new...");
       const createRes = await api.post(endpoint, payload);
       const newId = createRes.data.id;
-      console.log(`→ Created new ID: ${newId}`);
       console.groupEnd();
       return newId;
     } catch (createErr: any) {
@@ -322,7 +308,6 @@ function SetupWizardContent() {
           const retryRes = await api.get(endpoint, { params: searchParams });
           const retryId = retryRes.data.results?.[0]?.id || retryRes.data[0]?.id;
           if (retryId) {
-            console.log(`→ Retry found ID: ${retryId}`);
             console.groupEnd();
             return retryId;
           }
@@ -339,9 +324,6 @@ function SetupWizardContent() {
     setError(null);
 
     console.group("=== SETUP WIZARD COMPLETE FLOW ===");
-    console.log("Mode:", isNewSchoolMode ? "NEW SCHOOL" : "UPDATE EXISTING");
-    console.log("Current schoolId:", schoolId);
-
     try {
       let currentSchoolId: string;
 
@@ -382,33 +364,21 @@ function SetupWizardContent() {
 
       // Logo
       if (formData.logo) {
-        console.log("Uploading logo:", formData.logo.name, formData.logo.size);
         schoolForm.append("logo", formData.logo);
       }
 
       if (isNewSchoolMode || !schoolId) {
-        console.log("Creating NEW school...");
         const newSchoolRes = await api.post("/schools/", schoolForm);
         currentSchoolId = newSchoolRes.data.id;
-        console.log("→ New school created! ID:", currentSchoolId);
         setSchoolId(currentSchoolId);
       } else {
-        console.log("Updating EXISTING school:", schoolId);
         await api.patch(`/schools/${schoolId}/`, schoolForm);
         currentSchoolId = schoolId;
       }
 
       setActiveSchool(currentSchoolId);
-      console.log("→ Saved active_school_id to localStorage:", currentSchoolId);
-
       // ── COPY CURRICULUM TEMPLATE WITH SELECTED GRADES & DEPARTMENTS ──
       if (formData.selectedCurriculumId && (formData.selectedGradeLevelIds.length > 0 || formData.selectedDepartmentIds.length > 0)) {
-        console.log("Copying curriculum template:", {
-          template_id: formData.selectedCurriculumId,
-          grade_ids: formData.selectedGradeLevelIds,
-          dept_ids: formData.selectedDepartmentIds,
-        });
-
         await api.post(
           "/academics/copy-template/",
           {
@@ -420,8 +390,6 @@ function SetupWizardContent() {
             headers: { "X-School-ID": currentSchoolId },
           }
         );
-
-        console.log("→ Curriculum template copied successfully");
       }
 
       // ── BANKING & PAYMENT SETUP ────────────────────────────────────────
@@ -435,10 +403,7 @@ function SetupWizardContent() {
 
 
       // ── MARK SETUP COMPLETE ────────────────────────────────────────
-      console.log("Marking setup_complete = true on school:", currentSchoolId);
       await api.patch(`/schools/${currentSchoolId}/`, { setup_complete: true });
-
-      console.log("✓ Setup completed successfully!");
       router.push("/onboarding/select-modules");
       toast.success("School setup completed successfully!");
     } catch (error: any) {

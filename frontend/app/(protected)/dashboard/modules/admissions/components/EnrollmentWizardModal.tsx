@@ -1114,15 +1114,6 @@ export default function EnrollmentWizardModal({
       if (!formData.auto_generate_admission && formData.admission_number) {
         payload.set("admission_number", formData.admission_number);
       }
-
-      console.log("[ENROLL] Sending payload keys:", Array.from(payload.keys())); // Debug
-
-      const res = await api.post(
-        `/admissions/applications/${applicationId}/enroll/`,
-        payload,
-        { headers: { "Content-Type": "multipart/form-data" } }
-      );
-
       toast.success("Student enrolled successfully!");
 
       const studentId = res.data.id ||

@@ -337,13 +337,11 @@ function NewApplicationPageInner() {
           description: `ID: ${appId} — you can continue editing`,
           duration: 5000,
         });
-        console.log(`[DEBUG] Draft saved/updated - ID: ${appId}`);
       } else {
         toast.success("Application submitted successfully!", {
           description: `ID: ${appId}`,
           duration: 6000,
         });
-        console.log(`[DEBUG] Submitted - ID: ${appId}`);
         setIsFinalSubmitted(true);
       }
     },
@@ -473,9 +471,7 @@ function NewApplicationPageInner() {
     fd.append("status", action === "draft" ? "DRAFT" : "SUBMITTED");
 
     // Debug log
-    console.log(`Action: ${action.toUpperCase()} | Current saved ID: ${savedAppId ?? "new"}`);
     for (let [key, val] of fd.entries()) {
-      console.log(`${key}: ${val}`);
     }
 
     saveMutation.mutate({ fd, id: savedAppId ?? undefined });

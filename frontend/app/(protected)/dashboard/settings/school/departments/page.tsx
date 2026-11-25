@@ -143,10 +143,6 @@ export default function DepartmentsPage() {
     setLoading(true);
 
     try {
-      console.log("=== Department Save ===");
-      console.log("Current departments:", currentDepartments);
-      console.log("Original departments:", originalDepartments);
-
       // Find departments to delete
       const currentIds = new Set(currentDepartments.map((d) => d.id));
       const originalIds = new Set(originalDepartments.map((d) => d.id));
@@ -154,9 +150,6 @@ export default function DepartmentsPage() {
       const toDelete = [...originalIds].filter(
         (id) => !currentIds.has(id) && !String(id).startsWith("temp-")
       );
-
-      console.log("To Delete:", toDelete);
-
       // Delete departments
       if (toDelete.length > 0) {
         await Promise.all(
@@ -177,9 +170,6 @@ export default function DepartmentsPage() {
       const toCreate = currentDepartments.filter((d) =>
         d.id.startsWith("temp-")
       );
-
-      console.log("To Create:", toCreate.length);
-
       const createdPromises = toCreate.map(async (dept) => {
         const res = await api.post(
           "/academics/departments/",

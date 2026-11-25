@@ -117,8 +117,6 @@ export default function PublicNewApplicationPage() {
     queryFn: async () => {
       if (!school?.id) throw new Error("School not loaded");
       const res = await publicApi.get(`/academics/public/schools/${school.id}/grade-levels/`);
-      console.log(res.data);
-
       return res.data || [];
     },
     enabled: !!school?.id && !schoolLoading,
@@ -376,15 +374,10 @@ export default function PublicNewApplicationPage() {
                       render={({ field }) => {
                         // Ensure value is always string (convert number → string if needed)
                         const selectedValue = field.value ? String(field.value) : "";
-
-                        console.log("Current form value for class_applied:", field.value, typeof field.value);
-                        console.log("Selected value passed to Select:", selectedValue);
-
                         return (
                           <div>
                             <Select
                               onValueChange={(val) => {
-                                console.log("User selected:", val, typeof val);
                                 field.onChange(val);           // val is always string from shadcn
                                 trigger("class_applied");      // force immediate validation
                               }}

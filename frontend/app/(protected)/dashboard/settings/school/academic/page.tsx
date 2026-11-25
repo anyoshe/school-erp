@@ -151,7 +151,6 @@ export default function SchoolAcademicConfigPage() {
       setCurrentGradeLevels(normalized);
       const originalCopy: GradeLevel[] = normalized.map((g: any) => ({ ...g }));
       setOriginalGradeLevels(originalCopy);
-      console.log("Loaded grades:", originalCopy);
     } catch (err) {
       console.error("Failed to reload grades:", err);
     }
@@ -217,10 +216,6 @@ export default function SchoolAcademicConfigPage() {
     setLoading(true);
 
     try {
-      console.log("=== BEFORE SUBMIT ===");
-      console.log("currentGradeLevels:", currentGradeLevels);
-      console.log("originalGradeLevels:", originalGradeLevels);
-
       // 1. Update school academic config
       const schoolPayload = {
         academic_year_start_month: MONTHS.indexOf(formData.academicYearStartMonth) + 1,
@@ -241,12 +236,6 @@ export default function SchoolAcademicConfigPage() {
       const toDelete = [...originalIds].filter(
         (id) => !currentIds.has(id) && !String(id).startsWith("temp-")
       );
-
-      console.log("=== Grade Sync Debug ===");
-      console.log("Original IDs:", [...originalIds]);
-      console.log("Current IDs:", [...currentIds]);
-      console.log("To Delete:", toDelete);
-
       if (toDelete.length > 0) {
         const deleteResults = await Promise.all(
           toDelete.map((id) =>
@@ -254,7 +243,6 @@ export default function SchoolAcademicConfigPage() {
               headers: { "X-School-ID": currentSchool.id },
             })
               .then(() => {
-                console.log(`✓ Successfully deleted grade ${id}`);
                 return { id, success: true };
               })
               .catch((err) => {
@@ -263,14 +251,10 @@ export default function SchoolAcademicConfigPage() {
               })
           )
         );
-        console.log("Delete results:", deleteResults);
       }
 
       // Create new grades
       const toCreate = currentGradeLevels.filter((g) => g.id.startsWith("temp-"));
-
-      console.log("To Create:", toCreate.length, "new grades");
-
       const createdPromises = toCreate.map(async (level) => {
         const res = await api.post(
           "/academics/grade-levels/",

@@ -71,7 +71,6 @@ def _safe_fee_group_breakdown(**kwargs):
     try:
         return _fee_group_breakdown(**kwargs)
     except Exception as exc:
-        print(f"[finance dashboard] fee group breakdown failed: {exc}")
         return _empty_fee_groups()
 
 
@@ -153,7 +152,7 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
             if fi.name:
                 ensure(fi.name, has_money=False)
     except Exception as exc:
-        print(f"[finance dashboard] seed fee items failed: {exc}")
+        pass
 
     ensure("Interview fee", has_money=False)
     ensure("Admission / registration fee", has_money=False)
@@ -193,7 +192,6 @@ def _fee_group_breakdown(school_ids, inv_term, pay_term, interview_income, admis
             )[:2000]
         )
     except Exception as exc:
-        print(f"[finance dashboard] pay_term load failed: {exc}")
         pays = []
 
     for pay in pays:

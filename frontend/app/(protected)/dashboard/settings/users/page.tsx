@@ -269,15 +269,7 @@ export default function UsersSettingsPage() {
       };
 
       const res = await api.post(`/accounts/schools/${currentSchool.id}/users/`, payload);
-
-      console.log("RAW RESPONSE OBJECT:", res);
-      console.log("RESPONSE DATA:", res.data);
-
       const tempPass = res?.data?.temporary_password || null;
-
-      console.log("EXTRACTED TEMP PASS:", tempPass);
-      console.log("TYPE OF TEMP PASS:", typeof tempPass);
-
       toast.success(
         <div className="bg-white border-4 border-secondary rounded-xl p-6 shadow-2xl max-w-md mx-auto">
           <div className="text-2xl font-bold text-secondary-700 mb-4 flex items-center gap-3">

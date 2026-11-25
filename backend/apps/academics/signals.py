@@ -11,7 +11,6 @@ def load_initial_templates(sender, **kwargs):
     try:
         # Use loaddata with --ignorenonexistent to be safe if some models change later
         call_command('loaddata', fixture_path, verbosity=0, ignorenonexistent=True)
-        print("✅ Initial curriculum templates, grade levels, and departments seeded successfully.")
     except Exception as e:
         # Don't break startup if something goes wrong (e.g. during tests)
         print(f"⚠️  Failed to load initial templates: {e}")

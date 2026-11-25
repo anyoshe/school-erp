@@ -208,7 +208,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
     )
 
     password = serializers.CharField(write_only=True, required=False)
-    temporary_password = serializers.CharField(read_only=True, allow_null=True)  # ← add this
+    temporary_password = serializers.CharField(read_only=True, allow_null=True)
 
     class Meta:
         model = User
@@ -225,9 +225,6 @@ class UserCreateSerializer(serializers.ModelSerializer):
             import string
             alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
             password = ''.join(secrets.choice(alphabet) for _ in range(12))
-            print("DEBUG: Generated temporary password:", password)
-        else:
-            print("DEBUG: Password was provided, not generating temp one")
 
         role_codes = validated_data.pop('role_codes', None)
         extra_module_ids = validated_data.pop('extra_module_ids', None)
@@ -248,8 +245,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
             primary_role=primary,
         )
 
-        user._temporary_password = password  # temporary attribute
-        print("DEBUG: Set _temporary_password on user instance:", hasattr(user, '_temporary_password'))
+        user._temporary_password = password
         return user
 
     def to_representation(self, instance):
