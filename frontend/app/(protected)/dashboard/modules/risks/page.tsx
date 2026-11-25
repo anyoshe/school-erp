@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -37,14 +37,21 @@ const sevClass: Record<string, string> = {
 export default function RiskControlCenterPage() {
   const { currentSchool } = useCurrentSchool();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const headers = useMemo(
     () => (currentSchool?.id ? { "X-School-ID": String(currentSchool.id) } : undefined),
     [currentSchool?.id]
   );
 
-  const [status, setStatus] = useState("OPEN");
-  const [category, setCategory] = useState("ALL");
-  const [severity, setSeverity] = useState("ALL");
+  const [status, setStatus] = useState(
+    () => (searchParams.get("status") || "OPEN").toUpperCase()
+  );
+  const [category, setCategory] = useState(
+    () => (searchParams.get("category") || "ALL").toUpperCase()
+  );
+  const [severity, setSeverity] = useState(
+    () => (searchParams.get("severity") || "ALL").toUpperCase()
+  );
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [counts, setCounts] = useState({ open: 0, acknowledged: 0, resolved: 0 });
   const [loading, setLoading] = useState(true);

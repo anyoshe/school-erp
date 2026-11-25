@@ -261,7 +261,7 @@ export default function DashboardHome() {
               </p>
             ) : (
               <ul className="space-y-2">
-                {(pulse?.gaps || []).map((g: { code: string; label: string; href: string }) => (
+                {(pulse?.gaps || []).slice(0, 3).map((g: { code: string; label: string; href: string }) => (
                   <li key={g.code}>
                     <button
                       onClick={() => router.push(g.href)}
@@ -272,6 +272,17 @@ export default function DashboardHome() {
                     </button>
                   </li>
                 ))}
+                {(pulse?.gaps || []).length > 3 && (
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/dashboard/modules/risks")}
+                      className="w-full text-left text-xs font-medium text-amber-800 px-1 py-1 hover:underline"
+                    >
+                      +{(pulse?.gaps || []).length - 3} more setup items…
+                    </button>
+                  </li>
+                )}
                 {pulseQ.isLoading && <li className="h-10 animate-pulse bg-stone-100 rounded-xl" />}
               </ul>
             )}
